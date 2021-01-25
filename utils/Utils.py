@@ -208,7 +208,9 @@ def run_decoding_check(attack, batch):
         feed=batch.feeds.examples,
         decoder="batch"
     )
-    log("Initial decodings:", '\n'.join([" ".join([str(p), d]) for p, d in zip(probs, decodings)]))
+    z = zip(batch.audios.basenames, probs, decodings)
+    s = ["{}\t{:.3f}\t{}".format(b, p, d) for b, p, d in z]
+    log("Initial decodings:", '\n'.join(s))
 
 
 def args(experiments):
