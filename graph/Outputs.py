@@ -89,6 +89,7 @@ class Base(ABC):
                 [
                     ("step", outs["step"]),
                     ("basename", basename),
+                    ("success", success),
                     ("total loss", loss),
                     ("bound", bound),
                     ("distance", distance),
@@ -150,7 +151,10 @@ class Base(ABC):
                 db_output.update(snr_stats)
 
                 # -- Log success to stdout as that's nice to know about.
-                log(success_logging(db_output), wrap=False)
+                # Turning this off for now as it's redundant info that bloats
+                # the jenkins logs.
+
+                # log(success_logging(db_output), wrap=False)
 
                 # -- Write results to a json file
                 # note that SingleJSONDB overwrites for each new example.
