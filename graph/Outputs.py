@@ -145,16 +145,14 @@ class Base(ABC):
                 )
                 db_output.update(log_result)
 
-                # -- Log success to stdout as that's nice to know about.
-                log(
-                    success_logging(db_output), wrap=False
-                )
-
                 # -- Calculate some SNR / Lp norm values etc.
                 snr_stats = get_perceptual_stats(db_output)
                 db_output.update(snr_stats)
 
-                # -- Write most recent results to a json file.
+                # -- Log success to stdout as that's nice to know about.
+                log(success_logging(db_output), wrap=False)
+
+                # -- Write results to a json file
                 # note that SingleJSONDB overwrites for each new example.
                 self.example_db.open(
                     db_output['basename'].rstrip(".wav")
