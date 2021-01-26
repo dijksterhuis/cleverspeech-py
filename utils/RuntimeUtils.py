@@ -82,28 +82,18 @@ class AttackSpawner:
         # we *must* call the tensorflow session within the batch loop so the
         # graph gets reset: the maximum example length in a batch affects the
         # size of most graph elements.
-        try:
-            p = mp.Process(
-                target=attack_run,
-                args=args
-            )
-            p.start()
-            log(
-                "\nSpawned new attack with PID: {}".format(
-                    p.pid
-                ),
-                wrap=False
-            )
-
-            # wait for a while to make sure the graph is fully loaded onto the GPU
-            self.__processes.append(p)
-
-        except tf.errors.ResourceExhaustedError as e:
-
-            log("Out of Memory! Blocking until current processes complete!")
-            log("Error Traceback:\n{e}".format(e=e))
-            self.__block_until_completed()
-            self.__create_process(attack_run, args)
+        p = mp.Process(
+            target=attack_run,
+            args=args
+        )
+        p.start()
+        self.__processes.append(p)
+        log(
+            "\nSpawned new attack with PID: {}".format(
+                p.pid
+            ),
+            wrap=False
+        )
 
     def __wait(self):
         log(
