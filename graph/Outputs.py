@@ -147,8 +147,8 @@ class Base(ABC):
                 db_output.update(log_result)
 
                 # -- Calculate some SNR / Lp norm values etc.
-                snr_stats = get_perceptual_stats(db_output)
-                db_output.update(snr_stats)
+                # snr_stats = get_perceptual_stats(db_output)
+                # db_output.update(snr_stats)
 
                 # -- Log success to stdout as that's nice to know about.
                 # Turning this off for now as it's redundant info that bloats
