@@ -131,6 +131,10 @@ class AttackSpawner:
         # once finished, clear processes and start again
         self.__processes.clear()
 
+    @staticmethod
+    def __bytes_to_megabytes_str(x, power=2):
+        return str(x // 1024 ** power) + " MB"
+
     def spawn(self, attack_run, *args):
 
         self.__get_current_gpu_memory()
@@ -151,10 +155,14 @@ class AttackSpawner:
                 self.max_processes
             )
             s += "Current free gpu memory: {}\t".format(
-                self.__current_gpu_memory_free
+                self.__bytes_to_megabytes_str(
+                    self.__current_gpu_memory_free
+                )
             )
             s += "Last attack used gpu memory: {}".format(
-                self.__previous_batch_gpu_memory
+                self.__bytes_to_megabytes_str(
+                    self.__previous_batch_gpu_memory
+                )
             )
 
             log(s)
