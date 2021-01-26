@@ -135,11 +135,26 @@ class AttackSpawner:
     def __bytes_to_megabytes_str(x, power=2):
         return str(x // 1024 ** power) + " MB"
 
+    def __check_alive(self):
+        alive_processes = []
+        for process in self.__processes:
+            if process.is_alive():
+                alive_processes.append(process)
+        self.__processes = alive_processes
+
+        n_alive = len(self.__processes)
+
+        log(
+            "{n} processes are alive.".format(n=n_alive),
+            wrap=True
+        )
+
     def spawn(self, attack_run, *args):
 
         self.__get_current_gpu_memory()
         self.__create_process(attack_run, args)
         self.__wait()
+        self.__check_alive()
         self.__get_current_gpu_memory()
         self.__get_last_batch_gpu_memory()
 
