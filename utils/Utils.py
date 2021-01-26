@@ -229,6 +229,7 @@ def args(experiments):
         "audio_indir": str,
         "outdir": str,
         "targets_path": str,
+        "spawn_delay": int,
     }
 
     parser = argparse.ArgumentParser()
@@ -300,6 +301,9 @@ def args(experiments):
     )
     update_master_settings(
         master_settings, "targets_path", args.targets_path[0]
+    )
+    update_master_settings(
+        master_settings, "spawn_delay", args.spawn_delay[0]
     )
 
     experiments[experiment](master_settings)
