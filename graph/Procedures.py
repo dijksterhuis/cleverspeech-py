@@ -111,7 +111,7 @@ class Base(ABC):
                 yield self.decode_step_logic()
 
 
-class UpdateBound(Base):
+class UpdateOnDecoding(Base):
     """
     Updates bounds on a successful decoding.
 
@@ -125,4 +125,55 @@ class UpdateBound(Base):
         """
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
+
+
+class UpdateOnLoss(Base):
+    """
+    Updates bounds once the loss has reached a certain point.
+    """
+    def __init__(self, attack, *args, loss_lower_bound=10.0, **kwargs):
+        """
+        Initialise the procedure object then initialise the optimiser
+        variables => might be additional tf variables to initialise here.
+        """
+
+        super().__init__(attack, *args, **kwargs)
+        self.loss_bound = loss_lower_bound
+        self.init_optimiser_variables()
+
+    def run(self):
+        for results in super().run():
+            yield results
+
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left <= right else False
+
+    def decode_step_logic(self):
+
+        loss = self.tf_run(self.attack.adversarial_loss.loss_fn)
+        decodings, probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.batch.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
+
+        target_loss = [self.loss_bound for _ in range(self.attack.batch.size)]
+        targets = self.attack.batch.targets.phrases
+
+        return {
+            "step": self.current_step,
+            "data": [
+                {
+                    "idx": idx,
+                    "success": success,
+                    "decodings": decodings[idx],
+                    "target_phrase": targets[idx],
+                    "probs": probs
+                }
+                for idx, success in self.update_on_success(loss, target_loss)
+            ]
+        }
+
 
