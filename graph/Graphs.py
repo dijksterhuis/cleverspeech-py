@@ -26,7 +26,7 @@ class SimpleAttack:
 
         self.placeholders = Placeholders(batch_size, max_len)
 
-        self.masks = tf.Variable(
+        masks = tf.Variable(
             tf.zeros([batch_size, max_len]),
             trainable=False,
             validate_shape=True,
@@ -45,7 +45,7 @@ class SimpleAttack:
 
         # Mask deltas first so we zero value *any part of the signal* that is
         # zero value padded in the original audio
-        deltas = raw_deltas * self.masks
+        deltas = raw_deltas * masks
 
         # Restrict delta to valid space before applying constraints
 
@@ -73,7 +73,7 @@ class SimpleAttack:
             np.float32
         )
 
-        sess.run(self.masks.assign(initial_masks))
+        sess.run(masks.assign(initial_masks))
 
         self.opt_vars = [raw_deltas]
 
