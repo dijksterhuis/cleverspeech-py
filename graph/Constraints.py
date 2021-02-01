@@ -3,7 +3,7 @@ import tensorflow as tf
 
 from abc import ABC
 
-from cleverspeech.utils.Utils import lcomp, np_one, np_arr, log
+from cleverspeech.utils.Utils import lcomp, np_arr
 
 
 class LNorm(ABC):
@@ -164,50 +164,6 @@ class LNorm(ABC):
 
     def update(self, new_bounds):
         self.tf_run(self.bounds.assign(new_bounds))
-
-    # def log_scale_init(self):
-    #     self.lengths = np_arr(
-    #         [[l] for l in g.batch.audios.actual_lengths],
-    #         np.int32
-    #     )
-    #
-    #     self.evaluation_current = np.ceil(
-    #         np.log(g.initial_taus) - 1
-    #     )
-    #
-    # def log_scale_check(self, bound, distance, rescale, eval_r, base_tau):
-    #
-    #     """
-    #     TODO.
-    #     Get a new rescale constant, but also decrease it at a controlled
-    #     exponential rate based on the maximum possible distance for the example
-    #     so we can evaluate based on allowed attack strength (i.e. size of
-    #     perturbation).
-    #     """
-    #
-    #     if int(bound - distance) > 0:
-    #         # Bound is > than current distance, so reset rescale to a value that
-    #         # moves us to the current distance -- we shouldn't get bigger.
-    #         r = distance / float(base_tau)
-    #
-    #     else:
-    #         # else reduce bound by r constant
-    #         r = rescale * self.r_constant
-    #
-    #     if np.ceil(np.log(r * base_tau)) < eval_r:
-    #         final_r = np.exp(eval_r).astype(np.float32)
-    #         final_r = final_r / base_tau
-    #
-    #         # handle the case where the current example has reached the minimum
-    #         # available evaluation value
-    #         if eval_r - 1.0 == 0:
-    #             eval_r = 1.0
-    #         else:
-    #             eval_r = eval_r - 1
-    #     else:
-    #         final_r = r
-    #
-    #     return final_r, eval_r
 
 
 class L2(LNorm):
