@@ -19,7 +19,7 @@ class Base(ABC):
         self.attack = attack
         self.learning_rate = learning_rate
         self.train = None
-        self.vars = None
+        self.variables = None
 
     @abstractmethod
     def create_optimiser(self):
@@ -77,9 +77,7 @@ class AdamOptimiser(Base):
         )
         assert None not in lcomp(grad_var, i=0)
         self.train = adv_optimizer.apply_gradients(grad_var)
-
-        # TODO: Hardcoded variable name search: qq not in x.name
-        self.vars = [x for x in adv_optimizer.variables() if 'qq' not in x.name]
+        self.variables = adv_optimizer.variables()
 
 
 class CoordinateAdamOptimiser(AdamOptimiser):
@@ -119,9 +117,7 @@ class CoordinateAdamOptimiser(AdamOptimiser):
             optimisers.append(adv_optimizer.apply_gradients(grad_var))
 
         self.train = tf.group(optimisers)
-
-        # TODO: Hardcoded variable name search: qq not in x.name
-        self.vars = [x for x in adv_optimizer.variables() if 'qq' not in x.name]
+        self.variables = adv_optimizer.variables()
 
 
 class GradientDescentOptimiser(Base):
@@ -152,9 +148,7 @@ class GradientDescentOptimiser(Base):
         )
         assert None not in lcomp(grad_var, i=0)
         self.train = adv_optimizer.apply_gradients(grad_var)
-
-        # TODO: Hardcoded variable name search: qq not in x.name
-        self.vars = [x for x in adv_optimizer.variables() if 'qq' not in x.name]
+        self.variables = adv_optimizer.variables()
 
 
 class CoordinateGradientDescentOptimiser(Base):
@@ -190,9 +184,7 @@ class CoordinateGradientDescentOptimiser(Base):
             optimisers.append(adv_optimizer.apply_gradients(grad_var))
 
         self.train = tf.group(optimisers)
-
-        # TODO: Hardcoded variable name search: qq not in x.name
-        self.vars = [x for x in adv_optimizer.variables() if 'qq' not in x.name]
+        self.variables = adv_optimizer.variables()
 
 
 
