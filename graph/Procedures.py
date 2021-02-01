@@ -30,44 +30,61 @@ class Base(ABC):
         feed = self.attack.batch.feeds.attack
         return sess.run(tf_variables, feed_dict=feed)
 
-    def update_success(self, decodings, targets):
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left == right else False
+
+    def update_on_success(self, lefts, rights):
         """
         Update bound conditions if we've been successful.
         """
 
-        constraint = self.attack.hard_constraint
-        new_bounds = list()
+        deltas = self.tf_run(self.attack.graph.final_deltas)
 
-        tf_vars = [self.attack.graph.final_deltas, constraint.bounds]
-        deltas, bounds = self.tf_run(tf_vars)
+        z = zip(lefts, rights, deltas)
+        for idx, (left, right, delta) in enumerate(z):
 
-        z = zip(decodings, targets, deltas, bounds)
-        for idx, (decode, target, delta, bound) in enumerate(z):
+            success = self.success_criteria_check(left, right)
 
-            bound = bound[0]
-            distance = constraint.analyse(delta)
-
-            if decode == target:
-                new_bound = constraint.get_new_bound(bound, distance)
-                new_bounds.append([new_bound])
-                yield idx, True
+            if success:
+                self.attack.hard_constraint.update_one(delta, idx)
+                yield idx, success
             else:
-                new_bounds.append([bound])
-                yield idx, False
+                yield idx, success
 
-        constraint.update(new_bounds)
+    def decode_step_logic(self):
+
+        # can use either tf or deepspeech decodings ("ds" or "batch")
+        # "batch" is prefered as it's what the actual model would use.
+        # It does mean switching to CPU every time we want to do
+        # inference but there's not a major hit to performance
+
+        decodings, probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.batch.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
+
+        targets = self.attack.batch.targets.phrases
+
+        return {
+            "step": self.current_step,
+            "data": [
+                {
+                    "idx": idx,
+                    "success": success,
+                    "decodings": decodings[idx],
+                    "target_phrase": targets[idx],
+                    "probs": probs
+                }
+                for idx, success in self.update_on_success(decodings, targets)
+            ]
+        }
 
     def run(self):
         """
         Do the actual optimisation.
-        TODO: Distance metric could be held in AttackGraph or Base?
-
-        :param batch: batch data for the specified model.
-        :param steps: total number of steps to run optimisation for.
-        :param decode_step: when to check for a successful decoding.
-        :return:
-            stats for each step of optimisation (loss measurements),
-            successful adversarial examples
         """
         attack, g, b = self.attack, self.attack.graph, self.attack.batch
 
@@ -79,38 +96,7 @@ class Base(ABC):
             attack.optimiser.optimise(b.feeds.attack)
 
             if step % self.decode_step == 0:
-                # can use either tf or deepspeech decodings
-                # we prefer ds as it's what the actual model would use.
-                # It does mean switching to CPU every time we want to do
-                # inference but there's not a major hit to performance
-
-                decodings, probs = attack.victim.inference(
-                    b,
-                    feed=b.feeds.attack,
-                    decoder="batch",
-                    top_five=False,
-                )
-
-                outs = {
-                    "step": self.current_step,
-                    "data": [],
-                }
-
-                targets = b.targets.phrases
-
-                for idx, success in self.update_success(decodings, targets):
-
-                    out = {
-                        "idx": idx,
-                        "success": success,
-                        "decodings": decodings[idx],
-                        "target_phrase": b.targets.phrases[idx],
-                        "probs": probs
-                    }
-
-                    outs["data"].append(out)
-
-                yield outs
+                yield self.decode_step_logic()
 
 
 class UpdateBound(Base):
@@ -140,30 +126,4 @@ class UpdateBound(Base):
             yield results
 
 
-class StaticBound(Base):
-    def update_success(self, decodings, targets):
-        """
-        *DO NOT* update bound conditions if we've been successful.
-        Useful in performing security evaluations at specified distances.
-        See `Wild Patterns` -- Biggio et al.
-        """
-
-        constraint = self.attack.hard_constraint
-        deltas = self.tf_run(self.attack.graph.final_deltas)
-
-        z = zip(
-            decodings,
-            targets,
-            deltas,
-        )
-        for idx, (decode, target, delta) in enumerate(z):
-
-            distance = constraint.analyse(delta)
-
-            if decode == target:
-                success = True
-                yield idx, success, distance
-            else:
-                success = False
-                yield idx, success, distance
 

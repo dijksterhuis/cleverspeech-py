@@ -3,7 +3,7 @@ import tensorflow as tf
 
 from abc import ABC
 
-from cleverspeech.utils.Utils import lcomp, np_one, np_arr
+from cleverspeech.utils.Utils import lcomp, np_one, np_arr, log
 
 
 class LNorm(ABC):
@@ -60,14 +60,14 @@ class LNorm(ABC):
         """
         return tf.clip_by_norm(x, self.bounds, axes=[1])
 
-    def get_new_bound(self, bounds, *args):
+    def get_new_bound(self, bound, distance):
 
         if self.update_method == "lin":
-            return self.get_new_linear(bounds)
+            return self.get_new_linear(bound)
         elif self.update_method == "log":
-            return self.get_new_log(bounds)
+            return self.get_new_log(bound)
         elif self.update_method == "geom":
-            return self.get_new_geometric(bounds, *args)
+            return self.get_new_geometric(bound, distance)
 
     def get_new_geometric(self, bound, distance):
         """
@@ -150,6 +150,17 @@ class LNorm(ABC):
                 new_bound = self.lowest_bound
 
         return new_bound
+
+    def update_one(self, delta, index):
+
+        current_bounds = self.tf_run(self.bounds)
+        current_bound = current_bounds[index][0]
+        current_distance = self.analyse(delta)
+
+        new_bound = self.get_new_bound(current_bound, current_distance)
+
+        current_bounds[index][0] = new_bound
+        self.tf_run(self.bounds.assign(current_bounds))
 
     def update(self, new_bounds):
         self.tf_run(self.bounds.assign(new_bounds))
