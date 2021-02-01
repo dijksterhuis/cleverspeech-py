@@ -40,25 +40,23 @@ class LNorm(ABC):
             np.float32
         )
 
-        sess.run(self.bounds.assign(self.initial_taus))
+        self.tf_run(self.bounds.assign(self.initial_taus))
 
     def _gen_tau(self, act_lengths):
         for l in act_lengths:
             yield [self.analyse([self.maximum for _ in range(l)])]
 
     def analyse(self, x):
-        return np.power(np.sum(np.power(np.abs(x), 2)), 1 / 2)
+        """
+        Only implemented by child classes.
+        """
+        pass
 
     def clip(self, x):
         """
-        N.B. The `axes` flag for `p=2` must be used as as tensorflow runs
-        the over *all* tensor dimensions by default.
-
-        :param x:
-        :param bound:
-        :return:
+        Only implemented by child classes.
         """
-        return tf.clip_by_norm(x, self.bounds, axes=[1])
+        pass
 
     def get_new_bound(self, bound, distance):
 
@@ -71,7 +69,7 @@ class LNorm(ABC):
 
     def get_new_geometric(self, bound, distance):
         """
-        Get a new rescale constant.
+        Get a new rescale constant with geometric progression.
         """
 
         if bound > distance:
@@ -81,28 +79,13 @@ class LNorm(ABC):
             # else reduce bound by constant
             rc = self.r_constant
 
-        new_bound = np.ceil(bound * rc)
-
-        # if we are limiting perturbations to a maximum allowable value we
-        # check if the current bound is less than the lower bound then reset
-        # rescale so the current bound === lower bound
-
-        # TODO: we need some logic here if we want to set a specific range of
-        #       bound values for security evaluation curves.
-
-        if self.lowest_bound:
-            if new_bound < self.lowest_bound:
-                new_bound = self.lowest_bound
-
-        return new_bound
+        return np.ceil(bound * rc)
 
     def get_new_linear(self, bound):
         """
-        Get a new rescale constant linearly -- helpful for security evaluations
-        as we don't have to mess around with undoing the geometric progression
-        just to work out whether we want to capture the current distance stats.
+        Get a new rescale constant linearly.
         """
-        new_bound = np.round(bound - self.r_constant, 6)
+        new_bound = np.round(bound - bound * self.r_constant, 6)
 
         # there's some weird rounding things that happen between tf and numpy
         # floats... the rescale can actually be something like 0.1000000002572
@@ -111,45 +94,21 @@ class LNorm(ABC):
         if bound - new_bound <= self.r_constant:
             new_bound = self.r_constant
 
-        # if we are limiting perturbations to a maximum allowable value we
-        # check if the current bound is less than the lower bound then reset
-        # rescale so the current bound === lower bound
-
-        # TODO: we need some logic here if we want to set a specific range of
-        #       bound values for security evaluation curves.
-
-        if self.lowest_bound:
-            if new_bound < self.lowest_bound:
-                new_bound = self.lowest_bound
-
         precision = int(np.ceil(np.log10(1 / self.r_constant)))
+        new_bound = np.round(new_bound, precision)
 
-        return np.round(new_bound, precision)
+        return np.ceil(new_bound)
 
     def get_new_log(self, bound):
         """
-        Get a new rescale constant according to a log scale -- helpful for
-        security evaluations as we don't have to mess around with undoing the
-        geometric progression just to work out whether we want to capture the
-        current distance stats.
+        Get a new rescale constant according to a log scale.
 
         Note -- make sure to set rescale to something like 0.1 so it doesn't
         become a geometric progression.
         """
         new_bound = np.round(bound, 8) * self.r_constant
 
-        # if we are limiting perturbations to a maximum allowable value we
-        # check if the current bound is less than the lower bound then reset
-        # rescale so the current bound === lower bound
-
-        # TODO: we need some logic here if we want to set a specific range of
-        #       bound values for security evaluation curves.
-
-        if self.lowest_bound:
-            if new_bound < self.lowest_bound:
-                new_bound = self.lowest_bound
-
-        return new_bound
+        return np.ceil(new_bound)
 
     def update_one(self, delta, index):
 
@@ -185,10 +144,6 @@ class L2(LNorm):
         """
         N.B. The `axes` flag for `p=2` must be used as as tensorflow runs
         the over *all* tensor dimensions by default.
-
-        :param x:
-        :param bound:
-        :return:
         """
         return tf.clip_by_norm(x, self.bounds, axes=[1])
 
