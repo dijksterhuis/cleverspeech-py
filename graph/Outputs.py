@@ -119,7 +119,7 @@ class Base(ABC):
                 actual_length = b.audios.actual_lengths[idx]
                 original = b.audios.audio[idx]
                 advex = adv_audio[idx]
-                d_var = [delta_vars[i][idx] for i in range(len(delta_vars))]
+                d_var = delta_vars[0][idx]
                 raw_logs = raw_logits[idx]
                 smax_logs = softmax_logits[idx]
                 argmax_alignment = self.get_argmax_alignment(
