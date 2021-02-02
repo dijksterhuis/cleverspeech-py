@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from cleverspeech.utils.Utils import lcomp, np_arr
 
@@ -46,12 +46,14 @@ class LNorm(ABC):
         for l in act_lengths:
             yield [self.analyse([self.maximum for _ in range(l)])]
 
+    @abstractmethod
     def analyse(self, x):
         """
         Only implemented by child classes.
         """
         pass
 
+    @abstractmethod
     def clip(self, x):
         """
         Only implemented by child classes.
