@@ -16,10 +16,25 @@ class BaseBatchGenerator:
         )
 
 
-def pop_target_phrase(all_targets, min_feats):
-    candidate_target = all_targets.pop(0)
+class TargetPhrasePopper:
+    def __init__(self, targets):
+        self.idx = 0
+        self.targets = targets
+
+    def pop(self, min_feats):
+        candidate_target = self.targets[self.idx][0]
+        print("cand", candidate_target, "lencand", len(candidate_target), "min", min_feats)
+        if len(candidate_target) >= min_feats:
+            self.idx += 1
+            self.pop(min_feats)
+        else:
+            return candidate_target
+
+
+def pop_target_phrase(all_targets, min_feats, idx=0):
+    candidate_target = all_targets[idx]
     if len(candidate_target[0]) > min_feats:
-        pop_target_phrase(all_targets, min_feats)
+        pop_target_phrase(all_targets, min_feats, idx=idx+1)
     else:
         return candidate_target
 
@@ -58,9 +73,22 @@ class BatchGenerator(BaseBatchGenerator):
             # also, the first batch should also have the longest target phrase
             # and longest audio examples so we can easily manage GPU Memory
             # resources with the AttackSpawner context manager.
+            # for x in self.all_targets:
+            #     if len(x[0]) > 30:
+            #         print(x)
+            #print(lambda x: "{} {}".format(x[0],x[1]) if len(x[0]) > 30 else None, self.all_targets)
+            print(audio_batch.alignment_lengths)
+            print(audio_batch.feature_lengths)
+            print(self.all_targets[0])
+            print(min(audio_batch.alignment_lengths) > len(self.all_targets[0][0]))
+            # tpp = TargetPhrasePopper(self.all_targets)
+            # target_phrase = tpp.pop(min(audio_batch.alignment_lengths))
+
             target_phrase = pop_target_phrase(
                 self.all_targets, min(audio_batch.alignment_lengths)
             )
+
+            print(target_phrase)
 
             # each target must be the same length else numpy throws a hissyfit
             # because it can't understand skewed matrices
