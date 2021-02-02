@@ -160,6 +160,8 @@ def log(*args, funcs=None, wrap=True, outdir=None, stdout=True):
 
     if outdir is not None:
         outfile = os.path.join(outdir, "log.txt")
+
+        s = "{}\t".format(time.now()) + s
         with open(outfile, "a+") as f:
             f.write(s + "\n")
 
