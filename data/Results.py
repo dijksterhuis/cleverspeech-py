@@ -2,7 +2,31 @@ import json
 import numpy as np
 
 from os import path
-from cleverspeech.utils.Utils import dump_b64bytes
+from cleverspeech.utils.Utils import dump_b64bytes, dump_wavs
+
+
+class FileWriter:
+    def __init__(self, outdir):
+        self.outdir = outdir
+        self.example_db = SingleJsonDB(outdir)
+
+    def write(self, queue):
+        while queue:
+            if queue.empty() is not True:
+                db_output = queue.get()
+
+                self.example_db.open(
+                    db_output['basename'].rstrip(".wav")
+                ).put(db_output)
+
+                # -- Write audio data.
+                dump_wavs(
+                    self.outdir,
+                    db_output,
+                    ["original", "delta", "advex"],
+                    filepath_key="basename",
+                    sample_rate=16000
+                )
 
 
 class SingleJsonDB:

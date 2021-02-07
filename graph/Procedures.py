@@ -102,13 +102,12 @@ class Base(ABC):
 
         while self.current_step < self.steps:
 
-            self.current_step += 1
-            step = self.current_step
+            if self.current_step % self.decode_step == 0 or self.current_step == 0:
+                yield self.decode_step_logic()
 
             attack.optimiser.optimise(b.feeds.attack)
 
-            if step % self.decode_step == 0:
-                yield self.decode_step_logic()
+            self.current_step += 1
 
 
 class UpdateOnDecoding(Base):
