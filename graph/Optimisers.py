@@ -80,6 +80,106 @@ class AdamOptimiser(Base):
         self.variables = adv_optimizer.variables()
 
 
+class AdaGradOptimiser(Base):
+    def __init__(
+            self,
+            attack,
+            learning_rate: float = 10.0,
+            momementum: float = 0.9,
+    ):
+        """
+        Initialise the optimiser.
+
+        :param attack_graph: The current attack graph perform optimisation with.
+        :param learning_rate: Learning rate for optimiser (currently Adam)
+        """
+        super().__init__(attack, learning_rate)
+
+        self.momentum = momementum
+
+    def create_optimiser(self):
+
+        adv_optimizer = tf.train.AdagradOptimizer(
+            learning_rate=self.learning_rate,
+        )
+
+        grad_var = adv_optimizer.compute_gradients(
+            self.attack.loss_fn,
+            self.attack.graph.opt_vars,
+            colocate_gradients_with_ops=True,
+        )
+        assert None not in lcomp(grad_var, i=0)
+        self.train = adv_optimizer.apply_gradients(grad_var)
+        self.variables = adv_optimizer.variables()
+
+
+class RMSPropOptimiser(Base):
+    def __init__(
+            self,
+            attack,
+            learning_rate: float = 10.0,
+            momementum: float = 0.9,
+    ):
+        """
+        Initialise the optimiser.
+
+        :param attack_graph: The current attack graph perform optimisation with.
+        :param learning_rate: Learning rate for optimiser (currently Adam)
+        """
+        super().__init__(attack, learning_rate)
+
+        self.momentum = momementum
+
+    def create_optimiser(self):
+
+        adv_optimizer = tf.train.RMSPropOptimizer(
+            learning_rate=self.learning_rate,
+        )
+
+        grad_var = adv_optimizer.compute_gradients(
+            self.attack.loss_fn,
+            self.attack.graph.opt_vars,
+            colocate_gradients_with_ops=True,
+        )
+        assert None not in lcomp(grad_var, i=0)
+        self.train = adv_optimizer.apply_gradients(grad_var)
+        self.variables = adv_optimizer.variables()
+
+
+class MomentumOptimiser(Base):
+    def __init__(
+            self,
+            attack,
+            learning_rate: float = 10.0,
+            momementum: float = 0.9,
+    ):
+        """
+        Initialise the optimiser.
+
+        :param attack_graph: The current attack graph perform optimisation with.
+        :param learning_rate: Learning rate for optimiser (currently Adam)
+        """
+        super().__init__(attack, learning_rate)
+
+        self.momentum = momementum
+
+    def create_optimiser(self):
+
+        adv_optimizer = tf.train.MomentumOptimizer(
+            learning_rate=self.learning_rate,
+            momentum=self.momentum,
+        )
+
+        grad_var = adv_optimizer.compute_gradients(
+            self.attack.loss_fn,
+            self.attack.graph.opt_vars,
+            colocate_gradients_with_ops=True,
+        )
+        assert None not in lcomp(grad_var, i=0)
+        self.train = adv_optimizer.apply_gradients(grad_var)
+        self.variables = adv_optimizer.variables()
+
+
 class CoordinateAdamOptimiser(AdamOptimiser):
     def __init__(
             self,
