@@ -35,7 +35,7 @@ class Base(ABC):
         argmax_alignment = "".join(argmax_alignment)
         return argmax_alignment
 
-    def run(self, outs):
+    def run(self, outs, queue):
 
         # -- get batch'd variables from the tensorflow graph
 
@@ -156,20 +156,7 @@ class Base(ABC):
 
                 # log(success_logging(db_output), wrap=False)
 
-                # -- Write results to a json file
-                # note that SingleJSONDB overwrites for each new example.
-                self.example_db.open(
-                    db_output['basename'].rstrip(".wav")
-                ).put(db_output)
-
-                # -- Write audio data.
-                dump_wavs(
-                    self.outdir,
-                    db_output,
-                    ["original", "delta", "advex"],
-                    filepath_key="basename",
-                    sample_rate=16000
-                )
+                queue.put(db_output)
 
         return outs["step"]
 

@@ -3,186 +3,331 @@ from py3nvml import py3nvml as pynvml
 
 import multiprocessing as mp
 import tensorflow as tf
+import numpy as np
 
 from cleverspeech.utils.Utils import log
 
 
-def create_tf_runtime(device_id=None):
-
-    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
-    tf.reset_default_graph()
-
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.allow_soft_placement = True
-    if not device_id:
-        device = "/device:GPU:0"
-    else:
-        device = "/device:GPU:{}".format(device_id)
-
-    return tf.Session(config=config), tf.device(device)
+class AttackFailedException(Exception):
+    pass
 
 
-def log_attack_tensors():
-    tensors = []
-    for op in tf.get_default_graph().get_operations():
-        if "qq" in op.name:
-            for tensor in op.values():
-                tensors.append(tensor.__str__())
-    return "\n".join(tensors)
+class TFRuntime:
+    def __init__(self, device_id=None):
 
+        tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-class AttackSpawner:
-    def __init__(self, gpu_device=0, max_processes=None, delay=120):
+        tf.reset_default_graph()
 
-        self.gpu_device = gpu_device
-        self.max_processes = max_processes
-        self.delay = delay
+        self.config = tf.ConfigProto()
+        self.config.gpu_options.allow_growth = True
+        self.config.allow_soft_placement = True
 
-        if max_processes is not None:
-            assert type(max_processes) is int
-            self.max_processes = max_processes
+        if not device_id:
+            device = "/device:GPU:0"
         else:
-            self.max_processes = mp.cpu_count() // 2
+            device = "/device:GPU:{}".format(device_id)
 
-        self.__current_gpu_memory_free = None
-        self.__previous_gpu_memory_free = None
-        self.__previous_batch_gpu_memory = None
+        self.session = tf.Session(config=self.config)
+        self.device = tf.device(device)
 
-        self.__total_cpus = mp.cpu_count()
-        self.__processes = []
+    @staticmethod
+    def log_attack_tensors():
+        tensors = []
+        for op in tf.get_default_graph().get_operations():
+            if "qq" in op.name:
+                for tensor in op.values():
+                    tensors.append(tensor.__str__())
+        return "\n".join(tensors)
+
+
+def bytes_to_megabytes_str(x, power=2):
+    return str(x // 1024 ** power) + " MB"
+
+
+class GpuMemory:
+    def __init__(self, gpu_device):
 
         pynvml.nvmlInit()
-
         self.__device_handle = pynvml.nvmlDeviceGetHandleByIndex(
-            self.gpu_device
+            gpu_device
         )
+        self.total = None
+        self.used = None
+        self.current_free = None
+        self.previous_free = None
+        self.max_batch = None
+        self.all_batch = []
 
-    def __get_current_gpu_memory(self):
+    def reset(self):
+        self.used = None
+        self.current_free = None
+        self.previous_free = None
+        self.max_batch = None
+        self.all_batch = []
 
-        if self.__current_gpu_memory_free is not None:
-            self.__previous_gpu_memory_free = self.__current_gpu_memory_free
+    def update_usage(self):
 
         gpu_memory = pynvml.nvmlDeviceGetMemoryInfo(
             self.__device_handle
         )
 
-        self.__current_gpu_memory_free = gpu_memory.free
+        self.total = gpu_memory.total
+        self.used = gpu_memory.used
+
+        if self.current_free is not None:
+            self.previous_free = self.current_free
+
+        self.current_free = gpu_memory.free
+
+    def update_batch(self):
+        self.all_batch.append(self.previous_free - self.current_free)
+        self.max_batch = max(self.all_batch)
+
+    def check_resource(self):
+        return self.max_batch > self.current_free * 0.9
+
+
+class Processes:
+    def __init__(self, max_processes):
+
+        self.total_cpu = mp.cpu_count()
+        self.processes = None
+        self.alive = None
+        self.attempts = None
+
+        if max_processes is not None:
+            assert type(max_processes) is int
+            self.max = max_processes
+        else:
+            self.max = self.total_cpu // 2
+
+        self.reset()
+
+    def reset(self):
+        self.processes = []
+        self.alive = 0
+        self.attempts = 0
+
+    def new(self, attack_run, results_queue, args):
+
+        parent_conn, worker_conn = mp.Pipe()
+        args = (results_queue, worker_conn, *args)
+        p = mp.Process(
+            target=attack_run,
+            args=args,
+        )
+        p.start()
+        self.processes.append((p, parent_conn))
+        self.attempts += 1
+        return p
+
+    def block(self):
+
+        # block until all current processes have completed
+        for process, _ in self.processes:
+            process.join()
+            process.close()
+
+    def terminate(self):
+        for process, _ in self.processes:
+            process.terminate()
+
+    def check_last(self):
+        _, pipe = self.processes[-1]
+        return pipe.recv()
+
+    def check_alive(self):
+        self.alive = 0
+        for process, _ in self.processes:
+            if process.is_alive():
+                self.alive += 1
+
+    def check_resource(self):
+        return self.attempts >= self.max
+
+
+class AttackSpawnerMessages(object):
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def reset():
+        log("Restarted spawner variables.", wrap=False)
+
+    @staticmethod
+    def new_process(process):
+        log("Spawned new attack with PID: {}".format(process.pid), wrap=False)
+
+    @staticmethod
+    def alive_process_count(n_spawn_attempts, n_processes_alive, max_processes):
+
+        s = "Current spawn attempts: {}\n".format(
+            n_spawn_attempts
+        )
+        s += "Current alive processes: {}\n".format(
+            n_processes_alive
+        )
+        s += "Max spawns: {}".format(
+            max_processes
+        )
+
+        log(s, wrap=False)
+
+    @staticmethod
+    def healthy(p):
+        s = "Last attack with PID {} is healthy.".format(p.pid)
+        log(s, wrap=False)
+
+    @staticmethod
+    def unhealthy(p):
+        s = "Last attack with PID {} is unhealthy!".format(p.pid)
+        log(s, wrap=False)
+
+    @staticmethod
+    def waiting(delay):
+        s = "Waiting {n} seconds for warm up before spawning again.".format(
+            n=delay
+        )
+        log(s, wrap=True)
+
+    @staticmethod
+    def start_blocking():
+        s = "No more resource available: "
+        s += "Blocking until current attacks completed."
+        log(s, wrap=False)
+
+    @staticmethod
+    def stop_blocking():
+        s = "\nLast attack process finished: "
+        s += "Will spawn additional attacks now."
+        log(s, wrap=False)
+
+    @staticmethod
+    def gpu_mem_usage_stats(free, previous, batches):
+
+        mem_mean = np.mean(batches)
+        mem_max = np.max(batches)
+        mem_min = np.min(batches)
+
+        mem_all = "\t".join([bytes_to_megabytes_str(x) for x in batches])
+
+        s = "GPU Memory Usage:\n"
+
+        s += "Free:\t{}\n".format(
+            bytes_to_megabytes_str(
+                free
+            )
+        )
+        s += "Last:\t{}\n".format(
+            bytes_to_megabytes_str(
+                previous
+            )
+        )
+        s += "Max:\t{}\n".format(
+            bytes_to_megabytes_str(
+                mem_max
+            )
+        )
+        s += "Min:\t{}\n".format(
+            bytes_to_megabytes_str(
+                mem_min
+            )
+        )
+        s += "Mean:\t{}\n".format(
+            bytes_to_megabytes_str(
+                mem_mean
+            )
+        )
+
+        s += "All:\t" + mem_all
+        log(s, wrap=True)
+
+
+class AttackSpawner:
+    def __init__(self, gpu_device=0, max_processes=None, delay=120, file_writer=None):
+
+        self.delay = delay
+        self.device = gpu_device
+
+        self.processes = Processes(max_processes)
+        self.gpu_memory = GpuMemory(self.device)
+        self.__results_queue = mp.Queue()
+        self.__writer_process = mp.Process(
+            target=file_writer.write, args=(self.__results_queue,)
+        )
+        self.__writer_process.start()
+
+        self.__messenger = AttackSpawnerMessages()
+
+        self.__reset__()
+
+    def __reset__(self):
+        self.processes.reset()
+        self.gpu_memory.reset()
+        self.__messenger.reset()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # TODO
-        pass
-
-    def __create_process(self, attack_run, args):
-
-        # we *must* call the tensorflow session within the batch loop so the
-        # graph gets reset: the maximum example length in a batch affects the
-        # size of most graph elements.
-        p = mp.Process(
-            target=attack_run,
-            args=args
-        )
-        p.start()
-        self.__processes.append(p)
-        log(
-            "\nSpawned new attack with PID: {}".format(
-                p.pid
-            ),
-            wrap=False
-        )
+        if exc_val:
+            self.processes.terminate()
+            self.__results_queue.close()
+            self.__writer_process.terminate()
+            raise AttackFailedException(
+                "Attack Failed:\n\n{v}\n{t}".format(v=exc_val, t=exc_tb)
+            )
+        else:
+            self.__results_queue.close()
+            self.__writer_process.close()
 
     def __wait(self):
-        log(
-            "Waiting {} seconds before checking for free resources.".format(
-                self.delay
-            ),
-            wrap=True
-        )
+        self.__messenger.waiting(self.delay)
         time.sleep(self.delay)
-
-    def __get_last_batch_gpu_memory(self):
-        previous = self.__previous_gpu_memory_free
-        current = self.__current_gpu_memory_free
-        self.__previous_batch_gpu_memory = previous - current
-
-    def __check_gpu_available(self):
-        current = self.__current_gpu_memory_free
-        batch = self.__previous_batch_gpu_memory
-        return batch > current
-
-    def __check_cpu_available(self):
-        return len(self.__processes) >= self.max_processes
-
-    def __block_until_completed(self):
-
-        # block until all current processes have completed
-        for process in self.__processes:
-            process.join()
-
-        s = "\nLast attack process finished: "
-        s += "Will spawn additional attacks now."
-
-        log(s)
-
-        # once finished, clear processes and start again
-        self.__processes.clear()
-
-    @staticmethod
-    def __bytes_to_megabytes_str(x, power=2):
-        return str(x // 1024 ** power) + " MB"
-
-    def __check_alive(self):
-        alive_processes = []
-        for process in self.__processes:
-            if process.is_alive():
-                alive_processes.append(process)
-        self.__processes = alive_processes
-
-        n_alive = len(self.__processes)
-
-        log(
-            "{n} processes are alive.".format(n=n_alive),
-            wrap=True
-        )
 
     def spawn(self, attack_run, *args):
 
-        self.__get_current_gpu_memory()
-        self.__create_process(attack_run, args)
+        self.gpu_memory.update_usage()
+
+        p = self.processes.new(attack_run, self.__results_queue, args)
+
+        self.__messenger.new_process(p)
         self.__wait()
-        self.__check_alive()
-        self.__get_current_gpu_memory()
-        self.__get_last_batch_gpu_memory()
 
-        if self.__check_gpu_available() or self.__check_cpu_available():
+        child_status = self.processes.check_last()
 
-            s = "\nNo more resource available: "
-            s += "Blocking until current attacks completed.\n"
+        if child_status is False:
+            self.__messenger.unhealthy(p)
+        else:
+            self.__messenger.healthy(p)
 
-            s += "Current N spawned processes: {}\t".format(
-                len(self.__processes)
-            )
-            s += "Max N spawned processes: {}\n".format(
-                self.max_processes
-            )
-            s += "Current free gpu memory: {}\t".format(
-                self.__bytes_to_megabytes_str(
-                    self.__current_gpu_memory_free
-                )
-            )
-            s += "Last attack used gpu memory: {}".format(
-                self.__bytes_to_megabytes_str(
-                    self.__previous_batch_gpu_memory
-                )
-            )
+        self.processes.check_alive()
+        self.gpu_memory.update_usage()
+        self.gpu_memory.update_batch()
 
-            log(s)
+        self.__messenger.alive_process_count(
+            self.processes.attempts,
+            self.processes.alive,
+            self.processes.max
+        )
 
-            self.__block_until_completed()
+        self.__messenger.gpu_mem_usage_stats(
+            self.gpu_memory.current_free,
+            self.gpu_memory.max_batch,
+            self.gpu_memory.all_batch,
+        )
+
+        gpu = self.gpu_memory.check_resource()
+        cpu = self.processes.check_resource()
+        fail = not child_status
+
+        if gpu or cpu or fail:
+            # once finished, reset all the __restart__ variables and start again
+            self.__messenger.start_blocking()
+            self.processes.block()
+            self.__reset__()
+            self.__messenger.stop_blocking()
 
         else:
             # Not full so don't block yet.
