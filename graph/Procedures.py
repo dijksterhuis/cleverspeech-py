@@ -4,7 +4,7 @@ from abc import ABC
 
 
 class Base(ABC):
-    def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
+    def __init__(self, attack, steps: int = 5000, decode_step: int = 10, loss_update_idx=None):
         """
         Base class that sets up a wealth of stuff to execute the attack over a
         number of iterations.
@@ -17,13 +17,14 @@ class Base(ABC):
         assert type(steps) in [float, int]
         assert type(decode_step) in [float, int]
         assert steps > decode_step
-
         assert attack.optimiser is not None
 
         self.attack = attack
-
         self.steps, self.decode_step = steps + 1, decode_step
         self.current_step = 0
+        self.update_loss = loss_update_idx
+        if self.update_loss is not None:
+            assert type(self.update_loss) in [int, float]
 
     def init_optimiser_variables(self):
 
@@ -60,6 +61,9 @@ class Base(ABC):
 
             if success:
                 self.attack.hard_constraint.update_one(delta, idx)
+                if self.update_loss is not None:
+                    # N.B. If doing loss updates, make sure it's the first one!
+                    self.attack.loss[self.update_loss].update(self.attack.sess, idx)
                 yield idx, success
             else:
                 yield idx, success

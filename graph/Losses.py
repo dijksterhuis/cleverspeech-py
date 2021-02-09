@@ -1,26 +1,62 @@
 import tensorflow as tf
+import numpy as np
 
 
-class CarliniL2Loss(object):
+class BaseLoss:
+    def __init__(self, sess, batch_size, weight_initial=1.0, weight_increment=1.0):
+
+        self.weights = tf.Variable(
+            tf.ones(batch_size, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = weight_initial * np.ones([batch_size], dtype=np.float32)
+        sess.run(self.weights.assign(initial_vals))
+
+        self.increment = float(weight_increment)
+
+    def update(self, sess, idx):
+        weights = sess.run(self.weights)
+        weights[idx] += self.increment
+        sess.run(self.weights.assign(weights))
+
+
+class CarliniL2Loss(BaseLoss):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
-    def __init__(self, attack_graph, loss_weight=10.0):
+    def __init__(self, attack_graph):
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
 
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
         l2delta = tf.reduce_mean(attack_graph.bounded_deltas ** 2, axis=1)
-        self.loss_fn = l2delta / loss_weight
+        self.loss_fn = l2delta / self.weights
 
 
-class CTCLoss(object):
+class CTCLoss(BaseLoss):
     """
     Simple adversarial CTC Loss from https://arxiv.org/abs/1801.01944
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack_graph, loss_weight=1.0):
+    def __init__(self, attack_graph):
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
             attack_graph.graph.placeholders.targets,
@@ -31,33 +67,52 @@ class CTCLoss(object):
             labels=tf.cast(self.ctc_target, tf.int32),
             inputs=attack_graph.victim.raw_logits,
             sequence_length=attack_graph.batch.audios.feature_lengths
-        ) * loss_weight
+        ) * self.weights
 
 
-class EntropyLoss(object):
-    def __init__(self, attack_graph, loss_weight=10.0):
+class EntropyLoss(BaseLoss):
+    def __init__(self, attack_graph):
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
+
         x = attack_graph.victim.logits
-        self.loss_fn = tf.reduce_max(-tf.reduce_sum(x * tf.log(x), axis=2), axis=1)
+
+        log_mult_sum = tf.reduce_sum(x * tf.log(x), axis=2)
+        neg_max = tf.reduce_max(-log_mult_sum, axis=1)
+
+        self.loss_fn = neg_max * self.weights
 
 
-class SampleL2Loss(object):
+class SampleL2Loss(BaseLoss):
     """
     Modified CTC Loss with L2 from the original code.
     """
-    def __init__(self, attack_graph, loss_weight=10.0):
+    def __init__(self, attack_graph):
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
 
         original = attack_graph.placeholders.audios
         delta = attack_graph.bounded_deltas
 
         self.l2original = tf.reduce_sum(tf.abs(original ** 2), axis=1)
-        self.l2delta = tf.abs(delta * loss_weight) ** 2
+        self.l2delta = tf.abs(delta) ** 2
         self.l2_loss = tf.reduce_sum(self.l2delta, axis=1) / self.l2original
 
-        self.loss_fn = self.l2_loss
+        self.loss_fn = self.l2_loss * self.weights
 
 
-class CWImproved(object):
-    def __init__(self, attack_graph, target_logits, importance=1.0, k=0.0, loss_weight=1.0):
+class CWImproved(BaseLoss):
+    def __init__(self, attack_graph, target_logits, k=0.0):
         """
         Low Confidence Adversarial Audio Loss as per the original work in
         https://arxiv.org/abs/1801.01944
@@ -95,6 +150,13 @@ class CWImproved(object):
         :param loss_weight:
         """
 
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
+
         self.target = target_logits
         self.target_max = tf.reduce_max(self.target, axis=2)
         self.argmax_target = tf.argmax(self.target, dimension=2)
@@ -108,12 +170,11 @@ class CWImproved(object):
             -k * tf.ones(self.argmax_target.shape, dtype=tf.float32),
             tf.reduce_max(self.target - self.current, axis=2)
         )
-        #self.token_weighting = importance * self.argmax_diff
-        self.loss_fn = tf.reduce_sum(self.argmax_diff, axis=1) * loss_weight
+        self.loss_fn = tf.reduce_sum(self.argmax_diff, axis=1) * self.weights
 
 
-class CWMaxDiff(object):
-    def __init__(self, attack_graph, target_logits, char_weight=1000.0, k=0.5, loss_weight=1.0):
+class CWMaxDiff(BaseLoss):
+    def __init__(self, attack_graph, target_logits, k=0.5):
         """
         This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
         clipping update method.
@@ -139,6 +200,13 @@ class CWMaxDiff(object):
         TODO: normalise to 0 <= x + d <= 1 and convert to tanh space for `change
               of variable` optimisation
         """
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
 
         # We have to set k > 0 for this loss function because k = 0 will only
         # cause the probability of the target character to exactly match the
@@ -249,4 +317,4 @@ class CWMaxDiff(object):
         self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
         self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
 
-        self.loss_fn = self.loss_fn * loss_weight
+        self.loss_fn = self.loss_fn * self.weights
