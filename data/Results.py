@@ -139,14 +139,14 @@ class FullJsonDB:
         return self
 
 
-def step_logging(step_results):
+def step_logging(step_results, delimiter="|"):
     s = ""
     for k, v in step_results.items():
         if type(v) in (float, int, np.float32, np.float64):
-            s += "{k}: {v:.4f}\t".format(k=k, v=v)
+            s += "{k}: {v:.4f}{d}".format(k=k, v=v, d=delimiter)
         else:
             try:
-                s += "{k}: {v}\t".format(k=k, v=v)
+                s += "{k}: {v}{d}".format(k=k, v=v, d=delimiter)
             except TypeError:
                 pass
     return s
