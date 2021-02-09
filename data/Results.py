@@ -143,11 +143,12 @@ def step_logging(step_results):
     s = ""
     for k, v in step_results.items():
         if type(v) in (float, int, np.float32, np.float64):
-            s += "{k}: {v:.3f}\t".format(k=k, v=v)
-        elif type(v) is str:
-            s += "{k}: {v}\t".format(k=k, v=v)
+            s += "{k}: {v:.4f}\t".format(k=k, v=v)
         else:
-            pass
+            try:
+                s += "{k}: {v}\t".format(k=k, v=v)
+            except TypeError:
+                pass
     return s
 
 
