@@ -142,8 +142,10 @@ class FullJsonDB:
 def step_logging(step_results, delimiter="|"):
     s = ""
     for k, v in step_results.items():
-        if type(v) in (float, int, np.float32, np.float64):
+        if type(v) in (float, np.float32, np.float64):
             s += "{k}: {v:.4f}{d}".format(k=k, v=v, d=delimiter)
+        elif type(v) in [int, np.int8, np.int16, np.int32, np.int64]:
+            s += "{k}: {v:.0f}{d}".format(k=k, v=v, d=delimiter)
         else:
             try:
                 s += "{k}: {v}{d}".format(k=k, v=v, d=delimiter)
