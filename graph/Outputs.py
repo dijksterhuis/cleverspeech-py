@@ -100,7 +100,7 @@ class Base(ABC):
             log_result = OrderedDict(
                 [
                     ("step", outs["step"]),
-                    ("file", basename),
+                    ("basename", basename),
                     ("success", int(success)),
                     ("tot_loss", total_loss),
                     *all_losses,
