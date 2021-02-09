@@ -41,6 +41,9 @@ class Base(ABC):
 
         a, b = self.attack, self.batch
 
+        graph_losses = [l.loss_fn for l in a.loss]
+        losses = a.procedure.tf_run(graph_losses)
+
         graph_variables = [
             a.loss_fn,
             a.hard_constraint.bounds,
@@ -54,7 +57,7 @@ class Base(ABC):
         tf_outs = a.procedure.tf_run(graph_variables)
 
         [
-            tot_loss,
+            total_losses,
             bounds,
             deltas,
             adv_audio,
@@ -82,7 +85,11 @@ class Base(ABC):
             bound_epsilon = bound_raw / initial_tau
             distance_epsilon = distance_raw / initial_tau
 
-            loss = tot_loss[idx]
+            total_loss = total_losses[idx]
+            all_losses = [
+                ("loss{}".format(i), l[idx]) for i, l in enumerate(losses)
+            ]
+
             target = target_phrase.replace(' ', '=')
             decoding = decoding.replace(' ', '=')
             cer = character_error_rate(decoding, target)
@@ -95,7 +102,8 @@ class Base(ABC):
                     ("step", outs["step"]),
                     ("file", basename),
                     ("success", int(success)),
-                    ("loss", loss),
+                    ("tot_loss", total_loss),
+                    *all_losses,
                     ("eps_b", bound_epsilon),
                     ("eps_d", distance_epsilon),
                     ("cer", cer),

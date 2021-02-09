@@ -61,30 +61,19 @@ class Constructor(ABC):
             **kwargs
         )
 
-    def add_distance_loss(self, loss, *args, **kwargs):
-        self.distance_loss = loss(self, *args, **kwargs)
-
-    def add_adversarial_loss(self, loss, *args, **kwargs):
-        self.adversarial_loss = loss(self, *args, **kwargs)
-
     def create_loss_fn(self):
-        assert self.adversarial_loss is not None
+        assert self.loss is not None
+        self.loss_fn = sum(l.loss_fn for l in self.loss)
 
-        if self.distance_loss is not None:
-            self.loss_fn = self.adversarial_loss.loss_fn + self.distance_loss.loss_fn
+    def add_loss(self, loss, *args, **kwargs):
+        # Note that the attribute `loss_fn` is called here
+        new_loss = loss(self, *args, **kwargs)
+        if self.loss_fn is None:
+            self.loss = [new_loss]
+            self.loss_fn = new_loss.loss_fn
         else:
-            self.loss_fn = self.adversarial_loss.loss_fn
-
-    # def add_loss(self, loss, *args, **kwargs):
-    #     # Note that the attribute `loss_fn` is called here
-    #     # This is the nice hack to pass on the attack_graph -- `loss(self, ...)`
-    #     new_loss = loss(self, *args, **kwargs)
-    #     if self.loss_fn is None:
-    #         # tmp change
-    #         self.loss = new_loss
-    #         self.loss_fn = self.loss.loss_fn
-    #     else:
-    #         self.loss_fn = new_loss.loss_fn + self.loss_fn
+            self.loss = self.loss + [new_loss]
+            self.loss_fn = self.loss_fn + new_loss.loss_fn
 
     def add_optimiser(self, optimiser, *args, **kwargs):
         self.optimiser = optimiser(self, *args, **kwargs)
