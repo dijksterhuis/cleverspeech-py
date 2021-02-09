@@ -293,7 +293,6 @@ class AttackSpawner:
         p = self.processes.new(attack_run, self.__results_queue, args)
 
         self.__messenger.new_process(p)
-        self.__wait()
 
         child_status = self.processes.check_last()
 
@@ -302,6 +301,7 @@ class AttackSpawner:
         else:
             self.__messenger.healthy(p)
 
+        self.__wait()
         self.processes.check_alive()
         self.gpu_memory.update_usage()
         self.gpu_memory.update_batch()
