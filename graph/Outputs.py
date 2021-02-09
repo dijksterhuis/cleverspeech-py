@@ -75,8 +75,13 @@ class Base(ABC):
             # -- get useful stuff for logging to stdout / file
             basename = b.audios.basenames[idx]
             delta = deltas[idx]
-            distance = a.hard_constraint.analyse(delta)
-            bound = bounds[idx][0]
+
+            initial_tau = a.hard_constraint.initial_taus[idx][0]
+            distance_raw = a.hard_constraint.analyse(delta)
+            bound_raw = bounds[idx][0]
+            bound_epsilon = bound_raw / initial_tau
+            distance_epsilon = distance_raw / initial_tau
+
             loss = tot_loss[idx]
             target = target_phrase.replace(' ', '=')
             decoding = decoding.replace(' ', '=')
@@ -88,16 +93,16 @@ class Base(ABC):
             log_result = OrderedDict(
                 [
                     ("step", outs["step"]),
-                    ("basename", basename),
-                    ("success", success),
-                    ("total loss", loss),
-                    ("bound", bound),
-                    ("distance", distance),
+                    ("file", basename),
+                    ("success", int(success)),
+                    ("loss", loss),
+                    ("eps_b", bound_epsilon),
+                    ("eps_d", distance_epsilon),
                     ("cer", cer),
                     ("wer", wer),
                     ("loglike", probs),
-                    ("target", target),
-                    ("decoding", decoding),
+                    ("targ", target),
+                    ("decode", decoding),
                 ]
             )
 
@@ -142,6 +147,11 @@ class Base(ABC):
                         ("argmax_decoding", argmax_alignment),
                         ("raw_logits", raw_logs),
                         ("smax_logits", smax_logs),
+                        ("initial_tau", initial_tau),
+                        ("distance_eps", distance_epsilon),
+                        ("bound_eps", bound_epsilon),
+                        ("distance_raw", distance_raw),
+                        ("bound_raw", bound_raw),
                     ]
                 )
                 db_output.update(log_result)
