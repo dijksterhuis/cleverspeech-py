@@ -75,6 +75,13 @@ class Base(ABC):
         # It does mean switching to CPU every time we want to do
         # inference but there's not a major hit to performance
 
+        top_5_decodings, top_5_probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.batch.feeds.attack,
+            decoder="batch",
+            top_five=True,
+        )
+
         decodings, probs = self.attack.victim.inference(
             self.attack.batch,
             feed=self.attack.batch.feeds.attack,
@@ -92,7 +99,9 @@ class Base(ABC):
                     "success": success,
                     "decodings": decodings[idx],
                     "target_phrase": targets[idx],
-                    "probs": probs
+                    "probs": probs[idx],
+                    "top_five_decodings": top_5_decodings[idx],
+                    "top_five_probs": top_5_probs[idx],
                 }
                 for idx, success in self.update_on_success(decodings, targets)
             ]

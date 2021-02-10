@@ -74,6 +74,8 @@ class Base(ABC):
             target_phrase = out["target_phrase"]
             probs = out["probs"][idx]
             success = out["success"]
+            top_5_decodings = out["top_five_decodings"]
+            top_5_probs = out["top_five_probs"]
 
             # -- get useful stuff for logging to stdout / file
             basename = b.audios.basenames[idx]
@@ -149,8 +151,8 @@ class Base(ABC):
                         ("original", original),
                         ("delta", delta),
                         ("advex", advex),
-                        ("top_five_decode", decoding),
-                        ("top_five_loglikes", probs),
+                        ("top_five_decode", top_5_decodings),
+                        ("top_five_loglikes", top_5_probs),
                         ("delta_variables", d_var),
                         ("argmax_decoding", argmax_alignment),
                         ("raw_logits", raw_logs),
