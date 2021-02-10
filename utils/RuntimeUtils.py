@@ -127,7 +127,6 @@ class Processes:
         # block until all current processes have completed
         for process, _ in self.processes:
             process.join()
-            process.close()
 
     def terminate(self):
         for process, _ in self.processes:
