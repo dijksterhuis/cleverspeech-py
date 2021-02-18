@@ -271,7 +271,7 @@ class CWMaxDiff(BaseLoss):
         # - target logit (should just be the target logit value)
         # - all other logits (should be next most likely class)
 
-        self.target_logit = tf.reduce_max(self.targ, axis=2)
+        self.target_logit = tf.reduce_sum(self.targ, axis=2)
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
         # If target logit is most likely, then the optimiser has done a good job
