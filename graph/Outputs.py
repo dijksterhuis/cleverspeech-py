@@ -72,7 +72,7 @@ class Base(ABC):
             idx = out["idx"]
             decoding = out["decodings"]
             target_phrase = out["target_phrase"]
-            probs = out["probs"][idx]
+            probs = out["probs"]
             success = out["success"]
             top_5_decodings = out["top_five_decodings"]
             top_5_probs = out["top_five_probs"]
