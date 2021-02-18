@@ -115,8 +115,8 @@ class AllTargetPhrases(ETL):
 
     def transform(self):
         targets = self.__extracted
-        targets.sort(key=lambda x: len(x[0]), reverse=True)
-        self.__transformed = targets[-self.numb:]
+        targets.sort(key=lambda x: len(x[0]), reverse=False)
+        self.__transformed = targets[:self.numb]
         return self
 
     def load(self):
