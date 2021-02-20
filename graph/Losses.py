@@ -70,6 +70,35 @@ class CTCLoss(BaseLoss):
         ) * self.weights
 
 
+class CTCLossV2(BaseLoss):
+    """
+    Simple adversarial CTC Loss from https://arxiv.org/abs/1801.01944
+
+    N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+    """
+    def __init__(self, attack_graph):
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=1.0,
+            weight_increment=1.0
+        )
+
+        self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack_graph.graph.placeholders.targets,
+            attack_graph.graph.placeholders.target_lengths
+        )
+
+        self.loss_fn = tf.nn.ctc_loss_v2(
+            labels=tf.cast(self.ctc_target, tf.int32),
+            logits=attack_graph.victim.raw_logits,
+            label_length=attack_graph.graph.placeholders.target_lengths,
+            logit_length=attack_graph.batch.audios.feature_lengths,
+            blank_index=-1
+        ) * self.weights
+
+
 class EntropyLoss(BaseLoss):
     def __init__(self, attack_graph):
 
