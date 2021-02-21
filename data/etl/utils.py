@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 from cleverspeech.utils.Utils import np_arr, np_zero, l_map
 
@@ -132,7 +133,7 @@ class BatchGen(object):
 
     @staticmethod
     def pop_target_phrase(all_targets, min_feats, idx=0):
-        candidate_target = all_targets[idx]
+        candidate_target = random.choice(all_targets)
         if len(candidate_target[0]) > min_feats:
             BatchGen.pop_target_phrase(all_targets, min_feats, idx=idx + 1)
         else:
