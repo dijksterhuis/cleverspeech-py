@@ -194,7 +194,7 @@ def snr_segmented(error_signal, original_signal, frame_size=512):
     original_frame = psf.sigproc.framesig(error_signal, frame_size, frame_size)
     error_frame = psf.sigproc.framesig(original_signal, frame_size, frame_size)
 
-    logged = to_db(snr_energy(error_frame, original_frame))
+    logged = to_db(snr_energy(original_frame, error_frame))
 
     return sum(logged) / frame_size
 

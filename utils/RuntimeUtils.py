@@ -252,10 +252,13 @@ class AttackSpawner:
         self.processes = Processes(max_processes)
         self.gpu_memory = GpuMemory(self.device)
         self.__results_queue = mp.Queue()
-        self.__writer_process = mp.Process(
-            target=file_writer.write, args=(self.__results_queue,)
-        )
-        self.__writer_process.start()
+        if file_writer is not None:
+            self.__writer_process = mp.Process(
+                target=file_writer.write, args=(self.__results_queue,)
+            )
+            self.__writer_process.start()
+        else:
+            self.__writer_process = None
 
         self.__messenger = AttackSpawnerMessages()
 
@@ -273,13 +276,15 @@ class AttackSpawner:
         if exc_val:
             self.processes.terminate()
             self.__results_queue.close()
-            self.__writer_process.terminate()
+            if self.__writer_process is not None:
+                self.__writer_process.terminate()
             raise AttackFailedException(
                 "Attack Failed:\n\n{v}\n{t}".format(v=exc_val, t=exc_tb)
             )
         else:
             self.__results_queue.close()
-            self.__writer_process.close()
+            if self.__writer_process is not None:
+                self.__writer_process.close()
 
     def __wait(self):
         self.__messenger.waiting(self.delay)

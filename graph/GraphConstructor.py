@@ -9,9 +9,10 @@ class Constructor(ABC):
     Inherited by subsequent graphs
     Automatically passes attack graph to loss and optimiser
     """
-    def __init__(self, sess, batch):
+    def __init__(self, sess, batch, feeds):
 
         self.batch = batch
+        self.feeds = feeds
         self.sess = sess
 
         self.graph = None
@@ -95,9 +96,12 @@ class Constructor(ABC):
         results = self.optimiser.update_bound(*args, **kwargs)
         return results
 
+    def create_feeds(self):
+        self.feeds.create_feeds(self.graph)
+
 
 class Placeholders(object):
-    def __init__(self, batch_size: int, maxlen: int) -> object:
+    def __init__(self, batch_size: int, maxlen: int):
         self.audios = tf.placeholder(tf.float32, [batch_size, maxlen], name="new_input")
         self.audio_lengths = tf.placeholder(tf.int32, [batch_size], name='qq_featlens')
         self.targets = tf.placeholder(tf.int32, [batch_size, None], name='qq_targets')

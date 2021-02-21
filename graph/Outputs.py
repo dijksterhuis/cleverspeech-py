@@ -4,11 +4,10 @@ import numpy as np
 from abc import ABC
 from collections import OrderedDict
 
-from cleverspeech.data.Results import SingleJsonDB, step_logging, success_logging
-from cleverspeech.utils.Utils import log, dump_wavs
+from cleverspeech.data.Results import SingleJsonDB, step_logging
+from cleverspeech.utils.Utils import log
 from cleverspeech.eval.ErrorRates import character_error_rate
 from cleverspeech.eval.ErrorRates import word_error_rate
-from cleverspeech.eval.OnlineProcessing import get_perceptual_stats
 
 
 class Base(ABC):
@@ -78,7 +77,7 @@ class Base(ABC):
             top_5_probs = out["top_five_probs"]
 
             # -- get useful stuff for logging to stdout / file
-            basename = b.audios.basenames[idx]
+            basename = b.audios["basenames"][idx]
             delta = deltas[idx]
 
             initial_tau = a.hard_constraint.initial_taus[idx][0]
@@ -131,14 +130,14 @@ class Base(ABC):
             if success is True:
 
                 # save time by only doing this stuff when needed
-                actual_length = b.audios.actual_lengths[idx]
-                original = b.audios.audio[idx]
+                actual_length = b.audios["real_feats"][idx]
+                original = b.audios["audio"][idx]
                 advex = adv_audio[idx]
                 d_var = delta_vars[0][idx]
                 raw_logs = raw_logits[idx]
                 smax_logs = softmax_logits[idx]
                 argmax_alignment = self.get_argmax_alignment(
-                    b.targets.tokens,
+                    b.targets["tokens"],
                     raw_logs,
                 )
 

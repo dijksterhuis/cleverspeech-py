@@ -1,5 +1,5 @@
 class Validation:
-    def __init__(self, audio_batch, target_batch):
+    def __init__(self, batch):
         """
         Holds the feeds which will be passed into DeepSpeech for normal or
         attack evaluation.
@@ -8,8 +8,8 @@ class Validation:
         :param target_batch: a batch of target phrases (`Targets` class)
         """
 
-        self.audio = audio_batch
-        self.targets = target_batch
+        self.audio = batch.audios
+        self.targets = batch.targets
         self.examples = None
 
     def create_feeds(self, audio_ph, lens_ph):
@@ -22,15 +22,15 @@ class Validation:
         # TODO - this is nasty!
 
         self.examples = {
-            audio_ph: self.audio.padded_audio,
-            lens_ph: self.audio.feature_lengths
+            audio_ph: self.audio["padded_audio"],
+            lens_ph: self.audio["ds_feats"]
         }
 
         return self.examples
 
 
 class Attack:
-    def __init__(self, audio_batch, target_batch):
+    def __init__(self, batch):
         """
         Holds the feeds which will be passed into DeepSpeech for normal or
         attack evaluation.
@@ -39,8 +39,8 @@ class Attack:
         :param target_batch: a batch of target phrases (`Targets` class)
         """
 
-        self.audio = audio_batch
-        self.targets = target_batch
+        self.audio = batch.audios
+        self.targets = batch.targets
         self.examples = None
         self.attack = None
         self.alignments = None
@@ -54,20 +54,20 @@ class Attack:
         """
         # TODO - this is nasty!
         self.alignments = {
-            graph.placeholders.targets: self.targets.indices,
-            graph.placeholders.target_lengths: self.targets.lengths
+            graph.placeholders.targets: self.targets["indices"],
+            graph.placeholders.target_lengths: self.targets["lengths"],
         }
 
         self.examples = {
-            graph.placeholders.audios: self.audio.padded_audio,
-            graph.placeholders.audio_lengths: self.audio.feature_lengths
+            graph.placeholders.audios: self.audio["padded_audio"],
+            graph.placeholders.audio_lengths: self.audio["ds_feats"],
         }
 
         self.attack = {
-            graph.placeholders.audios: self.audio.padded_audio,
-            graph.placeholders.audio_lengths: self.audio.feature_lengths,
-            graph.placeholders.targets: self.targets.indices,
-            graph.placeholders.target_lengths: self.targets.lengths
+            graph.placeholders.audios: self.audio["padded_audio"],
+            graph.placeholders.audio_lengths: self.audio["ds_feats"],
+            graph.placeholders.targets: self.targets["indices"],
+            graph.placeholders.target_lengths: self.targets["lengths"],
         }
 
         return self.examples, self.attack

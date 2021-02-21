@@ -21,8 +21,8 @@ class SimpleAttack:
 
         """
         batch_size = batch.size
-        max_len = batch.audios.max_length
-        act_lengths = batch.audios.actual_lengths
+        max_len = batch.audios["max_samples"]
+        act_lengths = batch.audios["n_samples"]
 
         self.placeholders = Placeholders(batch_size, max_len)
 
@@ -36,7 +36,7 @@ class SimpleAttack:
 
         # Generate the delta synth parameter objects which we will optimise
         raw_deltas = tf.Variable(
-            tf.zeros([batch.size, batch.audios.max_length], dtype=tf.float32),
+            tf.zeros([batch.size, max_len], dtype=tf.float32),
             trainable=True,
             validate_shape=True,
             dtype=tf.float32,

@@ -36,7 +36,7 @@ class LNorm(ABC):
         )
 
         self.initial_taus = np_arr(
-            lcomp(self._gen_tau(batch.audios.actual_lengths)),
+            lcomp(self._gen_tau(batch.audios["n_samples"])),
             np.float32
         )
 

@@ -66,7 +66,7 @@ class CTCLoss(BaseLoss):
         self.loss_fn = tf.nn.ctc_loss(
             labels=tf.cast(self.ctc_target, tf.int32),
             inputs=attack_graph.victim.raw_logits,
-            sequence_length=attack_graph.batch.audios.feature_lengths
+            sequence_length=attack_graph.batch.audios["ds_feats"]
         ) * self.weights
 
 

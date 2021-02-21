@@ -1,11 +1,12 @@
 import json
 import numpy as np
 
-from os import path
+from os import path, mkdir
 from cleverspeech.utils.Utils import dump_b64bytes, dump_wavs
+from cleverspeech.eval.PerceptualStatsOnline import get_perceptual_stats
 
 
-class FileWriter:
+class SingleFileWriter:
     def __init__(self, outdir):
         self.outdir = outdir
         self.example_db = SingleJsonDB(outdir)
@@ -15,13 +16,47 @@ class FileWriter:
             if queue.empty() is not True:
                 db_output = queue.get()
 
-                self.example_db.open(
-                    db_output['basename'].rstrip(".wav")
-                ).put(db_output)
+                perceptual_stats = get_perceptual_stats(db_output)
+                db_output.update(perceptual_stats)
+
+                db_file_path = db_output['basename'].rstrip(".wav")
+
+                self.example_db.open(db_file_path).put(db_output)
 
                 # -- Write audio data.
                 dump_wavs(
                     self.outdir,
+                    db_output,
+                    ["original", "delta", "advex"],
+                    filepath_key="basename",
+                    sample_rate=16000
+                )
+
+
+class FullFileWriter:
+    def __init__(self, outdir):
+        self.outdir = outdir
+        self.example_db = SingleJsonDB(outdir)
+
+    def write(self, queue):
+        while queue:
+            if queue.empty() is not True:
+                db_output = queue.get()
+
+                example_dir = path.join(self.outdir, db_output['basename'])
+
+                if not path.exists(example_dir):
+                    mkdir(example_dir)
+
+                perceptual_stats = get_perceptual_stats(db_output)
+                db_output.update(perceptual_stats)
+
+                db_file_path = example_dir + "/" + "step{}".format(db_output["step"])
+                self.example_db.open(db_file_path).put(db_output)
+
+                # -- Write audio data.
+                dump_wavs(
+                    example_dir,
                     db_output,
                     ["original", "delta", "advex"],
                     filepath_key="basename",

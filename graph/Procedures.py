@@ -40,7 +40,7 @@ class Base(ABC):
 
     def tf_run(self, tf_variables):
         sess = self.attack.sess
-        feed = self.attack.batch.feeds.attack
+        feed = self.attack.feeds.attack
         return sess.run(tf_variables, feed_dict=feed)
 
     @staticmethod
@@ -77,19 +77,19 @@ class Base(ABC):
 
         top_5_decodings, top_5_probs = self.attack.victim.inference(
             self.attack.batch,
-            feed=self.attack.batch.feeds.attack,
+            feed=self.attack.feeds.attack,
             decoder="batch",
             top_five=True,
         )
 
         decodings, probs = self.attack.victim.inference(
             self.attack.batch,
-            feed=self.attack.batch.feeds.attack,
+            feed=self.attack.feeds.attack,
             decoder="batch",
             top_five=False,
         )
 
-        targets = self.attack.batch.targets.phrases
+        targets = self.attack.batch.targets["phrases"]
 
         return {
             "step": self.current_step,
@@ -118,7 +118,7 @@ class Base(ABC):
             if self.current_step % self.decode_step == 0 or self.current_step == 0:
                 yield self.decode_step_logic()
 
-            attack.optimiser.optimise(b.feeds.attack)
+            attack.optimiser.optimise(attack.feeds.attack)
 
             self.current_step += 1
 
@@ -163,16 +163,24 @@ class UpdateOnLoss(Base):
 
     def decode_step_logic(self):
 
-        loss = self.tf_run(self.attack.adversarial_loss.loss_fn)
+        loss = self.tf_run(self.attack.loss_fn)
+
+        top_5_decodings, top_5_probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=True,
+        )
+
         decodings, probs = self.attack.victim.inference(
             self.attack.batch,
-            feed=self.attack.batch.feeds.attack,
+            feed=self.attack.feeds.attack,
             decoder="batch",
             top_five=False,
         )
 
         target_loss = [self.loss_bound for _ in range(self.attack.batch.size)]
-        targets = self.attack.batch.targets.phrases
+        targets = self.attack.batch.targets["phrases"]
 
         return {
             "step": self.current_step,
@@ -182,7 +190,9 @@ class UpdateOnLoss(Base):
                     "success": success,
                     "decodings": decodings[idx],
                     "target_phrase": targets[idx],
-                    "probs": probs
+                    "top_five_decodings": top_5_decodings[idx],
+                    "top_five_probs": top_5_probs[idx],
+                    "probs": probs[idx]
                 }
                 for idx, success in self.update_on_success(loss, target_loss)
             ]
