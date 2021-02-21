@@ -70,10 +70,27 @@ class Base(ABC):
 
     def decode_step_logic(self):
 
+        # ==> every x steps apply integer level rounding prior to decoding.
+        # this helps the attacks work against the deepspeech native client api
+        # which only accepts tf.int16 type inputs. Although it doesn't work 100%
+        # of the time so use `bin/classify.py` to get the true success rate.
+
+        # We could do a line search etc. after running optimisation, but doing
+        # things during attack optimisation seems to help it find a solution in
+        # integer space all by itself (vs. fiddling with the examples after).
+
+        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
+        self.attack.sess.run(
+            self.attack.graph.raw_deltas.assign(tf.round(deltas))
+        )
+
         # can use either tf or deepspeech decodings ("ds" or "batch")
         # "batch" is prefered as it's what the actual model would use.
         # It does mean switching to CPU every time we want to do
-        # inference but there's not a major hit to performance
+        # inference but it's not a major hit to performance
+
+        # keep the top 5 scoring decodings and their probabilities as that might
+        # be useful come analysis time...
 
         top_5_decodings, top_5_probs = self.attack.victim.inference(
             self.attack.batch,
@@ -162,6 +179,11 @@ class UpdateOnLoss(Base):
         return True if left <= right else False
 
     def decode_step_logic(self):
+
+        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
+        self.attack.sess.run(
+            self.attack.graph.raw_deltas.assign(tf.round(deltas))
+        )
 
         loss = self.tf_run(self.attack.loss_fn)
 

@@ -35,7 +35,7 @@ class SimpleAttack:
         )
 
         # Generate the delta synth parameter objects which we will optimise
-        raw_deltas = tf.Variable(
+        self.raw_deltas = tf.Variable(
             tf.zeros([batch.size, max_len], dtype=tf.float32),
             trainable=True,
             validate_shape=True,
@@ -45,7 +45,7 @@ class SimpleAttack:
 
         # Mask deltas first so we zero value *any part of the signal* that is
         # zero value padded in the original audio
-        deltas = raw_deltas * masks
+        deltas = self.raw_deltas * masks
 
         # Restrict delta to valid space before applying constraints
 
@@ -75,7 +75,7 @@ class SimpleAttack:
 
         sess.run(masks.assign(initial_masks))
 
-        self.opt_vars = [raw_deltas]
+        self.opt_vars = [self.raw_deltas]
 
 
     @staticmethod
