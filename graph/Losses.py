@@ -140,6 +140,70 @@ class SampleL2Loss(BaseLoss):
         self.loss_fn = self.l2_loss * self.weights
 
 
+class BaseLogitDiffLoss(BaseLoss):
+    def __init__(self, attack_graph, target_argmax, weight_initial=1.0, weight_increment=1.0):
+        """
+        This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
+        using the gradient clipping update method.
+
+        Difference of:
+        - target logits value (B)
+        - max other logits value (A -- 2nd most likely)
+
+        Once  B > A, then B is most likely and we can stop optimising.
+
+        Unless -k > B, then k acts as a confidence threshold and continues
+        optimisation.
+
+        This will push B to become even less likely.
+        """
+
+        super().__init__(
+            attack_graph.sess,
+            attack_graph.batch.size,
+            weight_initial=weight_initial,
+            weight_increment=weight_increment
+        )
+
+        g = attack_graph
+
+        # We only use the argmax of the generated alignments so we don't have
+        # to worry about finding "exact" alignments
+        # target_logits should be [b, feats, chars]
+        self.target_argmax = target_argmax  # [b x feats]
+
+        # Current logits is [b, feats, chars]
+        # current_argmax is for debugging purposes only
+        self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
+        self.current = g.victim.logits
+
+        # Create one hot matrices to multiply by current logits.
+        # These essentially act as a filter to keep only the target logit or
+        # the rest of the logits (non-target).
+        targ_onehot = tf.one_hot(
+            self.target_argmax,
+            self.current.shape.as_list()[2],
+            on_value=1.0,
+            off_value=0.0
+        )
+        others_onehot = tf.one_hot(
+            self.target_argmax,
+            self.current.shape.as_list()[2],
+            on_value=0.0,
+            off_value=1.0
+        )
+
+        self.others = self.current * others_onehot
+        self.targ = self.current * targ_onehot
+
+        # Get the maximums of:
+        # - target logit (should just be the target logit value)
+        # - all other logits (should be next most likely class)
+
+        self.target_logit = tf.reduce_sum(self.targ, axis=2)
+        self.max_other_logit = tf.reduce_max(self.others, axis=2)
+
+
 class CWImproved(BaseLoss):
     def __init__(self, attack_graph, target_logits, k=0.0):
         """
@@ -202,7 +266,54 @@ class CWImproved(BaseLoss):
         self.loss_fn = tf.reduce_sum(self.argmax_diff, axis=1) * self.weights
 
 
-class CWMaxDiff(BaseLoss):
+class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
+    def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_initial=1.0):
+        """
+        This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
+        using the gradient clipping update method.
+
+        Difference of:
+        - target logits value (B)
+        - max other logits value (A -- 2nd most likely)
+
+        Once  B > A, then B is most likely and we can stop optimising.
+
+        Unless -k > B, then k acts as a confidence threshold and continues
+        optimisation.
+
+        This will push B to become even less likely.
+        """
+
+        super().__init__(
+            attack_graph,
+            target_argmax,
+            weight_initial=weight_initial,
+            weight_increment=1.0
+        )
+
+        # We have to set k > 0 for this loss function because k = 0 will only
+        # cause the probability of the target character to exactly match the
+        # next most likely character...
+        assert type(k) is float
+        assert ref_fn in [tf.reduce_max, tf.reduce_min, tf.reduce_mean]
+
+        self.kappa_distrib = self.max_other_logit - ref_fn(self.others, axis=2)
+
+        # each target logit frame must be at least k * other logits difference
+        # for loss to minimise.
+        self.kappas = self.kappa_distrib * k
+
+        # If target logit is most likely, then the optimiser has done a good job
+        # and loss will become negative.
+        # Add kappa on the end so that loss is zero when minimised
+        self.max_diff_abs = self.max_other_logit - self.target_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -self.kappas) + self.kappas
+        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
+
+        self.loss_fn = self.loss_fn * self.weights
+
+
+class CWMaxDiff(BaseLogitDiffLoss):
     def __init__(self, attack_graph, target_logits, k=0.5):
         """
         This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
@@ -231,118 +342,13 @@ class CWMaxDiff(BaseLoss):
         """
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack_graph,
+            target_logits,
             weight_initial=1.0,
             weight_increment=1.0
         )
 
-        # We have to set k > 0 for this loss function because k = 0 will only
-        # cause the probability of the target character to exactly match the
-        # next most likely character...
-        # Which means we wouldn't ever achieve success!
-        assert type(k) is float
-
-        g = attack_graph
-
-        # We only use the argmax of the generated alignments so we don't have
-        # to worry about finding "exact" alignments
-        # target_logits should be [b, feats, chars]
-        self.target = tf.transpose(target_logits, [1, 0, 2])
-        self.target_argmax = tf.argmax(self.target, dimension=2)  # [b x feats]
-
-        # Current logits is [b, feats, chars]
-        # current_argmax is for debugging purposes only
-        self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
-        self.current_argmax = tf.argmax(self.current, axis=2)
-
-        # Create one hot matrices to multiply by current logits.
-        # These essentially act as a filter to keep only the target logit or
-        # the rest of the logits (non-target).
-        targ_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=1.0,
-            off_value=0.0
-        )
-        others_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=0.0,
-            off_value=1.0
-        )
-
-        self.others = self.current * others_onehot
-        self.targ = self.current * targ_onehot
-
-        # + 1e-10 covers logit == zero edge case in subsequent where clauses
-        # self.others = (self.current + 1e-6) * others_onehot
-        # self.targ = (self.current + 1e-6) * targ_onehot
-
-        # DeepSpeech zero-valued Softmax logits are anything < 0.
-        # If we don't replace the zero off + on values after one hot
-        # multiplication then optimisation could be halted prematurely => the
-        # zero can become the most likely class in some cases
-
-        # self.targ = tf.where(
-        #     tf.equal(self.targ, tf.zeros(self.targ.shape, dtype=tf.float32)),
-        #     -40.0 * tf.ones(self.targ.shape, dtype=tf.float32),
-        #     self.targ
-        # )
-        #
-        # self.others = tf.where(
-        #     tf.equal(self.others, tf.zeros(self.others.shape, dtype=tf.float32)),
-        #     -40.0 * tf.ones(self.others.shape, dtype=tf.float32),
-        #     self.others
-        # )
-
-        # Get the maximums of:
-        # - target logit (should just be the target logit value)
-        # - all other logits (should be next most likely class)
-
-        self.target_logit = tf.reduce_sum(self.targ, axis=2)
-        self.max_other_logit = tf.reduce_max(self.others, axis=2)
-
-        # If target logit is most likely, then the optimiser has done a good job
-        # and loss will become negative.
-        # Keep optimising until we reached the confidence threshold -- how much
-        # distance between logits do we want can be controlled by k
-
         self.max_diff_abs = self.max_other_logit - self.target_logit
-
-        # MR addition
-        # Multiply by minimisation weighting only when target < next class to
-        # encourage further optimisation -- we want *highly confident* examples
-
-        # self.max_diff = tf.where(
-        #     tf.less_equal(self.max_diff, tf.zeros(self.max_diff.shape, dtype=tf.float32)),
-        #     tf.maximum(self.max_diff, -k),
-        #     self.max_diff * importance
-        # )
-        # TODO: per character importance -- could this be adaptive?
-        #       e.g. use percentage maxdiff compared to abs. max of maxdiff for
-        #       each character? Then, when a character is *VERY* different, it
-        #       gets a higher weighting, while other get a lower weighting
-        #       (i.e. the characters which are already closer).
-
-        # hacky implementation of character importance, only dealing with
-        # repeats and space characters
-        #
-        # self.max_diff_character_weighted = tf.where(
-        #     tf.equal(self.target_argmax, 28),
-        #     0.5 * self.max_diff_abs,
-        #     self.max_diff_abs,
-        # )
-        #
-        # self.max_diff_character_weighted = tf.where(
-        #     tf.equal(self.target_argmax, 0),
-        #     0.5 * self.max_diff_abs,
-        #     self.max_diff_abs,
-        # )
-        # Take the maximum between the max diffs or confidence threshold.
-        # We add k at the end so the loss is always non-negative.
-        # This is for sanity checks and has no impact on optimisation.
-
         self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
         self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
 
