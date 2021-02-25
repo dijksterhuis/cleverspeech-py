@@ -3,7 +3,14 @@ import numpy as np
 
 
 class BaseLoss:
-    def __init__(self, sess, batch_size, weight_initial=1.0, weight_increment=1.0):
+    def __init__(self, sess, batch_size, weight_settings=(None, None)):
+
+        assert type(weight_settings) in [list, tuple]
+        assert all(type(t) in [float, int] for t in weight_settings)
+        assert len(weight_settings) == 2
+
+        initial = weight_settings[0]
+        increment = weight_settings[1]
 
         self.weights = tf.Variable(
             tf.ones(batch_size, dtype=tf.float32),
@@ -12,10 +19,10 @@ class BaseLoss:
             name="qq_loss_weight"
         )
 
-        initial_vals = weight_initial * np.ones([batch_size], dtype=np.float32)
+        initial_vals = initial * np.ones([batch_size], dtype=np.float32)
         sess.run(self.weights.assign(initial_vals))
 
-        self.increment = float(weight_increment)
+        self.increment = float(increment)
 
     def update(self, sess, idx):
         weights = sess.run(self.weights)
@@ -27,13 +34,12 @@ class CarliniL2Loss(BaseLoss):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
-    def __init__(self, attack_graph):
+    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings
         )
 
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
@@ -51,13 +57,10 @@ class CTCLoss(BaseLoss):
     """
     def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
 
-        assert type(weight_settings) in list, tuple
-
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=weight_settings[0],
-            weight_increment=weight_settings[1]
+            weight_settings=weight_settings
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -78,13 +81,12 @@ class CTCLossV2(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack_graph):
+    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -102,13 +104,14 @@ class CTCLossV2(BaseLoss):
 
 
 class EntropyLoss(BaseLoss):
-    def __init__(self, attack_graph):
+    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+
+        assert type(weight_settings) in list, tuple
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings
         )
 
         x = attack_graph.victim.logits
@@ -123,13 +126,14 @@ class SampleL2Loss(BaseLoss):
     """
     Modified CTC Loss with L2 from the original code.
     """
-    def __init__(self, attack_graph):
+    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+
+        assert type(weight_settings) in list, tuple
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings
         )
 
         original = attack_graph.placeholders.audios
@@ -143,28 +147,17 @@ class SampleL2Loss(BaseLoss):
 
 
 class BaseLogitDiffLoss(BaseLoss):
-    def __init__(self, attack_graph, target_argmax, weight_initial=1.0, weight_increment=1.0):
+    def __init__(self, attack_graph, target_argmax, weight_settings=(None, None)):
+
         """
-        This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
-        using the gradient clipping update method.
-
-        Difference of:
-        - target logits value (B)
-        - max other logits value (A -- 2nd most likely)
-
-        Once  B > A, then B is most likely and we can stop optimising.
-
-        Unless -k > B, then k acts as a confidence threshold and continues
-        optimisation.
-
-        This will push B to become even less likely.
+        Base class that can be used for logits difference losses, like CW f_6
+        and the adaptive kappa variant.
         """
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=weight_initial,
-            weight_increment=weight_increment
+            weight_settings=weight_settings
         )
 
         g = attack_graph
@@ -207,7 +200,7 @@ class BaseLogitDiffLoss(BaseLoss):
 
 
 class CWImproved(BaseLoss):
-    def __init__(self, attack_graph, target_logits, k=0.0):
+    def __init__(self, attack_graph, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
         """
         Low Confidence Adversarial Audio Loss as per the original work in
         https://arxiv.org/abs/1801.01944
@@ -248,8 +241,7 @@ class CWImproved(BaseLoss):
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings
         )
 
         self.target = target_logits
@@ -269,7 +261,7 @@ class CWImproved(BaseLoss):
 
 
 class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
-    def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_initial=1.0):
+    def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
         """
         This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
         using the gradient clipping update method.
@@ -280,17 +272,20 @@ class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
 
         Once  B > A, then B is most likely and we can stop optimising.
 
-        Unless -k > B, then k acts as a confidence threshold and continues
+        Unless -kappa > B, then kappa acts as a confidence threshold and continues
         optimisation.
 
-        This will push B to become even less likely.
+        Where kappa is an adaptive value based on the results of the reference
+        function on the softmax vector values for that frame.
+
+        Basically, each frame step should have a different k constant, so we
+        calculate it adaptively based on the frame's probability distribution.
         """
 
         super().__init__(
             attack_graph,
             target_argmax,
-            weight_initial=weight_initial,
-            weight_increment=1.0
+            weight_settings=weight_settings,
         )
 
         # We have to set k > 0 for this loss function because k = 0 will only
@@ -316,7 +311,7 @@ class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
 
 
 class CWMaxDiff(BaseLogitDiffLoss):
-    def __init__(self, attack_graph, target_logits, k=0.5):
+    def __init__(self, attack_graph, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
         """
         This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
         clipping update method.
@@ -346,8 +341,7 @@ class CWMaxDiff(BaseLogitDiffLoss):
         super().__init__(
             attack_graph,
             target_logits,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_settings=weight_settings,
         )
 
         self.max_diff_abs = self.max_other_logit - self.target_logit
