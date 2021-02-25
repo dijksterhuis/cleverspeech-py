@@ -175,6 +175,7 @@ def create_dense_target_batch_from_standard(data, actual_feats, max_feats):
         "phrases": target_phrases,
         "row_ids": target_ids,
         "indices": new_indices,
+        "original_indices": orig_indices,
         "lengths": lengths,
     }
 
