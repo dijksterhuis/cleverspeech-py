@@ -49,13 +49,15 @@ class CTCLoss(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack_graph):
+    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+
+        assert type(weight_settings) in list, tuple
 
         super().__init__(
             attack_graph.sess,
             attack_graph.batch.size,
-            weight_initial=1.0,
-            weight_increment=1.0
+            weight_initial=weight_settings[0],
+            weight_increment=weight_settings[1]
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
