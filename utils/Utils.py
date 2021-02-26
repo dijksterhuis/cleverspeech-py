@@ -1,5 +1,6 @@
 import os
 import sys
+import random
 import argparse
 import soundfile
 
@@ -316,5 +317,9 @@ def args(experiments):
     update_master_settings(
         master_settings, "spawn_delay", args.spawn_delay[0]
     )
+
+    seed = 420
+    random.seed(seed)
+    np.random.seed(seed)
 
     experiments[experiment](master_settings)
