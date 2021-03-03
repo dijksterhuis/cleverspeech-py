@@ -5,7 +5,7 @@ from cleverspeech.data.etl import utils
 from cleverspeech.utils.Utils import np_arr, lcomp, load_wavs, l_map
 
 
-def get_audio_file_path_pool(indir, numb_examples, file_size_sort=True, filter_term=None, max_samples=None):
+def get_audio_file_path_pool(indir, numb_examples, file_size_sort=True, filter_term=None, max_samples=None, min_samples=None):
 
     if not os.path.exists(indir):
         raise Exception("Path does not exist: {}".format(indir))
@@ -29,7 +29,12 @@ def get_audio_file_path_pool(indir, numb_examples, file_size_sort=True, filter_t
     # bigger examples require more gpu memory / smaller batches
     if max_samples:
         fps = list(
-            filter(lambda x: x[0] < max_samples, fps)
+            filter(lambda x: x[0] <= max_samples, fps)
+        )
+
+    if min_samples:
+        fps = list(
+            filter(lambda x: x[0] >= min_samples, fps)
         )
 
     file_path_data = fps[:numb_examples]
