@@ -3,7 +3,7 @@ import numpy as np
 from abc import ABC
 
 
-class Base(ABC):
+class AbstractProcedure(ABC):
     def __init__(self, attack, steps: int = 5000, decode_step: int = 10, loss_update_idx=None):
         """
         Base class that sets up a wealth of stuff to execute the attack over a
@@ -47,23 +47,28 @@ class Base(ABC):
     def success_criteria_check(left, right):
         return True if left == right else False
 
+    def run_on_success(self, idx):
+
+        # update the delta hard constraint
+        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
+        self.attack.hard_constraint.update_one(delta, idx)
+
+        # update any loss weightings
+        if self.update_loss is not None:
+            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+
     def update_on_success(self, lefts, rights):
         """
         Update bound conditions if we've been successful.
         """
 
-        deltas = self.tf_run(self.attack.graph.final_deltas)
-
-        z = zip(lefts, rights, deltas)
-        for idx, (left, right, delta) in enumerate(z):
+        z = zip(lefts, rights)
+        for idx, (left, right) in enumerate(z):
 
             success = self.success_criteria_check(left, right)
 
             if success:
-                self.attack.hard_constraint.update_one(delta, idx)
-                if self.update_loss is not None:
-                    # N.B. If doing loss updates, make sure it's the first one!
-                    self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+                self.run_on_success(idx)
                 yield idx, success
             else:
                 yield idx, success
@@ -140,7 +145,7 @@ class Base(ABC):
             self.current_step += 1
 
 
-class Unbounded(Base):
+class Unbounded(AbstractProcedure):
     """
     Updates bounds on a successful decoding.
 
@@ -155,20 +160,12 @@ class Unbounded(Base):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-    def update_on_success(self, lefts, rights):
-        """
-        Update bound conditions if we've been successful.
-        """
-
-        deltas = self.tf_run(self.attack.graph.final_deltas)
-
-        z = zip(lefts, rights, deltas)
-        for idx, (left, right, delta) in enumerate(z):
-            success = self.success_criteria_check(left, right)
-            yield idx, success
+    def run_on_success(self, idx):
+        # Do nothing
+        pass
 
 
-class UpdateOnDecoding(Base):
+class UpdateOnDecoding(AbstractProcedure):
     """
     Updates bounds on a successful decoding.
 
@@ -184,7 +181,7 @@ class UpdateOnDecoding(Base):
         self.init_optimiser_variables()
 
 
-class UpdateOnLoss(Base):
+class UpdateOnLoss(AbstractProcedure):
     """
     Updates bounds once the loss has reached a certain point.
     """
@@ -249,7 +246,7 @@ class UpdateOnLoss(Base):
         }
 
 
-class UpdateOnProbs(Base):
+class UpdateOnProbs(AbstractProcedure):
     """
     Updates bounds once the loss has reached a certain point.
     """
@@ -321,26 +318,15 @@ class HardcoreMode(UpdateOnLoss):
             **kwargs
         )
 
-    def update_on_success(self, lefts, rights):
-        """
-        Update bound conditions if we've been successful.
-        """
+    def run_on_success(self, idx):
 
-        deltas = self.tf_run(self.attack.graph.final_deltas)
+        # update the delta hard constraint
+        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
+        self.attack.hard_constraint.update_one(delta, idx)
 
-        z = zip(lefts, rights, deltas)
-        for idx, (left, right, delta) in enumerate(z):
-
-            success = self.success_criteria_check(left, right)
-
-            if success:
-                self.attack.hard_constraint.update_one(delta, idx)
-                if self.update_loss is not None:
-                    # N.B. If doing loss updates, make sure it's the first one!
-                    self.attack.loss[self.update_loss].update(self.attack.sess, idx)
-                yield idx, success
-            else:
-                yield idx, success
+        # update any loss weightings
+        if self.update_loss is not None:
+            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
 
     def run(self):
         """
