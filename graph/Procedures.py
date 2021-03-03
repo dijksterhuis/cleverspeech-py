@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import numpy as np
 from abc import ABC
 
 
@@ -221,3 +221,64 @@ class UpdateOnLoss(Base):
         }
 
 
+class UpdateOnProbs(Base):
+    """
+    Updates bounds once the loss has reached a certain point.
+    """
+    def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
+        """
+        Initialise the procedure object then initialise the optimiser
+        variables => might be additional tf variables to initialise here.
+        """
+
+        super().__init__(attack, *args, **kwargs)
+        self.probs_diff = probs_diff
+        self.init_optimiser_variables()
+
+    def run(self):
+        for results in super().run():
+            yield results
+
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left <= right else False
+
+    def decode_step_logic(self):
+
+        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
+        self.attack.sess.run(
+            self.attack.graph.raw_deltas.assign(tf.round(deltas))
+        )
+
+        top_5_decodings, top_5_probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=True,
+        )
+
+        decodings, probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
+
+        target_probs = [self.probs_diff for _ in range(self.attack.batch.size)]
+        targets = self.attack.batch.targets["phrases"]
+
+        return {
+            "step": self.current_step,
+            "data": [
+                {
+                    "idx": idx,
+                    "success": success,
+                    "decodings": decodings[idx],
+                    "target_phrase": targets[idx],
+                    "top_five_decodings": top_5_decodings[idx],
+                    "top_five_probs": top_5_probs[idx],
+                    "probs": probs[idx]
+                }
+                for idx, success in self.update_on_success(probs, target_probs)
+            ]
+        }
