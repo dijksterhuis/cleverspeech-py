@@ -140,6 +140,34 @@ class Base(ABC):
             self.current_step += 1
 
 
+class Unbounded(Base):
+    """
+    Updates bounds on a successful decoding.
+
+    Basically just the Base class with a more useful name.
+    """
+    def __init__(self, attack, *args, **kwargs):
+
+        """
+        Initialise the procedure object then initialise the optimiser
+        variables => might be additional tf variables to initialise here.
+        """
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
+
+    def update_on_success(self, lefts, rights):
+        """
+        Update bound conditions if we've been successful.
+        """
+
+        deltas = self.tf_run(self.attack.graph.final_deltas)
+
+        z = zip(lefts, rights, deltas)
+        for idx, (left, right, delta) in enumerate(z):
+            success = self.success_criteria_check(left, right)
+            yield idx, success
+
+
 class UpdateOnDecoding(Base):
     """
     Updates bounds on a successful decoding.
