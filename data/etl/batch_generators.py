@@ -56,7 +56,7 @@ def get_standard_batch_generator(settings):
         # resources with the AttackSpawner context manager.
 
         target_phrase = BatchGen.pop_target_phrase(
-            targets_pool, min(audios_batch["real_feats"])
+            targets_pool, min(audios_batch["real_feats"]) - 4
         )
 
         # each target must be the same length else numpy throws a hissyfit
@@ -127,7 +127,7 @@ def get_dense_batch_factory(settings):
         # minimum possible length by 3
 
         target_phrase = BatchGen.pop_target_phrase(
-            targets_pool, min(audios_batch["real_feats"]) // 3
+            targets_pool, (min(audios_batch["real_feats"]) - 4)
         )
 
         # each target must be the same length else numpy throws a hissyfit
