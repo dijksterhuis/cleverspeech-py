@@ -282,3 +282,49 @@ class UpdateOnProbs(Base):
                 for idx, success in self.update_on_success(probs, target_probs)
             ]
         }
+
+
+class HardcoreMode(UpdateOnLoss):
+    def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
+        super().__init__(
+            attack,
+            *args,
+            loss_lower_bound=loss_lower_bound,
+            **kwargs
+        )
+
+    def update_on_success(self, lefts, rights):
+        """
+        Update bound conditions if we've been successful.
+        """
+
+        deltas = self.tf_run(self.attack.graph.final_deltas)
+
+        z = zip(lefts, rights, deltas)
+        for idx, (left, right, delta) in enumerate(z):
+
+            success = self.success_criteria_check(left, right)
+
+            if success:
+                self.attack.hard_constraint.update_one(delta, idx)
+                if self.update_loss is not None:
+                    # N.B. If doing loss updates, make sure it's the first one!
+                    self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+                yield idx, success
+            else:
+                yield idx, success
+
+    def run(self):
+        """
+        Do the actual optimisation.
+        """
+        attack, g, b = self.attack, self.attack.graph, self.attack.batch
+
+        while True:
+
+            if self.current_step % self.decode_step == 0 or self.current_step == 0:
+                yield self.decode_step_logic()
+
+            attack.optimiser.optimise(attack.feeds.attack)
+
+            self.current_step += 1
