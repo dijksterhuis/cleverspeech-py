@@ -242,6 +242,7 @@ def args(experiments):
         "outdir": str,
         "targets_path": str,
         "spawn_delay": int,
+        "max_examples": int
     }
 
     parser = argparse.ArgumentParser()
@@ -316,6 +317,9 @@ def args(experiments):
     )
     update_master_settings(
         master_settings, "spawn_delay", args.spawn_delay[0]
+    )
+    update_master_settings(
+        master_settings, "max_examples", args.max_examples[0]
     )
 
     seed = 420
