@@ -98,7 +98,7 @@ class CTCLossV2(BaseLoss):
             labels=tf.cast(self.ctc_target, tf.int32),
             logits=attack_graph.victim.raw_logits,
             label_length=attack_graph.graph.placeholders.target_lengths,
-            logit_length=attack_graph.batch.audios.feature_lengths,
+            logit_length=attack_graph.batch.audios["ds_feats"],
             blank_index=-1
         ) * self.weights
 
