@@ -1,3 +1,4 @@
+import os
 import time
 from py3nvml import py3nvml as pynvml
 
@@ -5,7 +6,8 @@ import multiprocessing as mp
 import tensorflow as tf
 import numpy as np
 
-from cleverspeech.utils.Utils import log
+from cleverspeech.data import Results
+from cleverspeech.utils.Utils import log, run_decoding_check
 
 
 class AttackFailedException(Exception):
@@ -109,12 +111,12 @@ class Processes:
         self.alive = 0
         self.attempts = 0
 
-    def new(self, attack_run, results_queue, args):
+    def new(self, results_queue, args):
 
         parent_conn, worker_conn = mp.Pipe()
         args = (results_queue, worker_conn, *args)
         p = mp.Process(
-            target=attack_run,
+            target=boilerplate,
             args=args,
         )
         p.start()
@@ -290,11 +292,11 @@ class AttackSpawner:
         self.__messenger.waiting(self.delay)
         time.sleep(self.delay)
 
-    def spawn(self, attack_run, *args):
+    def spawn(self, *args):
 
         self.gpu_memory.update_usage()
 
-        p = self.processes.new(attack_run, self.__results_queue, args)
+        p = self.processes.new(self.__results_queue, args)
 
         self.__messenger.new_process(p)
 
@@ -336,3 +338,75 @@ class AttackSpawner:
         else:
             # Not full so don't block yet.
             pass
+
+
+def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
+
+    # we *must* call the tensorflow session within the batch loop so the
+    # graph gets reset: the maximum example length in a batch affects the
+    # size of most graph elements.
+
+    # tensorflow sessions can't be passed between processes either, so we have
+    # to create it here.
+
+    try:
+        tf_runtime = TFRuntime(settings["gpu_device"])
+        with tf_runtime.session as sess, tf_runtime.device as tf_device:
+
+            # Initialise curried attack graph constructor function
+
+            attack = attack_fn(sess, batch, settings)
+
+            # log some useful things for debugging before the attack runs
+
+            run_decoding_check(attack, batch)
+
+            log(
+                "Created Attack Graph and Feeds. Loaded TF Operations:",
+                wrap=False
+            )
+            log(funcs=tf_runtime.log_attack_tensors)
+
+            # Run the attack generator loop. See `Attacks/Procedures.py` for
+            # detailed info on returned results.
+            log(
+                "Beginning attack run...\nMonitor progress in: {}".format(
+                    settings["outdir"] + "log.txt"
+                )
+            )
+
+            # Inform the parent process that we've successfully loaded the graph
+            # and will start the attacks.
+            healthy_conn.send(True)
+            attack.run(results_queue)
+
+    except tf.errors.ResourceExhaustedError as e:
+
+        # Fail gracefully for OOM GPU issues.
+
+        s = "Out of GPU Memory! Attack failed to run for these examples:\n"
+        s += '\n'.join(batch.audios["basenames"])
+        s += "\n\nError Traceback:\n{e}".format(e=e)
+
+        log(s, wrap=True)
+        healthy_conn.send(False)
+        raise
+
+    except Exception as e:
+
+        # We shouldn't use a broad Exception, but OOM errors are the most common
+        # point of breakage right now.
+
+        # if there's a non-OOM exception then something broke with the code that
+        # needs to be fixed
+
+        s = "Something broke! Attack failed to run for these examples:\n"
+        s += '\n'.join(batch.audios["basenames"])
+        s += "\n\nError Traceback:\n{e}".format(e=e)
+        s += "\n\nExiting Hard!"
+
+        log(s, wrap=True)
+        healthy_conn.send(False)
+
+        exit(100)
+
