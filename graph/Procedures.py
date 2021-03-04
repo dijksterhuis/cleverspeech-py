@@ -1,6 +1,5 @@
 import tensorflow as tf
-import numpy as np
-from abc import ABC
+from abc import ABC, abstractmethod
 
 
 class AbstractProcedure(ABC):
@@ -43,38 +42,32 @@ class AbstractProcedure(ABC):
         feed = self.attack.feeds.attack
         return sess.run(tf_variables, feed_dict=feed)
 
-    @staticmethod
-    def success_criteria_check(left, right):
-        return True if left == right else False
-
-    def run_on_success(self, idx):
-
-        # update the delta hard constraint
-        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
-        self.attack.hard_constraint.update_one(delta, idx)
-
-        # update any loss weightings
-        if self.update_loss is not None:
-            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
-
-    def update_on_success(self, lefts, rights):
+    def run(self):
         """
-        Update bound conditions if we've been successful.
+        Do the actual optimisation.
         """
+        attack, g, b = self.attack, self.attack.graph, self.attack.batch
 
-        z = zip(lefts, rights)
-        for idx, (left, right) in enumerate(z):
+        while self.current_step < self.steps:
 
-            success = self.success_criteria_check(left, right)
+            if self.current_step % self.decode_step == 0 or self.current_step == 0:
+                yield self.decode_step_logic()
 
-            if success:
-                self.run_on_success(idx)
-                yield idx, success
-            else:
-                yield idx, success
+            attack.optimiser.optimise(attack.feeds.attack)
 
+            self.current_step += 1
+
+    @abstractmethod
     def decode_step_logic(self):
+        """
+        What should we do at decoding steps?
 
+        The code below is run when child classes run the line:
+        > super().decode_step_logic()
+
+        This should be called in any child implementation of this method, unless
+        you rewrite the entire method from scratch, which is also possible.
+        """
         # ==> every x steps apply integer level rounding prior to decoding.
         # this helps the attacks work against the deepspeech native client api
         # which only accepts tf.int16 type inputs. Although it doesn't work 100%
@@ -111,6 +104,58 @@ class AbstractProcedure(ABC):
             top_five=False,
         )
 
+        return decodings, probs, top_5_decodings, top_5_probs
+
+    def check_for_success(self, lefts, rights):
+        """
+        Check if we've been successful and run the update steps if we have
+        """
+        z = zip(lefts, rights)
+        for idx, (left, right) in enumerate(z):
+            success = self.success_criteria_check(left, right)
+            if success:
+                self.do_success_updates(idx)
+                yield idx, success
+            else:
+                yield idx, success
+
+    @staticmethod
+    @abstractmethod
+    def success_criteria_check(left, right):
+        """
+        What is success?
+        """
+        pass
+
+    @abstractmethod
+    def do_success_updates(self, idx):
+        """
+        How should we update the attack for whatever we consider a success?
+        """
+        pass
+
+
+class Unbounded(AbstractProcedure):
+    """
+    Don't update anything on a successful decoding, just exit optimisation.
+    """
+    def __init__(self, attack, *args, **kwargs):
+
+        """
+        Initialise the procedure object then initialise the optimiser
+        variables => might be additional tf variables to initialise here.
+        """
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
+
+    def decode_step_logic(self):
+        [
+            decodings,
+            probs,
+            top_5_decodings,
+            top_5_probs
+        ] = super().decode_step_logic()
+
         targets = self.attack.batch.targets["phrases"]
 
         return {
@@ -125,31 +170,24 @@ class AbstractProcedure(ABC):
                     "top_five_decodings": top_5_decodings[idx],
                     "top_five_probs": top_5_probs[idx],
                 }
-                for idx, success in self.update_on_success(decodings, targets)
+                for idx, success in self.check_for_success(decodings, targets)
             ]
         }
 
-    def run(self):
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left == right else False
+
+    def do_success_updates(self, idx):
         """
-        Do the actual optimisation.
+        if successful stop optimising
         """
-        attack, g, b = self.attack, self.attack.graph, self.attack.batch
-
-        while self.current_step < self.steps:
-
-            if self.current_step % self.decode_step == 0 or self.current_step == 0:
-                yield self.decode_step_logic()
-
-            attack.optimiser.optimise(attack.feeds.attack)
-
-            self.current_step += 1
+        self.current_step = self.steps
 
 
-class Unbounded(AbstractProcedure):
+class UpdateBoundOnSuccess(AbstractProcedure, ABC):
     """
-    Updates bounds on a successful decoding.
-
-    Basically just the Base class with a more useful name.
+    Updates bounds MixIn.
     """
     def __init__(self, attack, *args, **kwargs):
 
@@ -160,16 +198,29 @@ class Unbounded(AbstractProcedure):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-    def run_on_success(self, idx):
-        # Do nothing
-        pass
+    def do_success_updates(self, idx):
+        super().do_success_updates(idx)
+
+        # update the delta hard constraint
+        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
+        self.attack.hard_constraint.update_one(delta, idx)
 
 
-class UpdateOnDecoding(AbstractProcedure):
+class UpdateLossOnSuccess(AbstractProcedure, ABC):
     """
-    Updates bounds on a successful decoding.
+    Updates loss weightings MixIn.
+    """
+    def do_success_updates(self, idx):
+        super().do_success_updates(idx)
 
-    Basically just the Base class with a more useful name.
+        # update any loss weightings
+        if self.update_loss is not None:
+            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+
+
+class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
+    """
+    Updates bounds and loss weightings on a successful decoding.
     """
     def __init__(self, attack, *args, **kwargs):
 
@@ -180,10 +231,41 @@ class UpdateOnDecoding(AbstractProcedure):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
+    def decode_step_logic(self):
 
-class UpdateOnLoss(AbstractProcedure):
+        [
+            decodings,
+            probs,
+            top_5_decodings,
+            top_5_probs
+        ] = super().decode_step_logic()
+
+        targets = self.attack.batch.targets["phrases"]
+
+        return {
+            "step": self.current_step,
+            "data": [
+                {
+                    "idx": idx,
+                    "success": success,
+                    "decodings": decodings[idx],
+                    "target_phrase": targets[idx],
+                    "probs": probs[idx],
+                    "top_five_decodings": top_5_decodings[idx],
+                    "top_five_probs": top_5_probs[idx],
+                }
+                for idx, success in self.check_for_success(decodings, targets)
+            ]
+        }
+
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left == right else False
+
+
+class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
     """
-    Updates bounds once the loss has reached a certain point.
+    Updates bounds and loss weightings once loss reaches a specified threshold.
     """
     def __init__(self, attack, *args, loss_lower_bound=10.0, **kwargs):
         """
@@ -195,37 +277,16 @@ class UpdateOnLoss(AbstractProcedure):
         self.loss_bound = loss_lower_bound
         self.init_optimiser_variables()
 
-    def run(self):
-        for results in super().run():
-            yield results
-
-    @staticmethod
-    def success_criteria_check(left, right):
-        return True if left <= right else False
-
     def decode_step_logic(self):
 
-        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
-        self.attack.sess.run(
-            self.attack.graph.raw_deltas.assign(tf.round(deltas))
-        )
+        [
+            decodings,
+            probs,
+            top_5_decodings,
+            top_5_probs
+        ] = super().decode_step_logic()
 
         loss = self.tf_run(self.attack.loss_fn)
-
-        top_5_decodings, top_5_probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=True,
-        )
-
-        decodings, probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=False,
-        )
-
         target_loss = [self.loss_bound for _ in range(self.attack.batch.size)]
         targets = self.attack.batch.targets["phrases"]
 
@@ -241,14 +302,19 @@ class UpdateOnLoss(AbstractProcedure):
                     "top_five_probs": top_5_probs[idx],
                     "probs": probs[idx]
                 }
-                for idx, success in self.update_on_success(loss, target_loss)
+                for idx, success in self.check_for_success(loss, target_loss)
             ]
         }
 
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left <= right else False
 
-class UpdateOnProbs(AbstractProcedure):
+
+class UpdateOnProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
     """
-    Updates bounds once the loss has reached a certain point.
+    Updates bounds and loss weightings once log likelihood (decoder
+    probabilities) has reached a certain point.
     """
     def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
         """
@@ -260,34 +326,14 @@ class UpdateOnProbs(AbstractProcedure):
         self.probs_diff = probs_diff
         self.init_optimiser_variables()
 
-    def run(self):
-        for results in super().run():
-            yield results
-
-    @staticmethod
-    def success_criteria_check(left, right):
-        return True if left <= right else False
-
     def decode_step_logic(self):
 
-        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
-        self.attack.sess.run(
-            self.attack.graph.raw_deltas.assign(tf.round(deltas))
-        )
-
-        top_5_decodings, top_5_probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=True,
-        )
-
-        decodings, probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=False,
-        )
+        [
+            decodings,
+            probs,
+            top_5_decodings,
+            top_5_probs
+        ] = super().decode_step_logic()
 
         target_probs = [self.probs_diff for _ in range(self.attack.batch.size)]
         targets = self.attack.batch.targets["phrases"]
@@ -304,12 +350,23 @@ class UpdateOnProbs(AbstractProcedure):
                     "top_five_probs": top_5_probs[idx],
                     "probs": probs[idx]
                 }
-                for idx, success in self.update_on_success(probs, target_probs)
+                for idx, success in self.check_for_success(probs, target_probs)
             ]
         }
 
+    @staticmethod
+    def success_criteria_check(left, right):
+        return True if left <= right else False
+
 
 class HardcoreMode(UpdateOnLoss):
+    """
+    Updates bounds and loss weightings once loss has reached some extreme value.
+    Doesn't stop optimising a single example.
+
+    Only useful for development -- leave it running overnight to see how long an
+    extreme optimisation case takes to finish.
+    """
     def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
         super().__init__(
             attack,
@@ -317,16 +374,6 @@ class HardcoreMode(UpdateOnLoss):
             loss_lower_bound=loss_lower_bound,
             **kwargs
         )
-
-    def run_on_success(self, idx):
-
-        # update the delta hard constraint
-        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
-        self.attack.hard_constraint.update_one(delta, idx)
-
-        # update any loss weightings
-        if self.update_loss is not None:
-            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
 
     def run(self):
         """
