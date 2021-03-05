@@ -3,7 +3,7 @@ from cleverspeech.utils.Utils import lcomp
 from abc import ABC, abstractmethod
 
 
-class Base(ABC):
+class AbstractOptimiser(ABC):
     def __init__(
             self,
             attack,
@@ -40,7 +40,7 @@ class Base(ABC):
         self.attack.victim.reset_state()
 
 
-class AdamOptimiser(Base):
+class AdamOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
@@ -52,7 +52,7 @@ class AdamOptimiser(Base):
         """
         Initialise the optimiser.
 
-        :param attack_graph: The current attack graph perform optimisation with.
+        :param attack: The current attack graph perform optimisation with.
         :param learning_rate: Learning rate for optimiser (currently Adam)
         """
         super().__init__(attack, learning_rate)
@@ -80,7 +80,7 @@ class AdamOptimiser(Base):
         self.variables = adv_optimizer.variables()
 
 
-class AdaGradOptimiser(Base):
+class AdaGradOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
@@ -90,7 +90,7 @@ class AdaGradOptimiser(Base):
         """
         Initialise the optimiser.
 
-        :param attack_graph: The current attack graph perform optimisation with.
+        :param attack: The current attack graph perform optimisation with.
         :param learning_rate: Learning rate for optimiser (currently Adam)
         """
         super().__init__(attack, learning_rate)
@@ -113,7 +113,7 @@ class AdaGradOptimiser(Base):
         self.variables = adv_optimizer.variables()
 
 
-class RMSPropOptimiser(Base):
+class RMSPropOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
@@ -123,7 +123,7 @@ class RMSPropOptimiser(Base):
         """
         Initialise the optimiser.
 
-        :param attack_graph: The current attack graph perform optimisation with.
+        :param attack: The current attack graph perform optimisation with.
         :param learning_rate: Learning rate for optimiser (currently Adam)
         """
         super().__init__(attack, learning_rate)
@@ -146,22 +146,22 @@ class RMSPropOptimiser(Base):
         self.variables = adv_optimizer.variables()
 
 
-class MomentumOptimiser(Base):
+class MomentumOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
             learning_rate: float = 10.0,
-            momementum: float = 0.9,
+            momentum: float = 0.9,
     ):
         """
         Initialise the optimiser.
 
-        :param attack_graph: The current attack graph perform optimisation with.
+        :param attack: The current attack graph perform optimisation with.
         :param learning_rate: Learning rate for optimiser (currently Adam)
         """
         super().__init__(attack, learning_rate)
 
-        self.momentum = momementum
+        self.momentum = momentum
 
     def create_optimiser(self):
 
@@ -192,7 +192,7 @@ class CoordinateAdamOptimiser(AdamOptimiser):
         """
         Initialise the optimiser.
 
-        :param attack_graph: The current attack graph perform optimisation with.
+        :param attack: The current attack graph perform optimisation with.
         :param learning_rate: Learning rate for optimiser (currently Adam)
         """
         super().__init__(attack, learning_rate, beta1, beta2, epsilon)
@@ -220,7 +220,7 @@ class CoordinateAdamOptimiser(AdamOptimiser):
         self.variables = adv_optimizer.variables()
 
 
-class GradientDescentOptimiser(Base):
+class GradientDescentOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
@@ -251,7 +251,7 @@ class GradientDescentOptimiser(Base):
         self.variables = adv_optimizer.variables()
 
 
-class CoordinateGradientDescentOptimiser(Base):
+class CoordinateGradientDescentOptimiser(AbstractOptimiser):
     def __init__(
             self,
             attack,
