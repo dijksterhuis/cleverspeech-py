@@ -327,7 +327,7 @@ class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         return True if left <= right else False
 
 
-class UpdateOnProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
+class UpdateOnDeepSpeechProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
     """
     Updates bounds and loss weightings once log likelihood (decoder
     probabilities) has reached a certain point.
@@ -384,6 +384,23 @@ class UpdateOnProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         :return: Bool result
         """
         return True if left <= right else False
+
+
+class UpdateOnTensorflowProbs(UpdateOnDeepSpeechProbs):
+    @staticmethod
+    def success_criteria_check(left, right):
+        """
+        Decoder log probabilities should be less than/equal to a specified
+        bound.
+
+        Only use this implementation with a TF beam search decoder (it returns
+        the raw negative log probabilities).
+
+        :param left: deepspeech decoder log probabilities (positive)
+        :param right: target log probabilities (positive)
+        :return: Bool result
+        """
+        return True if left >= right else False
 
 
 class HardcoreMode(UpdateOnLoss):
