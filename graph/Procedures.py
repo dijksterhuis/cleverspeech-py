@@ -8,8 +8,8 @@ class AbstractProcedure(ABC):
         Base class that sets up a wealth of stuff to execute the attack over a
         number of iterations.
 
-        *DO NOT USE IN THE ATTACK GRAPH!* -- define a class on top of this one.
-        See examples below.
+        This class should never be initialised by itself, it should always be
+        extended. See examples below.
 
         """
 
@@ -185,9 +185,12 @@ class Unbounded(AbstractProcedure):
         self.current_step = self.steps
 
 
-class UpdateBoundOnSuccess(AbstractProcedure, ABC):
+class UpdateBoundOnSuccess(AbstractProcedure):
     """
     Updates bounds MixIn.
+
+    This class should never be initialised by itself, it should always be
+    extended.
     """
     def __init__(self, attack, *args, **kwargs):
 
@@ -206,9 +209,12 @@ class UpdateBoundOnSuccess(AbstractProcedure, ABC):
         self.attack.hard_constraint.update_one(delta, idx)
 
 
-class UpdateLossOnSuccess(AbstractProcedure, ABC):
+class UpdateLossOnSuccess(AbstractProcedure):
     """
     Updates loss weightings MixIn.
+
+    This class should never be initialised by itself, it should always be
+    extended.
     """
     def do_success_updates(self, idx):
         super().do_success_updates(idx)
@@ -223,7 +229,6 @@ class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
     Updates bounds and loss weightings on a successful decoding.
     """
     def __init__(self, attack, *args, **kwargs):
-
         """
         Initialise the procedure object then initialise the optimiser
         variables => might be additional tf variables to initialise here.
@@ -260,6 +265,12 @@ class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
 
     @staticmethod
     def success_criteria_check(left, right):
+        """
+        Decodings should match the target phrases exactly.
+        :param left: decodings
+        :param right: target phrases
+        :return: Bool result
+        """
         return True if left == right else False
 
 
@@ -272,7 +283,6 @@ class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         Initialise the procedure object then initialise the optimiser
         variables => might be additional tf variables to initialise here.
         """
-
         super().__init__(attack, *args, **kwargs)
         self.loss_bound = loss_lower_bound
         self.init_optimiser_variables()
@@ -308,6 +318,12 @@ class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
 
     @staticmethod
     def success_criteria_check(left, right):
+        """
+        Loss should be less than/equal to a specified bound.
+        :param left: loss
+        :param right: target loss
+        :return: Bool result
+        """
         return True if left <= right else False
 
 
@@ -356,15 +372,26 @@ class UpdateOnProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
 
     @staticmethod
     def success_criteria_check(left, right):
+        """
+        Decoder log probabilities should be less than/equal to a specified
+        bound.
+
+        Only use this implementation with the DeepSpeech beam search decoder (it
+        outputs POSITIVE log probabilities).
+
+        :param left: deepspeech decoder log probabilities (positive)
+        :param right: target log probabilities (positive)
+        :return: Bool result
+        """
         return True if left <= right else False
 
 
 class HardcoreMode(UpdateOnLoss):
     """
     Updates bounds and loss weightings once loss has reached some extreme value.
-    Doesn't stop optimising a single example.
+    Optimises one example forever (or until you KeyboardInterrupt).
 
-    Only useful for development -- leave it running overnight to see how long an
+    Useful for development: leave it running overnight to see how long an
     extreme optimisation case takes to finish.
     """
     def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
