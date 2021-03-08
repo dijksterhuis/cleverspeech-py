@@ -123,6 +123,58 @@ class DenseTargets(object):
         return padded
 
 
+class SparseTargets(object):
+
+    @staticmethod
+    def insert_target_blanks(target_indices):
+        # get a shifted list so we can compare back one step in the phrase
+
+        previous_indices = target_indices.tolist()
+        previous_indices.insert(0, None)
+
+        # insert blank tokens where ctc would expect them - i.e. `do-or`
+        # also insert a blank at the start to gives time for the RNN hidden
+        # states to "warm up"
+        with_repeats = [28]
+        for current, previous in zip(target_indices, previous_indices):
+            if not previous:
+                with_repeats.append(current)
+            elif current == previous:
+                with_repeats.append(28)
+                with_repeats.append(current)
+            else:
+                with_repeats.append(current)
+        return with_repeats
+
+    @staticmethod
+    def create_new_target_indices(new_target, n_feats):
+
+        """
+        Taking into account the space we have available, find out the new argmax
+        indices for each frame of audio which relate to our target phrase
+
+        :param new_target: the new target phrase included additional blank tokens
+        :param n_feats: the number of features in the logits (time steps)
+
+        :return: the index for each frame in turn
+        """
+
+        spacing = n_feats // new_target.size
+
+        for t in new_target:
+            for i in range(spacing):
+                if i > 0:
+                    yield 28
+                else:
+                    yield t
+
+    @staticmethod
+    def pad_indices(indices, act_len):
+        n_paddings = act_len - len(indices)
+        padded = np.concatenate([indices, np.ones(n_paddings) * 28])
+        return padded
+
+
 class BatchGen(object):
 
     @staticmethod
