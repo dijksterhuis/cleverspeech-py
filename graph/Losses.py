@@ -170,7 +170,6 @@ class BaseLogitDiffLoss(BaseLoss):
         # Current logits is [b, feats, chars]
         # current_argmax is for debugging purposes only
         self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
-        self.current = g.victim.logits
 
         # Create one hot matrices to multiply by current logits.
         # These essentially act as a filter to keep only the target logit or
