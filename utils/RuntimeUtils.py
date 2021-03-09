@@ -284,9 +284,14 @@ class AttackSpawner:
                 "Attack Failed:\n\n{v}\n{t}".format(v=exc_val, t=exc_tb)
             )
         else:
-            self.__results_queue.close()
-            if self.__writer_process is not None:
-                self.__writer_process.close()
+            try:
+                self.__results_queue.close()
+                if self.__writer_process is not None:
+                    self.__writer_process.terminate()
+            except Exception as err:
+                raise AttackFailedException(
+                    "Attack Failed:\n\n{e}".format(e=err)
+                )
 
     def __wait(self):
         self.__messenger.waiting(self.delay)
