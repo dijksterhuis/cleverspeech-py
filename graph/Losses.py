@@ -259,6 +259,47 @@ class CWImproved(BaseLoss):
         self.loss_fn = tf.reduce_sum(self.argmax_diff, axis=1) * self.weights
 
 
+class CWMaxDiff(BaseLogitDiffLoss):
+    def __init__(self, attack_graph, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
+        """
+        This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
+        clipping update method.
+
+        Difference of:
+        - target logits value (B)
+        - max other logits value (A -- 2nd most likely)
+
+        Once  B > A, then B is most likely and we can stop optimising.
+
+        Unless -k > B, then k acts as a confidence threshold and continues
+        optimisation.
+
+        This will push B to become even less likely.
+
+        N.B. This loss does *not* seems to conform to:
+            l(x + d, t) <= 0 <==> C(x + d) = t
+
+        But it does a much better job than the ArgmaxLowConfidence
+        implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
+
+        TODO: This needs testing.
+        TODO: normalise to 0 <= x + d <= 1 and convert to tanh space for `change
+              of variable` optimisation
+        """
+
+        super().__init__(
+            attack_graph,
+            target_logits,
+            weight_settings=weight_settings,
+        )
+
+        self.max_diff_abs = self.max_other_logit - self.target_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
+        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
+
+        self.loss_fn = self.loss_fn * self.weights
+
+
 class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
     def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
         """
@@ -308,43 +349,3 @@ class AdaptiveKappaCWMaxDiff(BaseLogitDiffLoss):
 
         self.loss_fn = self.loss_fn * self.weights
 
-
-class CWMaxDiff(BaseLogitDiffLoss):
-    def __init__(self, attack_graph, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
-        """
-        This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
-        clipping update method.
-
-        Difference of:
-        - target logits value (B)
-        - max other logits value (A -- 2nd most likely)
-
-        Once  B > A, then B is most likely and we can stop optimising.
-
-        Unless -k > B, then k acts as a confidence threshold and continues
-        optimisation.
-
-        This will push B to become even less likely.
-
-        N.B. This loss does *not* seems to conform to:
-            l(x + d, t) <= 0 <==> C(x + d) = t
-
-        But it does a much better job than the ArgmaxLowConfidence
-        implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
-
-        TODO: This needs testing.
-        TODO: normalise to 0 <= x + d <= 1 and convert to tanh space for `change
-              of variable` optimisation
-        """
-
-        super().__init__(
-            attack_graph,
-            target_logits,
-            weight_settings=weight_settings,
-        )
-
-        self.max_diff_abs = self.max_other_logit - self.target_logit
-        self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
-        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
-
-        self.loss_fn = self.loss_fn * self.weights
