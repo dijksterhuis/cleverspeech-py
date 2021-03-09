@@ -433,3 +433,57 @@ class HardcoreMode(UpdateOnLoss):
             attack.optimiser.optimise(attack.feeds.attack)
 
             self.current_step += 1
+
+
+class CTCAlignMixIn(AbstractProcedure, ABC):
+    """
+    Abstract MixIn class to be used to initialise the CTC alignment search graph
+    to find an optimal alignment for the model and target transcription,
+    irrelevant of the given example.
+    """
+    def __init__(self, attack, alignment_graph, *args, **kwargs):
+        """
+        Initialise the evaluation procedure.
+
+        :param attack_graph: The current attack graph perform optimisation with.
+        """
+
+        super().__init__(attack, *args, **kwargs)
+        self.alignment_graph = alignment_graph
+        self.init_optimiser_variables()
+
+    def init_optimiser_variables(self):
+
+        # We must wait until now to initialise the optimiser so that we can
+        # initialise only the attack variables (i.e. not the deepspeech ones).
+
+        self.alignment_graph.optimiser.create_optimiser()
+        self.attack.optimiser.create_optimiser()
+
+        opt_vars = self.attack.graph.opt_vars
+        opt_vars += [self.alignment_graph.graph.initial_alignments]
+        opt_vars += self.attack.optimiser.variables
+        opt_vars += self.alignment_graph.optimiser.variables
+
+        self.attack.sess.run(tf.variables_initializer(opt_vars))
+
+    def run(self):
+        self.alignment_graph.optimise(self.attack.victim)
+        for r in super().run():
+            yield r
+
+
+class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
+    pass
+
+
+class CTCAlignUnbounded(UpdateOnDecoding, CTCAlignMixIn):
+    pass
+
+
+class CTCAlignUpdateOnLoss(UpdateOnLoss, CTCAlignMixIn):
+    pass
+
+
+class CTCAlignHardcoreMode(HardcoreMode, CTCAlignMixIn):
+    pass
