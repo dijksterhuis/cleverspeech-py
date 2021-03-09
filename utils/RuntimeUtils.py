@@ -308,7 +308,11 @@ class AttackSpawner:
         child_status = self.processes.check_last()
 
         if child_status is False:
+            # Something broke, cause an exception in main process.
             self.__messenger.unhealthy(p)
+            raise AttackFailedException(
+                "Attack Failed:\n\n{e}".format(e="Child Process is unhealthy.")
+            )
         else:
             self.__messenger.healthy(p)
 
@@ -394,7 +398,7 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
         s += "\n\nError Traceback:\n{e}".format(e=e)
 
         log(s, wrap=True)
-        healthy_conn.send(False)
+        healthy_conn.send(True)
         raise
 
     except Exception as e:
@@ -408,10 +412,7 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
         s = "Something broke! Attack failed to run for these examples:\n"
         s += '\n'.join(batch.audios["basenames"])
         s += "\n\nError Traceback:\n{e}".format(e=e)
-        s += "\n\nExiting Hard!"
 
         log(s, wrap=True)
         healthy_conn.send(False)
-
-        exit(100)
 
