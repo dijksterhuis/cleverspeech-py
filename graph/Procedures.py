@@ -42,13 +42,27 @@ class AbstractProcedure(ABC):
         feed = self.attack.feeds.attack
         return sess.run(tf_variables, feed_dict=feed)
 
-    def run(self):
+    def steps_rule(self):
+        """
+        Allows MixIns to take control of how long to optimise for.
+        e.g. number of iterations, minimum bound reached, one success unbounded
+        """
+        return self.current_step < self.steps
+
+    def run(self, health_check):
         """
         Do the actual optimisation.
         """
         attack, g, b = self.attack, self.attack.graph, self.attack.batch
 
-        while self.current_step < self.steps:
+        while self.steps_rule():
+
+            # Perform one step of optimisation. let the parent spawner process
+            # know if everything is working. Any exception will be caught by the
+            # attack spawner boilerplate
+
+            if self.current_step == 1:
+                health_check.send(True)
 
             if self.current_step % self.decode_step == 0 or self.current_step == 0:
                 yield self.decode_step_logic()
@@ -145,6 +159,7 @@ class Unbounded(AbstractProcedure):
         Initialise the procedure object then initialise the optimiser
         variables => might be additional tf variables to initialise here.
         """
+        self.finished = False
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
@@ -158,7 +173,7 @@ class Unbounded(AbstractProcedure):
 
         targets = self.attack.batch.targets["phrases"]
 
-        return {
+        outs = {
             "step": self.current_step,
             "data": [
                 {
@@ -174,15 +189,26 @@ class Unbounded(AbstractProcedure):
             ]
         }
 
+        current_n_successes = sum([d["success"] for d in outs["data"]])
+        self.finished = self.attack.batch.size == current_n_successes
+
+        return outs
+
     @staticmethod
     def success_criteria_check(left, right):
         return True if left == right else False
 
+    def steps_rule(self):
+        """
+        Stop optimising once everything in a batch is successful.
+        """
+        return self.finished is not True
+
     def do_success_updates(self, idx):
         """
-        if successful stop optimising
+        if successful do nothing
         """
-        self.current_step = self.steps
+        pass
 
 
 class UpdateBoundOnSuccess(AbstractProcedure):
@@ -202,7 +228,6 @@ class UpdateBoundOnSuccess(AbstractProcedure):
         self.init_optimiser_variables()
 
     def do_success_updates(self, idx):
-        super().do_success_updates(idx)
 
         # update the delta hard constraint
         delta = self.tf_run(self.attack.graph.final_deltas)[idx]
@@ -217,7 +242,6 @@ class UpdateLossOnSuccess(AbstractProcedure):
     extended.
     """
     def do_success_updates(self, idx):
-        super().do_success_updates(idx)
 
         # update any loss weightings
         if self.update_loss is not None:
@@ -419,20 +443,11 @@ class HardcoreMode(UpdateOnLoss):
             **kwargs
         )
 
-    def run(self):
+    def steps_rule(self):
         """
-        Do the actual optimisation.
+        Keep optimising regardless of any kind of success.
         """
-        attack, g, b = self.attack, self.attack.graph, self.attack.batch
-
-        while True:
-
-            if self.current_step % self.decode_step == 0 or self.current_step == 0:
-                yield self.decode_step_logic()
-
-            attack.optimiser.optimise(attack.feeds.attack)
-
-            self.current_step += 1
+        return True
 
 
 class CTCAlignMixIn(AbstractProcedure, ABC):
@@ -467,9 +482,9 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
-    def run(self):
+    def run(self, health_check):
         self.alignment_graph.optimise(self.attack.victim)
-        for r in super().run():
+        for r in super().run(health_check):
             yield r
 
 
