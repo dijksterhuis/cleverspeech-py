@@ -6,7 +6,6 @@ import multiprocessing as mp
 import tensorflow as tf
 import numpy as np
 
-from cleverspeech.data import Results
 from cleverspeech.utils.Utils import log, run_decoding_check
 
 
@@ -275,23 +274,15 @@ class AttackSpawner:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        # we'll always want to close results and kill writer process on exit
+        self.__results_queue.close()
+        if self.__writer_process is not None:
+            self.__writer_process.terminate()
+
+        # if there's a problem we also kill child processes and raise exception
+        # in parent process.
         if exc_val:
             self.processes.terminate()
-            self.__results_queue.close()
-            if self.__writer_process is not None:
-                self.__writer_process.terminate()
-            raise AttackFailedException(
-                "Attack Failed:\n\n{v}\n{t}".format(v=exc_val, t=exc_tb)
-            )
-        else:
-            try:
-                self.__results_queue.close()
-                if self.__writer_process is not None:
-                    self.__writer_process.terminate()
-            except Exception as err:
-                raise AttackFailedException(
-                    "Attack Failed:\n\n{e}".format(e=err)
-                )
 
     def __wait(self):
         self.__messenger.waiting(self.delay)
@@ -311,7 +302,7 @@ class AttackSpawner:
             # Something broke, cause an exception in main process.
             self.__messenger.unhealthy(p)
             raise AttackFailedException(
-                "Attack Failed:\n\n{e}".format(e="Child Process is unhealthy.")
+                "Child Process {} was unhealthy. Unsafe to continue".format(p.pid)
             )
         else:
             self.__messenger.healthy(p)
@@ -356,7 +347,7 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
     # size of most graph elements.
 
     # tensorflow sessions can't be passed between processes either, so we have
-    # to create it here.
+    # to create it here (at least, not easily).
 
     try:
         tf_runtime = TFRuntime(settings["gpu_device"])
@@ -376,18 +367,14 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
             )
             log(funcs=tf_runtime.log_attack_tensors)
 
-            # Run the attack generator loop. See `Attacks/Procedures.py` for
-            # detailed info on returned results.
             log(
                 "Beginning attack run...\nMonitor progress in: {}".format(
                     settings["outdir"] + "log.txt"
                 )
             )
 
-            # Inform the parent process that we've successfully loaded the graph
-            # and will start the attacks.
-            healthy_conn.send(True)
-            attack.run(results_queue)
+            # Start the attacks.
+            attack.run(results_queue, healthy_conn)
 
     except tf.errors.ResourceExhaustedError as e:
 
@@ -415,4 +402,5 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
 
         log(s, wrap=True)
         healthy_conn.send(False)
+        raise
 
