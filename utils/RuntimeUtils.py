@@ -1,5 +1,6 @@
 import os
 import time
+import traceback
 from py3nvml import py3nvml as pynvml
 
 import multiprocessing as mp
@@ -379,14 +380,14 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
     except tf.errors.ResourceExhaustedError as e:
 
         # Fail gracefully for OOM GPU issues.
+        tb = "".join(traceback.format_exception(None, e, e.__traceback__))
 
         s = "Out of GPU Memory! Attack failed to run for these examples:\n"
         s += '\n'.join(batch.audios["basenames"])
-        s += "\n\nError Traceback:\n{e}".format(e=e)
+        s += "\n\nError Traceback:\n{e}".format(e=tb)
 
         log(s, wrap=True)
         healthy_conn.send(True)
-        raise
 
     except Exception as e:
 
@@ -396,11 +397,14 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
         # if there's a non-OOM exception then something broke with the code that
         # needs to be fixed
 
+        tb = "".join(traceback.format_exception(None, e, e.__traceback__))
+
         s = "Something broke! Attack failed to run for these examples:\n"
         s += '\n'.join(batch.audios["basenames"])
-        s += "\n\nError Traceback:\n{e}".format(e=e)
+        s += "\n\nError Traceback:\n{e}".format(e=tb)
 
         log(s, wrap=True)
         healthy_conn.send(False)
-        raise
+
+
 
