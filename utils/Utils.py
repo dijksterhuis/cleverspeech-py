@@ -5,6 +5,7 @@ import argparse
 import soundfile
 
 import numpy as np
+import tensorflow as tf
 
 from datetime import datetime as time
 from base64 import b64encode
@@ -325,5 +326,6 @@ def args(experiments):
     seed = 420
     random.seed(seed)
     np.random.seed(seed)
+    tf.set_random_seed(420)
 
     experiments[experiment](master_settings)
