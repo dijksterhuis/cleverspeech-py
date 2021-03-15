@@ -34,6 +34,31 @@ class Base(ABC):
         argmax_alignment = "".join(argmax_alignment)
         return argmax_alignment
 
+    def custom_success_modifications(self, db_output, batch_idx):
+        """
+        Extend this class with custom modifications, e.g. to get experiment
+        specific data out of the tensorflow graph and store when a successful
+        example is found.
+
+        :param db_output: current output data to be written to disk
+        :param batch_idx: index of the current batch item we're processing
+
+        :return: modified output data to be written to disk
+        """
+        return db_output
+
+    def custom_logging_modifications(self, log_output, batch_idx):
+        """
+        Extend this class with custom modifications, e.g. to get experiment
+        specific data out of the tensorflow graph and write it to the log file.
+
+        :param log_output: current log data
+        :param batch_idx: index of the current batch item we're processing
+
+        :return: modified output log data
+        """
+        return log_output
+
     def run(self, outs, queue):
 
         # -- get batch'd variables from the tensorflow graph
@@ -110,10 +135,22 @@ class Base(ABC):
                     ("cer", cer),
                     ("wer", wer),
                     ("loglike", probs),
+                ]
+            )
+
+            log_result = self.custom_logging_modifications(log_result, idx)
+
+            # always add decoding vs. target check after everything else
+            # to make log output more human readable.
+
+            decode_vs_target = OrderedDict(
+                [
                     ("targ", target),
                     ("decode", decoding),
                 ]
             )
+
+            log_result.update(decode_vs_target)
 
             # -- Log how we're doing to file on disk
             # if you want to monitor progress live then you'll have to do:
@@ -164,6 +201,8 @@ class Base(ABC):
                     ]
                 )
                 db_output.update(log_result)
+
+                db_output = self.custom_success_modifications(db_output, idx)
 
                 # -- Calculate some SNR / Lp norm values etc.
                 # snr_stats = get_perceptual_stats(db_output)
