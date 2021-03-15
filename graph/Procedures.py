@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from abc import ABC, abstractmethod
 
 
@@ -57,15 +58,28 @@ class AbstractProcedure(ABC):
 
         while self.steps_rule():
 
-            # Perform one step of optimisation. let the parent spawner process
-            # know if everything is working. Any exception will be caught by the
-            # attack spawner boilerplate
+            # Do startup stuff.
+
+            if self.current_step == 0:
+                self.do_warm_up()
+
+            # We've performed one step of optimisation. let the parent spawner
+            # process know if everything is working. Any exception will have
+            # been caught by the attack spawner boilerplate.
 
             if self.current_step == 1:
                 health_check.send(True)
 
-            if self.current_step % self.decode_step == 0 or self.current_step == 0:
+            # Normal optimisation procedure steps defined by the
+            # `decode_step_logic` method. Can be overridden.
+
+            is_decode_step = self.current_step % self.decode_step == 0
+            is_zeroth_step = self.current_step == 0
+
+            if is_decode_step or is_zeroth_step:
                 yield self.decode_step_logic()
+
+            # Do the actual optimisation
 
             attack.optimiser.optimise(attack.feeds.attack)
 
@@ -145,6 +159,16 @@ class AbstractProcedure(ABC):
     def do_success_updates(self, idx):
         """
         How should we update the attack for whatever we consider a success?
+        """
+        pass
+
+    def do_warm_up(self):
+        """
+        Should anything else be done before we start? e.g. start with a
+        randomised delta?
+
+        N.B. This method is not abstract as it is *not* required to run an
+        attack, but feel free to override it.
         """
         pass
 
