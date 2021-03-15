@@ -149,7 +149,7 @@ class SampleL2Loss(BaseLoss):
 
 
 class BaseLogitDiffLoss(BaseLoss):
-    def __init__(self, attack_graph, target_argmax, weight_settings=(None, None)):
+    def __init__(self, attack_graph, target_argmax, softmax=False, weight_settings=(None, None)):
 
         """
         Base class that can be used for logits difference losses, like CW f_6
@@ -171,7 +171,11 @@ class BaseLogitDiffLoss(BaseLoss):
 
         # Current logits is [b, feats, chars]
         # current_argmax is for debugging purposes only
-        self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
+
+        if softmax is False:
+            self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
+        else:
+            self.current = g.victim.logits
 
         # Create one hot matrices to multiply by current logits.
         # These essentially act as a filter to keep only the target logit or
