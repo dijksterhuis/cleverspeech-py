@@ -16,6 +16,11 @@ class SingleFileWriter:
             if queue.empty() is not True:
                 db_output = queue.get()
 
+                # TODO: get_perceptual_stats() is called here because of the
+                #       time taken to do processing on results. This means data
+                #       output code is split between here and the graph.Outputs
+                #       class, which is confusing.
+
                 perceptual_stats = get_perceptual_stats(db_output)
                 db_output.update(perceptual_stats)
 
@@ -47,6 +52,11 @@ class FullFileWriter:
 
                 if not path.exists(example_dir):
                     mkdir(example_dir)
+
+                # TODO: get_perceptual_stats() is called here because of the
+                #       time taken to do processing on results. This means data
+                #       output code is split between here and the graph.Outputs
+                #       class, which is confusing.
 
                 perceptual_stats = get_perceptual_stats(db_output)
                 db_output.update(perceptual_stats)
