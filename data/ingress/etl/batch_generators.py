@@ -11,7 +11,7 @@ class Batch:
         self.targets = targets
 
 
-def get_standard_batch_generator(settings):
+def standard(settings):
 
     # get N samples of all the data. alsp make sure to limit example length,
     # otherwise we'd have to do adaptive batch sizes.
@@ -79,7 +79,7 @@ def get_standard_batch_generator(settings):
         yield id, batch
 
 
-def get_dense_batch_generator(settings):
+def dense(settings):
 
     # get N samples of all the data. alsp make sure to limit example length,
     # otherwise we'd have to do adaptive batch sizes.
@@ -155,7 +155,7 @@ def get_dense_batch_generator(settings):
         yield id, batch
 
 
-def get_sparse_batch_generator(settings):
+def sparse(settings):
 
     # get N samples of all the data. alsp make sure to limit example length,
     # otherwise we'd have to do adaptive batch sizes.
@@ -231,7 +231,7 @@ def get_sparse_batch_generator(settings):
         yield id, batch
 
 
-def get_validation_batch_generator(settings):
+def validation(settings):
 
     # get N samples of all the data. alsp make sure to limit example length,
     # otherwise we'd have to do adaptive batch sizes.
