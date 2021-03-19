@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 
 class AbstractProcedure(ABC):
-    def __init__(self, attack, steps: int = 5000, decode_step: int = 10, loss_update_idx=None):
+    def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
         """
         Base class that sets up a wealth of stuff to execute the attack over a
         number of iterations.
@@ -22,17 +22,14 @@ class AbstractProcedure(ABC):
         self.steps, self.decode_step = steps + 1, decode_step
         self.current_step = 0
 
-        if loss_update_idx is not None:
-            assert type(loss_update_idx) in [tuple, list]
-            for idx in loss_update_idx:
-                assert type(idx) is int
-
-        self.update_loss = loss_update_idx
-
     def init_optimiser_variables(self):
+        """
+        We must wait to initialise the optimiser so that we can initialise only
+        the attack variables (i.e. not the deepspeech ones).
 
-        # We must wait to initialise the optimiser so that we can
-        # initialise only the attack variables (i.e. not the deepspeech ones).
+        This must be called in **EVERY** child classes' __init__() method so we
+        can do the CTCAlign* procedures (special case).
+        """
 
         self.attack.optimiser.create_optimiser()
 
@@ -42,6 +39,9 @@ class AbstractProcedure(ABC):
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
     def tf_run(self, tf_variables):
+        """
+        Helper method to automatically pass in the attack feed dictionary.
+        """
         sess = self.attack.sess
         feed = self.attack.feeds.attack
         return sess.run(tf_variables, feed_dict=feed)
@@ -53,58 +53,19 @@ class AbstractProcedure(ABC):
         """
         return self.current_step < self.steps
 
-    def run(self, queue, health_check):
+    def do_warm_up(self):
         """
-        Do the actual optimisation.
+        Should anything else be done before we start? e.g. start with a
+        randomised delta?
+
+        N.B. This method is not abstract as it is *not* required to run an
+        attack, but feel free to override it.
         """
-        attack, g, b = self.attack, self.attack.graph, self.attack.batch
+        pass
 
-        while self.steps_rule():
-
-            # Do startup stuff.
-
-            if self.current_step == 0:
-                self.do_warm_up()
-
-            # We've performed one step of optimisation. let the parent spawner
-            # process know if everything is working. Any exception will have
-            # been caught by the attack spawner boilerplate.
-
-            if self.current_step == 1:
-                health_check.send(True)
-
-            # Normal optimisation procedure steps defined by the
-            # `decode_step_logic` method. Can be overridden.
-
-            is_decode_step = self.current_step % self.decode_step == 0
-            is_zeroth_step = self.current_step == 0
-
-            if is_decode_step or is_zeroth_step:
-                # Generate output data and pass it to the results writer process
-                batched_results = self.decode_step_logic()
-
-                # update everything if we've been successful
-                for idx, success_check in enumerate(batched_results["success"]):
-                    if success_check:
-                        self.do_success_updates(idx)
-
-                queue.put(batched_results)
-                yield batched_results
-
-            # Do the actual optimisation
-            attack.optimiser.optimise(attack.feeds.attack)
-            self.current_step += 1
-
-    @abstractmethod
     def decode_step_logic(self):
         """
         What should we do at decoding steps?
-
-        The code below is run when child classes run the line:
-        > super().decode_step_logic()
-
-        This should be called in any child implementation of this method, unless
-        you rewrite the entire method from scratch, which is also possible.
         """
         # ==> every x steps apply integer level rounding prior to decoding.
         # this helps the attacks work against the deepspeech native client api
@@ -121,6 +82,21 @@ class AbstractProcedure(ABC):
         a.sess.run(
             a.graph.raw_deltas.assign(tf.round(deltas))
         )
+
+    @abstractmethod
+    def check_for_success(self, batched_results):
+        """
+        Check if we've been successful and run the update steps if we have
+        This should be defined in **EVERY** child implementation of this class.
+        """
+        pass
+
+    def get_current_attack_state(self):
+        """
+        Get the current values of a bunch of attack graph variables.
+        """
+
+        a, b = self.attack, self.attack.batch
 
         # can use either tf or deepspeech decodings ("ds" or "batch")
         # "batch" is prefered as it's what the actual model would use.
@@ -206,80 +182,99 @@ class AbstractProcedure(ABC):
         batched_results.update(auds)
         batched_results.update(targs)
 
+        successes = [
+            success for success in self.check_for_success(batched_results)
+        ]
+
+        batched_results["success"] = successes
+
         return batched_results
-
-    def check_for_success(self, lefts, rights):
-        """
-        Check if we've been successful and run the update steps if we have
-        """
-        z = zip(lefts, rights)
-        for idx, (left, right) in enumerate(z):
-            success = self.success_criteria_check(left, right)
-            if success:
-                yield success
-            else:
-                yield success
-
-    @staticmethod
-    @abstractmethod
-    def success_criteria_check(left, right):
-        """
-        What is success?
-        """
-        pass
 
     @abstractmethod
     def do_success_updates(self, idx):
         """
         How should we update the attack for whatever we consider a success?
+        This should be defined in **EVERY** child implementation of this class.
         """
         pass
 
-    def do_warm_up(self):
+    def run(self, queue, health_check):
         """
-        Should anything else be done before we start? e.g. start with a
-        randomised delta?
+        Do the actual optimisation.
+        """
+        attack, g, b = self.attack, self.attack.graph, self.attack.batch
 
-        N.B. This method is not abstract as it is *not* required to run an
-        attack, but feel free to override it.
-        """
-        pass
+        while self.steps_rule():
+
+            # Do startup stuff.
+
+            if self.current_step == 0:
+                self.do_warm_up()
+
+            # We've performed one step of optimisation. let the parent spawner
+            # process know if everything is working. Any exception will have
+            # been caught by the attack spawner boilerplate.
+
+            if self.current_step == 1:
+                health_check.send(True)
+
+            # Normal optimisation procedure steps defined by the
+            # `decode_step_logic` method. Can be overridden.
+
+            is_decode_step = self.current_step % self.decode_step == 0
+            is_zeroth_step = self.current_step == 0
+
+            if is_decode_step or is_zeroth_step:
+
+                self.decode_step_logic()
+
+                # Generate output data and pass it to the results writer process
+                batched_results = self.get_current_attack_state()
+
+                # update everything if we've been successful
+                for idx, success_check in enumerate(batched_results["success"]):
+                    if success_check:
+                        self.do_success_updates(idx)
+
+                queue.put(batched_results)
+                yield batched_results
+
+            # Do the actual optimisation
+            attack.optimiser.optimise(attack.feeds.attack)
+            self.current_step += 1
 
 
 class Unbounded(AbstractProcedure):
-    """
-    Don't update anything on a successful decoding, just exit optimisation.
-    """
     def __init__(self, attack, *args, **kwargs):
 
-        """
-        Initialise the procedure object then initialise the optimiser
-        variables => might be additional tf variables to initialise here.
-        """
-        self.finished = False
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-    def decode_step_logic(self):
-        batched_results = super().decode_step_logic()
+        self.finished = False
 
-        decodings = batched_results["decodings"]
-        targets = self.attack.batch.targets["phrases"]
-
-        batched_results["success"] = [
-            success for success in self.check_for_success(decodings, targets)
-        ]
+    def check_for_success(self, batched_results):
+        """
+        Stop optimising when the decoding of every example in a batch matches
+        the target phrase we want.
+        """
 
         current_n_successes = sum(
             [batched_results["success"] for _ in range(self.attack.batch.size)]
         )
         self.finished = self.attack.batch.size == current_n_successes
 
-        return batched_results
+        lefts = batched_results["decodings"]
+        rights = batched_results["phrases"]
 
-    @staticmethod
-    def success_criteria_check(left, right):
-        return True if left == right else False
+        z = zip(lefts, rights)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left == right:
+                yield True
+
+            else:
+                yield False
 
     def steps_rule(self):
         """
@@ -296,21 +291,28 @@ class Unbounded(AbstractProcedure):
 
 class UpdateOnSuccess(AbstractProcedure):
     """
-    Updates bounds MixIn.
+    MixIn to update bounds and loss weightings.
 
     This class should never be initialised by itself, it should always be
     extended.
     """
-    def __init__(self, attack, *args, **kwargs):
+    def __init__(self, attack, *args, loss_update_idx = None, **kwargs):
 
-        """
-        Initialise the procedure object then initialise the optimiser
-        variables => might be additional tf variables to initialise here.
-        """
         super().__init__(attack, *args, **kwargs)
+
         self.init_optimiser_variables()
 
+        if loss_update_idx is not None:
+            assert type(loss_update_idx) in [tuple, list]
+            for idx in loss_update_idx:
+                assert type(idx) is int
+
+        self.update_loss = loss_update_idx
+
     def do_success_updates(self, idx):
+        """
+        Update both the hard constraint bound and the loss weightings.
+        """
 
         # update the delta hard constraint
         delta = self.tf_run(self.attack.graph.final_deltas)[idx]
@@ -328,135 +330,82 @@ class UpdateOnSuccess(AbstractProcedure):
 
 
 class UpdateOnDecoding(UpdateOnSuccess):
-    """
-    Updates bounds and loss weightings on a successful decoding.
-    """
     def __init__(self, attack, *args, **kwargs):
-        """
-        Initialise the procedure object then initialise the optimiser
-        variables => might be additional tf variables to initialise here.
-        """
+
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-    def decode_step_logic(self):
-        batched_results = super().decode_step_logic()
-
-        decodings = batched_results["decodings"]
-        targets = self.attack.batch.targets["phrases"]
-
-        batched_results["success"] = [
-            success for success in self.check_for_success(decodings, targets)
-        ]
-
-        return batched_results
-
-    @staticmethod
-    def success_criteria_check(left, right):
+    def check_for_success(self, batched_results):
         """
-        Decodings should match the target phrases exactly.
-        :param left: decodings
-        :param right: target phrases
-        :return: Bool result
+        Success is when the decoding matches the target phrase.
         """
-        return True if left == right else False
+        lefts = batched_results["decodings"]
+        rights = batched_results["phrases"]
+
+        z = zip(lefts, rights)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left == right:
+                yield True
+
+            else:
+                yield False
 
 
 class UpdateOnLoss(UpdateOnSuccess):
-    """
-    Updates bounds and loss weightings once loss reaches a specified threshold.
-    """
     def __init__(self, attack, *args, loss_lower_bound=10.0, **kwargs):
-        """
-        Initialise the procedure object then initialise the optimiser
-        variables => might be additional tf variables to initialise here.
-        """
+
         super().__init__(attack, *args, **kwargs)
-        self.loss_bound = loss_lower_bound
         self.init_optimiser_variables()
 
-    def decode_step_logic(self):
-        batched_results = super().decode_step_logic()
+        self.loss_bound = loss_lower_bound
 
-        loss = batched_results["total_loss"]
-        target_loss = [self.loss_bound for _ in range(self.attack.batch.size)]
-
-        batched_results["success"] = [
-            success for success in self.check_for_success(loss, target_loss)
-        ]
-
-        return batched_results
-
-    @staticmethod
-    def success_criteria_check(left, right):
+    def check_for_success(self, batched_results):
         """
-        Loss should be less than/equal to a specified bound.
-        :param left: loss
-        :param right: target loss
-        :return: Bool result
+        Success is when the loss reaches a specified threshold.
         """
-        return True if left <= right else False
+
+        lefts = batched_results["total_loss"]
+        rights = [self.loss_bound for _ in range(self.attack.batch.size)]
+
+        z = zip(lefts, rights)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left <= right:
+                yield True
+
+            else:
+                yield False
 
 
 class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
-    """
-    Updates bounds and loss weightings once log likelihood (decoder
-    probabilities) has reached a certain point.
-    """
     def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
-        """
-        Initialise the procedure object then initialise the optimiser
-        variables => might be additional tf variables to initialise here.
-        """
 
         super().__init__(attack, *args, **kwargs)
-        self.probs_diff = probs_diff
         self.init_optimiser_variables()
 
-    def decode_step_logic(self):
+        self.probs_diff = probs_diff
 
-        batched_results = super().decode_step_logic()
-
-        probs = batched_results["probs"]
-        target_probs = [self.probs_diff for _ in range(self.attack.batch.size)]
-
-        batched_results["success"] = [
-            success for success in self.check_for_success(probs, target_probs)
-        ]
-
-        return batched_results
-
-    @staticmethod
-    def success_criteria_check(left, right):
+    def check_for_success(self, batched_results):
         """
-        Decoder log probabilities should be less than/equal to a specified
-        bound.
-
-        Only use this implementation with the DeepSpeech beam search decoder (it
-        outputs POSITIVE log probabilities).
-
-        :param left: deepspeech decoder log probabilities (positive)
-        :param right: target log probabilities (positive)
-        :return: Bool result
+        Success is when log likelihood (decoder probabilities) have reached a
+        certain threshold.
         """
-        return True if left <= right else False
 
+        lefts = batched_results["probs"]
+        rights = [self.probs_diff for _ in range(self.attack.batch.size)]
 
-class UpdateOnTensorflowProbs(UpdateOnDeepSpeechProbs):
-    @staticmethod
-    def success_criteria_check(left, right):
-        """
-        Decoder log probabilities should be less than/equal to a specified
-        bound.
+        z = zip(lefts, rights)
 
-        Only use this implementation with a TF beam search decoder (it returns
-        the raw negative log probabilities).
+        for idx, (left, right) in enumerate(z):
 
-        :param left: deepspeech decoder log probabilities (positive)
-        :param right: target log probabilities (positive)
-        :return: Bool result
-        """
-        return True if left >= right else False
+            if left <= right:
+                yield True
+
+            else:
+                yield False
 
 
 class HardcoreMode(UpdateOnLoss):
@@ -489,14 +438,11 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
     irrelevant of the given example.
     """
     def __init__(self, attack, alignment_graph, *args, **kwargs):
-        """
-        Initialise the evaluation procedure.
-
-        :param attack_graph: The current attack graph perform optimisation with.
-        """
 
         super().__init__(attack, *args, **kwargs)
+
         self.alignment_graph = alignment_graph
+
         self.init_optimiser_variables()
 
     def init_optimiser_variables(self):
