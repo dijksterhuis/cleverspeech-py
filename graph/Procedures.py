@@ -121,7 +121,13 @@ class AbstractProcedure(ABC):
         )
 
         graph_losses = [l.loss_fn for l in a.loss]
-        losses = [a.procedure.tf_run(graph_losses)]
+        losses = a.procedure.tf_run(graph_losses)
+
+        losses_transposed = [
+            [
+                losses[loss_idx][batch_idx] for loss_idx in range(len(a.loss))
+            ] for batch_idx in range(b.size)
+        ]
 
         graph_variables = [
             a.loss_fn,
@@ -132,10 +138,9 @@ class AbstractProcedure(ABC):
             a.victim.logits,
             tf.transpose(a.victim.raw_logits, [1, 0, 2]),
         ]
-        outs = losses + a.procedure.tf_run(graph_variables)
+        outs = a.procedure.tf_run(graph_variables)
 
         [
-            losses,
             total_losses,
             bounds_raw,
             deltas,
@@ -145,8 +150,9 @@ class AbstractProcedure(ABC):
             raw_logits,
         ] = outs
 
+        # TODO: Fix nesting here or over in file write subprocess (as is now)?
         initial_tau = self.attack.hard_constraint.initial_taus
-        distance_raw = self.attack.hard_constraint.analyse(deltas)
+        distance_raw = [self.attack.hard_constraint.analyse(d) for d in deltas]
         bound_eps = [x / i_t for x, i_t in zip(bounds_raw, initial_tau)]
         distance_eps = [x / i_t for x, i_t in zip(distance_raw, initial_tau)]
 
@@ -155,16 +161,16 @@ class AbstractProcedure(ABC):
         batched_results = {
             "step": [self.current_step for _ in range(b.size)],
             "tokens": batched_tokens,
-            "losses": losses,
+            "losses": losses_transposed,
             "total_loss": total_losses,
             "initial_taus": initial_tau,
             "bounds_raw": bounds_raw,
             "distances_raw": distance_raw,
-            "bounds_eps": bound_eps[:][0],
-            "distances_eps": distance_eps[:][0],
+            "bounds_eps": bound_eps,
+            "distances_eps": distance_eps,
             "deltas": deltas,
             "advs": adv_audio,
-            "delta_vars": delta_vars,
+            "delta_vars": [d for d in delta_vars[0]],
             "softmax_logits": softmax_logits,
             "raw_logits": raw_logits,
             "decodings": decodings,

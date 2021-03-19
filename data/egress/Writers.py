@@ -17,27 +17,33 @@ class SingleFileWriter:
             if queue.empty() is not True:
                 batched_outs = queue.get()
 
-                log_result, db_output = self.extracter.run(batched_outs)
-                log(log_result, wrap=False, outdir=self.outdir, stdout=False)
+                for log_result, db_output in self.extracter.run(batched_outs):
 
-                if db_output is not None:
+                    log(
+                        log_result,
+                        wrap=False,
+                        outdir=self.outdir,
+                        stdout=False
+                    )
 
-                    db_file_path = db_output['basenames'].rstrip(".wav")
+                    if db_output is not None:
 
-                    self.example_db.open(db_file_path).put(db_output)
+                        db_file_path = db_output['basenames'].rstrip(".wav")
 
-                    # -- Write audio data.
-                    for wav_file in ["audio", "deltas", "advs"]:
+                        self.example_db.open(db_file_path).put(db_output)
 
-                        outpath = path.join(self.outdir, db_file_path)
-                        outpath += "_{}.wav".format(wav_file)
+                        # -- Write audio data.
+                        for wav_file in ["audio", "deltas", "advs"]:
 
-                        WavFile.write(
-                            outpath,
-                            db_output[wav_file],
-                            sample_rate=16000,
-                            bit_depth=16
-                        )
+                            outpath = path.join(self.outdir, db_file_path)
+                            outpath += "_{}.wav".format(wav_file)
+
+                            WavFile.write(
+                                outpath,
+                                db_output[wav_file],
+                                sample_rate=16000,
+                                bit_depth=16
+                            )
 
 
 class FullFileWriter:

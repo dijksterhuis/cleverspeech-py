@@ -71,14 +71,42 @@ class Standard(ABC):
 
     @staticmethod
     def convert_to_example_wise(batched_results):
+
         assert type(batched_results) is dict
+
         d = {idx: {} for idx in range(len(batched_results["step"]))}
+
         for k, v in batched_results.items():
             for idx in d.keys():
-                d[idx][k] = batched_results[k][idx]
+                try:
+                    d[idx][k] = batched_results[k][idx]
+                except IndexError:
+                    print(idx, k, batched_results[k])
+                    raise
+
         return d
 
+    @staticmethod
+    def fix_nestings(y):
+        return [x[0] for x in y]
+
     def run(self, batched_results):
+
+        batched_results["initial_taus"] = self.fix_nestings(
+            batched_results["initial_taus"]
+        )
+        batched_results["bounds_raw"] = self.fix_nestings(
+            batched_results["bounds_raw"]
+        )
+        batched_results["distances_raw"] = self.fix_nestings(
+            batched_results["distances_raw"]
+        )
+        batched_results["bounds_eps"] = self.fix_nestings(
+            batched_results["bounds_eps"]
+        )
+        batched_results["distances_eps"] = self.fix_nestings(
+            batched_results["distances_eps"]
+        )
 
         example_wise_results = self.convert_to_example_wise(batched_results)
 
@@ -148,8 +176,8 @@ class Standard(ABC):
 
                 db_output = self.custom_success_modifications(example_data)
 
-                return step_logs, db_output
+                yield step_logs, db_output
 
             else:
-                return step_logs, None
+                yield step_logs, None
 
