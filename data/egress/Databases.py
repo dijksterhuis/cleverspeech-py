@@ -44,6 +44,9 @@ class SingleJsonDB:
                     for idx, value in enumerate(values):
                         values[idx] = value.tolist()
 
+                if type(values[0]) in [np.float32, np.int32, np.int16, np.int64]:
+                    values = [float(v) for v in values]
+
             if type(values) is not list:
                 values = [values]
 
