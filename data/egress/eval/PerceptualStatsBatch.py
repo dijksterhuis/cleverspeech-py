@@ -6,18 +6,18 @@ import numpy as np
 from collections import OrderedDict
 from cleverspeech.utils.Utils import log, load_wavs
 
-from cleverspeech.eval.DetectionMetrics import lnorm
-from cleverspeech.eval.DetectionMetrics import power_db
-from cleverspeech.eval.DetectionMetrics import energy_db
-from cleverspeech.eval.DetectionMetrics import rms_amplitude_db
-from cleverspeech.eval.DetectionMetrics import snr_power_db
-from cleverspeech.eval.DetectionMetrics import snr_power
-from cleverspeech.eval.DetectionMetrics import snr_energy_db
-from cleverspeech.eval.DetectionMetrics import snr_energy
-from cleverspeech.eval.DetectionMetrics import snr_segmented
+from cleverspeech.data.egress.eval.DetectionMetrics import lnorm
+from cleverspeech.data.egress.eval.DetectionMetrics import power_db
+from cleverspeech.data.egress.eval.DetectionMetrics import energy_db
+from cleverspeech.data.egress.eval.DetectionMetrics import rms_amplitude_db
+from cleverspeech.data.egress.eval.DetectionMetrics import snr_power_db
+from cleverspeech.data.egress.eval.DetectionMetrics import snr_power
+from cleverspeech.data.egress.eval.DetectionMetrics import snr_energy_db
+from cleverspeech.data.egress.eval.DetectionMetrics import snr_energy
+from cleverspeech.data.egress.eval.DetectionMetrics import snr_segmented
 
-from cleverspeech.eval.NoiseWeightings import a_weighting
-from cleverspeech.eval.NoiseWeightings import itu_weighting
+from cleverspeech.data.egress.eval.NoiseWeightings import a_weighting
+from cleverspeech.data.egress.eval.NoiseWeightings import itu_weighting
 
 
 def get_fps(indir):

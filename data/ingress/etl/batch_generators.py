@@ -1,5 +1,5 @@
-from cleverspeech.data.etl import etls
-from cleverspeech.data.etl.utils import BatchGen
+from cleverspeech.data.ingress.etl import etls
+from cleverspeech.data.ingress.etl.utils import BatchGen
 from cleverspeech.utils.Utils import log, l_map
 
 
@@ -79,7 +79,7 @@ def get_standard_batch_generator(settings):
         yield id, batch
 
 
-def get_dense_batch_factory(settings):
+def get_dense_batch_generator(settings):
 
     # get N samples of all the data. alsp make sure to limit example length,
     # otherwise we'd have to do adaptive batch sizes.

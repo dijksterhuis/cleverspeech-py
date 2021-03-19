@@ -44,7 +44,7 @@ class LNorm(ABC):
 
     def _gen_tau(self, act_lengths):
         for l in act_lengths:
-            yield [self.analyse([self.maximum for _ in range(l)])]
+            yield self.analyse([self.maximum for _ in range(l)])
 
     @abstractmethod
     def analyse(self, x):
@@ -140,7 +140,10 @@ class L2(LNorm):
         )
 
     def analyse(self, x):
-        return np.power(np.sum(np.power(np.abs(x), 2)), 1 / 2)
+        res = np.power(np.sum(np.power(np.abs(x), 2)), 1 / 2)
+        if type(res) != list:
+            res = [res]
+        return res
 
     def clip(self, x):
         """
@@ -162,7 +165,11 @@ class Linf(LNorm):
         )
 
     def analyse(self, x):
-        return np.max(np.abs(x))
+        res = np.max(np.abs(x))
+        if type(res) != list:
+            res = [res]
+        return res
+
 
     def clip(self, x):
         # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the

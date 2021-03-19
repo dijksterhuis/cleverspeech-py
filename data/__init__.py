@@ -1,2 +1,2 @@
-from cleverspeech.data import Results
-from cleverspeech.data import etl
+from cleverspeech.data import ingress
+from cleverspeech.data import egress

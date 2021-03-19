@@ -1,5 +1,4 @@
 import tensorflow as tf
-import numpy as np
 from abc import ABC, abstractmethod
 
 
@@ -22,9 +21,13 @@ class AbstractProcedure(ABC):
         self.attack = attack
         self.steps, self.decode_step = steps + 1, decode_step
         self.current_step = 0
+
+        if loss_update_idx is not None:
+            assert type(loss_update_idx) in [tuple, list]
+            for idx in loss_update_idx:
+                assert type(idx) is int
+
         self.update_loss = loss_update_idx
-        if self.update_loss is not None:
-            assert type(self.update_loss) in [int, float]
 
     def init_optimiser_variables(self):
 
@@ -50,7 +53,7 @@ class AbstractProcedure(ABC):
         """
         return self.current_step < self.steps
 
-    def run(self, health_check):
+    def run(self, queue, health_check):
         """
         Do the actual optimisation.
         """
@@ -77,12 +80,19 @@ class AbstractProcedure(ABC):
             is_zeroth_step = self.current_step == 0
 
             if is_decode_step or is_zeroth_step:
-                yield self.decode_step_logic()
+                # Generate output data and pass it to the results writer process
+                batched_results = self.decode_step_logic()
+
+                # update everything if we've been successful
+                for idx, success_check in enumerate(batched_results["success"]):
+                    if success_check:
+                        self.do_success_updates(idx)
+
+                queue.put(batched_results)
+                yield batched_results
 
             # Do the actual optimisation
-
             attack.optimiser.optimise(attack.feeds.attack)
-
             self.current_step += 1
 
     @abstractmethod
@@ -105,9 +115,11 @@ class AbstractProcedure(ABC):
         # things during attack optimisation seems to help it find a solution in
         # integer space all by itself (vs. fiddling with the examples after).
 
-        deltas = self.attack.sess.run(self.attack.graph.raw_deltas)
-        self.attack.sess.run(
-            self.attack.graph.raw_deltas.assign(tf.round(deltas))
+        a, b = self.attack, self.attack.batch
+
+        deltas = a.sess.run(a.graph.raw_deltas)
+        a.sess.run(
+            a.graph.raw_deltas.assign(tf.round(deltas))
         )
 
         # can use either tf or deepspeech decodings ("ds" or "batch")
@@ -132,7 +144,69 @@ class AbstractProcedure(ABC):
             top_five=False,
         )
 
-        return decodings, probs, top_5_decodings, top_5_probs
+        graph_losses = [l.loss_fn for l in a.loss]
+        losses = [a.procedure.tf_run(graph_losses)]
+
+        graph_variables = [
+            a.loss_fn,
+            a.hard_constraint.bounds,
+            a.graph.final_deltas,
+            a.graph.adversarial_examples,
+            a.graph.opt_vars,
+            a.victim.logits,
+            tf.transpose(a.victim.raw_logits, [1, 0, 2]),
+        ]
+        outs = losses + a.procedure.tf_run(graph_variables)
+
+        [
+            losses,
+            total_losses,
+            bounds_raw,
+            deltas,
+            adv_audio,
+            delta_vars,
+            softmax_logits,
+            raw_logits,
+        ] = outs
+
+        initial_tau = self.attack.hard_constraint.initial_taus
+        distance_raw = self.attack.hard_constraint.analyse(deltas)
+        bound_eps = [x / i_t for x, i_t in zip(bounds_raw, initial_tau)]
+        distance_eps = [x / i_t for x, i_t in zip(distance_raw, initial_tau)]
+
+        batched_tokens = [b.targets["tokens"] for _ in range(b.size)]
+
+        batched_results = {
+            "step": [self.current_step for _ in range(b.size)],
+            "tokens": batched_tokens,
+            "losses": losses,
+            "total_loss": total_losses,
+            "initial_taus": initial_tau,
+            "bounds_raw": bounds_raw,
+            "distances_raw": distance_raw,
+            "bounds_eps": bound_eps[:][0],
+            "distances_eps": distance_eps[:][0],
+            "deltas": deltas,
+            "advs": adv_audio,
+            "delta_vars": delta_vars,
+            "softmax_logits": softmax_logits,
+            "raw_logits": raw_logits,
+            "decodings": decodings,
+            "top_five_decodings": top_5_decodings,
+            "probs": probs,
+            "top_five_probs": top_5_probs,
+        }
+
+        targs_batch_exclude = ["tokens"]
+        targs = {k: v for k, v in b.targets.items() if k not in targs_batch_exclude}
+
+        audio_batch_exclude = ["max_samples", "max_feats"]
+        auds = {k: v for k, v in b.audios.items() if k not in audio_batch_exclude}
+
+        batched_results.update(auds)
+        batched_results.update(targs)
+
+        return batched_results
 
     def check_for_success(self, lefts, rights):
         """
@@ -142,10 +216,9 @@ class AbstractProcedure(ABC):
         for idx, (left, right) in enumerate(z):
             success = self.success_criteria_check(left, right)
             if success:
-                self.do_success_updates(idx)
-                yield idx, success
+                yield success
             else:
-                yield idx, success
+                yield success
 
     @staticmethod
     @abstractmethod
@@ -188,35 +261,21 @@ class Unbounded(AbstractProcedure):
         self.init_optimiser_variables()
 
     def decode_step_logic(self):
-        [
-            decodings,
-            probs,
-            top_5_decodings,
-            top_5_probs
-        ] = super().decode_step_logic()
+        batched_results = super().decode_step_logic()
 
+        decodings = batched_results["decodings"]
         targets = self.attack.batch.targets["phrases"]
 
-        outs = {
-            "step": self.current_step,
-            "data": [
-                {
-                    "idx": idx,
-                    "success": success,
-                    "decodings": decodings[idx],
-                    "target_phrase": targets[idx],
-                    "probs": probs[idx],
-                    "top_five_decodings": top_5_decodings[idx],
-                    "top_five_probs": top_5_probs[idx],
-                }
-                for idx, success in self.check_for_success(decodings, targets)
-            ]
-        }
+        batched_results["success"] = [
+            success for success in self.check_for_success(decodings, targets)
+        ]
 
-        current_n_successes = sum([d["success"] for d in outs["data"]])
+        current_n_successes = sum(
+            [batched_results["success"] for _ in range(self.attack.batch.size)]
+        )
         self.finished = self.attack.batch.size == current_n_successes
 
-        return outs
+        return batched_results
 
     @staticmethod
     def success_criteria_check(left, right):
@@ -235,7 +294,7 @@ class Unbounded(AbstractProcedure):
         pass
 
 
-class UpdateBoundOnSuccess(AbstractProcedure):
+class UpdateOnSuccess(AbstractProcedure):
     """
     Updates bounds MixIn.
 
@@ -257,22 +316,18 @@ class UpdateBoundOnSuccess(AbstractProcedure):
         delta = self.tf_run(self.attack.graph.final_deltas)[idx]
         self.attack.hard_constraint.update_one(delta, idx)
 
-
-class UpdateLossOnSuccess(AbstractProcedure):
-    """
-    Updates loss weightings MixIn.
-
-    This class should never be initialised by itself, it should always be
-    extended.
-    """
-    def do_success_updates(self, idx):
-
         # update any loss weightings
         if self.update_loss is not None:
-            self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+
+            if type(self.update_loss) == int:
+                self.attack.loss[self.update_loss].update(self.attack.sess, idx)
+
+            elif type(self.update_loss) in [list, tuple]:
+                for idx in self.update_loss:
+                    self.attack.loss[idx].update(self.attack.sess, idx)
 
 
-class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
+class UpdateOnDecoding(UpdateOnSuccess):
     """
     Updates bounds and loss weightings on a successful decoding.
     """
@@ -285,31 +340,16 @@ class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         self.init_optimiser_variables()
 
     def decode_step_logic(self):
+        batched_results = super().decode_step_logic()
 
-        [
-            decodings,
-            probs,
-            top_5_decodings,
-            top_5_probs
-        ] = super().decode_step_logic()
-
+        decodings = batched_results["decodings"]
         targets = self.attack.batch.targets["phrases"]
 
-        return {
-            "step": self.current_step,
-            "data": [
-                {
-                    "idx": idx,
-                    "success": success,
-                    "decodings": decodings[idx],
-                    "target_phrase": targets[idx],
-                    "probs": probs[idx],
-                    "top_five_decodings": top_5_decodings[idx],
-                    "top_five_probs": top_5_probs[idx],
-                }
-                for idx, success in self.check_for_success(decodings, targets)
-            ]
-        }
+        batched_results["success"] = [
+            success for success in self.check_for_success(decodings, targets)
+        ]
+
+        return batched_results
 
     @staticmethod
     def success_criteria_check(left, right):
@@ -322,7 +362,7 @@ class UpdateOnDecoding(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         return True if left == right else False
 
 
-class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
+class UpdateOnLoss(UpdateOnSuccess):
     """
     Updates bounds and loss weightings once loss reaches a specified threshold.
     """
@@ -336,33 +376,16 @@ class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         self.init_optimiser_variables()
 
     def decode_step_logic(self):
+        batched_results = super().decode_step_logic()
 
-        [
-            decodings,
-            probs,
-            top_5_decodings,
-            top_5_probs
-        ] = super().decode_step_logic()
-
-        loss = self.tf_run(self.attack.loss_fn)
+        loss = batched_results["total_loss"]
         target_loss = [self.loss_bound for _ in range(self.attack.batch.size)]
-        targets = self.attack.batch.targets["phrases"]
 
-        return {
-            "step": self.current_step,
-            "data": [
-                {
-                    "idx": idx,
-                    "success": success,
-                    "decodings": decodings[idx],
-                    "target_phrase": targets[idx],
-                    "top_five_decodings": top_5_decodings[idx],
-                    "top_five_probs": top_5_probs[idx],
-                    "probs": probs[idx]
-                }
-                for idx, success in self.check_for_success(loss, target_loss)
-            ]
-        }
+        batched_results["success"] = [
+            success for success in self.check_for_success(loss, target_loss)
+        ]
+
+        return batched_results
 
     @staticmethod
     def success_criteria_check(left, right):
@@ -375,7 +398,7 @@ class UpdateOnLoss(UpdateBoundOnSuccess, UpdateLossOnSuccess):
         return True if left <= right else False
 
 
-class UpdateOnDeepSpeechProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
+class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
     """
     Updates bounds and loss weightings once log likelihood (decoder
     probabilities) has reached a certain point.
@@ -392,31 +415,16 @@ class UpdateOnDeepSpeechProbs(UpdateBoundOnSuccess, UpdateLossOnSuccess):
 
     def decode_step_logic(self):
 
-        [
-            decodings,
-            probs,
-            top_5_decodings,
-            top_5_probs
-        ] = super().decode_step_logic()
+        batched_results = super().decode_step_logic()
 
+        probs = batched_results["probs"]
         target_probs = [self.probs_diff for _ in range(self.attack.batch.size)]
-        targets = self.attack.batch.targets["phrases"]
 
-        return {
-            "step": self.current_step,
-            "data": [
-                {
-                    "idx": idx,
-                    "success": success,
-                    "decodings": decodings[idx],
-                    "target_phrase": targets[idx],
-                    "top_five_decodings": top_5_decodings[idx],
-                    "top_five_probs": top_5_probs[idx],
-                    "probs": probs[idx]
-                }
-                for idx, success in self.check_for_success(probs, target_probs)
-            ]
-        }
+        batched_results["success"] = [
+            success for success in self.check_for_success(probs, target_probs)
+        ]
+
+        return batched_results
 
     @staticmethod
     def success_criteria_check(left, right):
@@ -506,9 +514,9 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
-    def run(self, health_check):
+    def run(self, queue, health_check):
         self.alignment_graph.optimise(self.attack.victim)
-        for r in super().run(health_check):
+        for r in super().run(queue, health_check):
             yield r
 
 

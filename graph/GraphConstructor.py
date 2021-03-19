@@ -88,9 +88,9 @@ class Constructor(ABC):
     def add_outputs(self, outputs, *args, **kwargs):
         self.outputs = outputs(self, self.batch, *args, **kwargs)
 
-    def run(self, queue, *args, **kwargs):
-        for results in self.procedure.run(*args, **kwargs):
-            self.outputs.run(results, queue)
+    def run(self, queue, health_check, *args, **kwargs):
+        for results in self.procedure.run(queue, health_check, *args, **kwargs):
+            pass
 
     def update_bound(self, *args, **kwargs):
         results = self.optimiser.update_bound(*args, **kwargs)

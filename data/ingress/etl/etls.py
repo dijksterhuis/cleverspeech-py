@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from cleverspeech.data.etl import utils
+from cleverspeech.data.ingress.etl import utils
 from cleverspeech.utils.Utils import np_arr, lcomp, load_wavs, l_map
 
 
@@ -119,6 +119,7 @@ def create_standard_target_batch(data, tokens=" abcdefghijklmnopqrstuvwxyz'-"):
         "phrases": target_phrases,
         "row_ids": target_ids,
         "indices": indices,
+        "original_indices": indices,  # we may modify for alignments
         "lengths": lengths,
     }
 
