@@ -4,20 +4,11 @@ import sys
 import numpy as np
 
 from collections import OrderedDict
-from cleverspeech.utils.Utils import log, load_wavs
+from cleverspeech.utils.Utils import log
+from cleverspeech.utils import WavFile
 
-from cleverspeech.data.egress.eval.DetectionMetrics import lnorm
-from cleverspeech.data.egress.eval.DetectionMetrics import power_db
-from cleverspeech.data.egress.eval.DetectionMetrics import energy_db
-from cleverspeech.data.egress.eval.DetectionMetrics import rms_amplitude_db
-from cleverspeech.data.egress.eval.DetectionMetrics import snr_power_db
-from cleverspeech.data.egress.eval.DetectionMetrics import snr_power
-from cleverspeech.data.egress.eval.DetectionMetrics import snr_energy_db
-from cleverspeech.data.egress.eval.DetectionMetrics import snr_energy
-from cleverspeech.data.egress.eval.DetectionMetrics import snr_segmented
-
-from cleverspeech.data.egress.eval.NoiseWeightings import a_weighting
-from cleverspeech.data.egress.eval.NoiseWeightings import itu_weighting
+from cleverspeech.data.egress.eval import DetectionMetrics
+from cleverspeech.data.egress.eval import NoiseWeightings
 
 
 def get_fps(indir):
@@ -64,9 +55,9 @@ def batch_generate_statistic_file(indir):
     origs_file_paths.sort()
     advexs_file_paths.sort()
 
-    deltas = load_wavs(deltas_file_paths, "float32")
-    advexs = load_wavs(advexs_file_paths, "float32")
-    origs = load_wavs(origs_file_paths, "float32")
+    deltas = [WavFile.load(fp, "float32") for fp in deltas_file_paths]
+    advexs = [WavFile.load(fp, "float32") for fp in advexs_file_paths]
+    origs = [WavFile.load(fp, "float32") for fp in origs_file_paths]
 
     gen = enumerate(
         zip(
@@ -94,92 +85,106 @@ def batch_generate_statistic_file(indir):
         adv = normalise_16_bit(adv)
 
         # Apply noise weightings
-        a_delta = a_weighting(delta)
-        a_original = a_weighting(original)
-        a_adv = a_weighting(adv)
-        itu_delta = itu_weighting(delta)
-        itu_original = itu_weighting(original)
-        itu_adv = itu_weighting(adv)
+        a_delta = NoiseWeightings.a_weighting(delta)
+        a_original = NoiseWeightings.a_weighting(original)
+        a_adv = NoiseWeightings.a_weighting(adv)
+        itu_delta = NoiseWeightings.itu_weighting(delta)
+        itu_original = NoiseWeightings.itu_weighting(original)
+        itu_adv = NoiseWeightings.itu_weighting(adv)
 
         # Generate the actual stats. Note that many of these stats actually give
         # use the same results -- it's useful to confirm everything is working.
         stats = OrderedDict(
             [
+                # ==> misc metadata
+                ("raw_model_success", True),
                 ("filepath_adv", adv_fp),
                 ("samples", original.size),
+                # ==> Lp norm metrics
                 # ("l1", LNorm(1).analyse(d)), TODO
-                ("l1_delta", lnorm(delta, norm=1)),
-                ("l2_delta", lnorm(delta, norm=2)),
-                ("linf_delta", lnorm(delta, norm=np.inf)),
-                ("snr_energy_plain", snr_energy(adv, original)),
-                ("snr_energy_A", snr_energy(a_adv, a_original)),
-                ("snr_energy_ITU", snr_energy(itu_adv, itu_original)),
-                ("snr_energy_db_plain", snr_energy_db(adv, original)),
-                ("snr_energy_db_A", snr_energy_db(a_adv, a_original)),
-                ("snr_energy_db_ITU", snr_energy(itu_adv, itu_original)),
-                ("snr_power_plain", snr_power(adv, original)),
-                ("snr_power_A", snr_power(a_adv, a_original)),
-                ("snr_power_ITU", snr_power(itu_adv, itu_original)),
-                ("snr_power_db_plain", snr_power_db(adv, original)),
-                ("snr_power_db_A", snr_power_db(a_adv, a_original)),
-                ("snr_power_db_ITU", snr_power_db(itu_adv, itu_original)),
-                ("snr_seg_plain", snr_segmented(adv, original)),
-                ("snr_seg_A", snr_segmented(a_adv, a_original)),
-                ("snr_seg_ITU", snr_segmented(itu_adv, itu_original)),
-                ("rms_amp_db_delta_plain", rms_amplitude_db(delta)),
-                ("rms_amp_db_delta_A", rms_amplitude_db(a_delta)),
-                ("rms_amp_db_delta_ITU", rms_amplitude_db(itu_delta)),
-                ("rms_amp_db_adv_plain", rms_amplitude_db(adv)),
-                ("rms_amp_db_adv_A", rms_amplitude_db(a_adv)),
-                ("rms_amp_db_adv_ITU", rms_amplitude_db(itu_adv)),
-                ("rms_amp_db_orig_plain", rms_amplitude_db(original)),
-                ("rms_amp_db_orig_A", rms_amplitude_db(a_original)),
-                ("rms_amp_db_orig_ITU", rms_amplitude_db(itu_original)),
-                ("rms_amp_raw_delta_plain", rms_amplitude_db(delta)),
-                ("rms_amp_raw_delta_A", rms_amplitude_db(a_delta)),
-                ("rms_amp_raw_delta_ITU", rms_amplitude_db(itu_delta)),
-                ("rms_amp_raw_adv_plain", rms_amplitude_db(adv)),
-                ("rms_amp_raw_adv_A", rms_amplitude_db(a_adv)),
-                ("rms_amp_raw_adv_ITU", rms_amplitude_db(itu_adv)),
-                ("rms_amp_raw_orig_plain", rms_amplitude_db(original)),
-                ("rms_amp_raw_orig_A", rms_amplitude_db(a_original)),
-                ("rms_amp_raw_orig_ITU", rms_amplitude_db(itu_original)),
-                ("energy_db_delta_plain", energy_db(delta)),
-                ("energy_db_delta_A", energy_db(a_delta)),
-                ("energy_db_delta_ITU", energy_db(itu_delta)),
-                ("energy_db_adv_plain", energy_db(adv)),
-                ("energy_db_adv_A", energy_db(a_adv)),
-                ("energy_db_adv_ITU", energy_db(itu_adv)),
-                ("energy_db_orig_plain", energy_db(original)),
-                ("energy_db_orig_A", energy_db(a_original)),
-                ("energy_db_orig_ITU", energy_db(itu_original)),
-                ("energy_raw_delta_plain", energy_db(delta)),
-                ("energy_raw_delta_A", energy_db(a_delta)),
-                ("energy_raw_delta_ITU", energy_db(itu_delta)),
-                ("energy_raw_adv_plain", energy_db(adv)),
-                ("energy_raw_adv_A", energy_db(a_adv)),
-                ("energy_raw_adv_ITU", energy_db(itu_adv)),
-                ("energy_raw_orig_plain", energy_db(original)),
-                ("energy_raw_orig_A", energy_db(a_original)),
-                ("energy_raw_orig_ITU", energy_db(itu_original)),
-                ("power_db_delta_plain", power_db(delta)),
-                ("power_db_delta_A", power_db(a_delta)),
-                ("power_db_delta_ITU", power_db(itu_delta)),
-                ("power_db_adv_plain", power_db(adv)),
-                ("power_db_adv_A", power_db(a_adv)),
-                ("power_db_adv_ITU", power_db(itu_adv)),
-                ("power_db_orig_plain", power_db(original)),
-                ("power_db_orig_A", power_db(a_original)),
-                ("power_db_orig_ITU", power_db(itu_original)),
-                ("power_raw_delta_plain", power_db(delta)),
-                ("power_raw_delta_A", power_db(a_delta)),
-                ("power_raw_delta_ITU", power_db(itu_delta)),
-                ("power_raw_adv_plain", power_db(adv)),
-                ("power_raw_adv_A", power_db(a_adv)),
-                ("power_raw_adv_ITU", power_db(itu_adv)),
-                ("power_raw_orig_plain", power_db(original)),
-                ("power_raw_orig_A", power_db(a_original)),
-                ("power_raw_orig_ITU", power_db(itu_original))
+                ("l1_delta", DetectionMetrics.lnorm(delta, norm=1)),
+                ("l2_delta", DetectionMetrics.lnorm(delta, norm=2)),
+                ("linf_delta", DetectionMetrics.lnorm(delta, norm=np.inf)),
+                # ==> snr from the energy in DBfs
+                ("snr_energy_db_plain", DetectionMetrics.snr_energy_db(delta, original)),
+                ("snr_energy_db_A", DetectionMetrics.snr_energy_db(a_delta, a_original)),
+                ("snr_energy_db_ITU", DetectionMetrics.snr_energy_db(itu_delta, itu_original)),
+                # ==> energy snr from raw 16 bit int values
+                ("snr_energy_plain", DetectionMetrics.snr_energy(delta, original)),
+                ("snr_energy_A", DetectionMetrics.snr_energy(a_delta, a_original)),
+                ("snr_energy_ITU", DetectionMetrics.snr_energy(itu_delta, itu_original)),
+                # ==> power snr in DBfs
+                ("snr_power_db_plain", DetectionMetrics.snr_power_db(delta, original)),
+                ("snr_power_db_A", DetectionMetrics.snr_power_db(a_delta, a_original)),
+                ("snr_power_db_ITU", DetectionMetrics.snr_power_db(itu_delta, itu_original)),
+                # ==> power snr from raw 16 bit int values
+                ("snr_power_plain", DetectionMetrics.snr_power(delta, original)),
+                ("snr_power_A", DetectionMetrics.snr_power(a_delta, a_original)),
+                ("snr_power_ITU",DetectionMetrics.snr_power(itu_delta, itu_original)),
+                # ==> segmented snr from lea's paper
+                ("snr_seg_plain", DetectionMetrics.snr_segmented(delta, original)),
+                ("snr_seg_A", DetectionMetrics.snr_segmented(a_delta, a_original)),
+                ("snr_seg_ITU", DetectionMetrics.snr_segmented(itu_delta, itu_original)),
+                # ==> RMS Amplitude in DBfs
+                ("rms_amp_db_delta_plain", DetectionMetrics.rms_amplitude_db(delta)),
+                ("rms_amp_db_delta_A", DetectionMetrics.rms_amplitude_db(a_delta)),
+                ("rms_amp_db_delta_ITU", DetectionMetrics.rms_amplitude_db(itu_delta)),
+                ("rms_amp_db_adv_plain", DetectionMetrics.rms_amplitude_db(adv)),
+                ("rms_amp_db_adv_A", DetectionMetrics.rms_amplitude_db(a_adv)),
+                ("rms_amp_db_adv_ITU", DetectionMetrics.rms_amplitude_db(itu_adv)),
+                ("rms_amp_db_orig_plain", DetectionMetrics.rms_amplitude_db(original)),
+                ("rms_amp_db_orig_A", DetectionMetrics.rms_amplitude_db(a_original)),
+                ("rms_amp_db_orig_ITU", DetectionMetrics.rms_amplitude_db(itu_original)),
+                # ==> RMS Amplitude from raw 16 ints
+                ("rms_amp_raw_delta_plain", DetectionMetrics.rms_amplitude_db(delta)),
+                ("rms_amp_raw_delta_A", DetectionMetrics.rms_amplitude_db(a_delta)),
+                ("rms_amp_raw_delta_ITU", DetectionMetrics.rms_amplitude_db(itu_delta)),
+                ("rms_amp_raw_adv_plain", DetectionMetrics.rms_amplitude_db(adv)),
+                ("rms_amp_raw_adv_A", DetectionMetrics.rms_amplitude_db(a_adv)),
+                ("rms_amp_raw_adv_ITU", DetectionMetrics.rms_amplitude_db(itu_adv)),
+                ("rms_amp_raw_orig_plain", DetectionMetrics.rms_amplitude_db(original)),
+                ("rms_amp_raw_orig_A", DetectionMetrics.rms_amplitude_db(a_original)),
+                ("rms_amp_raw_orig_ITU", DetectionMetrics.rms_amplitude_db(itu_original)),
+                # ==> Energy in Decibels
+                ("energy_db_delta_plain", DetectionMetrics.energy_db(delta)),
+                ("energy_db_delta_A", DetectionMetrics.energy_db(a_delta)),
+                ("energy_db_delta_ITU", DetectionMetrics.energy_db(itu_delta)),
+                ("energy_db_adv_plain", DetectionMetrics.energy_db(adv)),
+                ("energy_db_adv_A", DetectionMetrics.energy_db(a_adv)),
+                ("energy_db_adv_ITU", DetectionMetrics.energy_db(itu_adv)),
+                ("energy_db_orig_plain", DetectionMetrics.energy_db(original)),
+                ("energy_db_orig_A", DetectionMetrics.energy_db(a_original)),
+                ("energy_db_orig_ITU", DetectionMetrics.energy_db(itu_original)),
+                # ==> Energy from raw 16 bit ints
+                ("energy_raw_delta_plain", DetectionMetrics.energy_db(delta)),
+                ("energy_raw_delta_A", DetectionMetrics.energy_db(a_delta)),
+                ("energy_raw_delta_ITU", DetectionMetrics.energy_db(itu_delta)),
+                ("energy_raw_adv_plain", DetectionMetrics.energy_db(adv)),
+                ("energy_raw_adv_A", DetectionMetrics.energy_db(a_adv)),
+                ("energy_raw_adv_ITU", DetectionMetrics.energy_db(itu_adv)),
+                ("energy_raw_orig_plain", DetectionMetrics.energy_db(original)),
+                ("energy_raw_orig_A", DetectionMetrics.energy_db(a_original)),
+                ("energy_raw_orig_ITU", DetectionMetrics.energy_db(itu_original)),
+                # ==> Signal power in DBfs
+                ("power_db_delta_plain", DetectionMetrics.power_db(delta)),
+                ("power_db_delta_A", DetectionMetrics.power_db(a_delta)),
+                ("power_db_delta_ITU", DetectionMetrics.power_db(itu_delta)),
+                ("power_db_adv_plain", DetectionMetrics.power_db(adv)),
+                ("power_db_adv_A", DetectionMetrics.power_db(a_adv)),
+                ("power_db_adv_ITU", DetectionMetrics.power_db(itu_adv)),
+                ("power_db_orig_plain", DetectionMetrics.power_db(original)),
+                ("power_db_orig_A", DetectionMetrics.power_db(a_original)),
+                ("power_db_orig_ITU", DetectionMetrics.power_db(itu_original)),
+                # ==> Signal power from raw 16 bit ints
+                ("power_raw_delta_plain", DetectionMetrics.power_db(delta)),
+                ("power_raw_delta_A", DetectionMetrics.power_db(a_delta)),
+                ("power_raw_delta_ITU", DetectionMetrics.power_db(itu_delta)),
+                ("power_raw_adv_plain", DetectionMetrics.power_db(adv)),
+                ("power_raw_adv_A", DetectionMetrics.power_db(a_adv)),
+                ("power_raw_adv_ITU", DetectionMetrics.power_db(itu_adv)),
+                ("power_raw_orig_plain", DetectionMetrics.power_db(original)),
+                ("power_raw_orig_A", DetectionMetrics.power_db(a_original)),
+                ("power_raw_orig_ITU", DetectionMetrics.power_db(itu_original))
             ]
         )
 
@@ -196,6 +201,9 @@ def batch_generate_statistic_file(indir):
         s = "\rWrote statistics for {a} of {b}.".format(a=i+1, b=len(deltas))
         sys.stdout.write(s)
         sys.stdout.flush()
+
+        # TODO: Generate spectrograms whilst all these audio files are loaded.
+        # TODO: Run through against normal deepspeech (16-bit int wav files).
 
     log("\nFinished writing statistics.", wrap=False)
 

@@ -2,7 +2,8 @@ import os
 import numpy as np
 
 from cleverspeech.data.ingress.etl import utils
-from cleverspeech.utils.Utils import np_arr, lcomp, load_wavs, l_map
+from cleverspeech.utils.Utils import np_arr, lcomp, l_map
+from cleverspeech.utils import WavFile
 
 
 def get_audio_file_path_pool(indir, numb_examples, file_size_sort=True, filter_term=None, max_samples=None, min_samples=None):
@@ -58,7 +59,7 @@ def create_audio_batch(batched_file_path_data, dtype="int16"):
     audio_fps = l_map(lambda x: x[1], batched_file_path_data)
     basenames = l_map(lambda x: x[2], batched_file_path_data)
 
-    audios = lcomp(load_wavs(audio_fps, dtype=dtype))
+    audios = lcomp([WavFile.load(f, dtype) for f in audio_fps])
 
     maxlen = max(map(len, audios))
     maximum_length = maxlen + utils.Audios.padding(maxlen)

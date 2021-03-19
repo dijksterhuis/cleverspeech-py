@@ -1,7 +1,8 @@
 from os import path, mkdir
 
-from cleverspeech.utils.Utils import dump_wavs, log
+from cleverspeech.utils.Utils import log
 from cleverspeech.data.egress.Databases import SingleJsonDB, FullJsonDB
+from cleverspeech.utils import WavFile
 
 
 class SingleFileWriter:
@@ -26,13 +27,17 @@ class SingleFileWriter:
                     self.example_db.open(db_file_path).put(db_output)
 
                     # -- Write audio data.
-                    dump_wavs(
-                        self.outdir,
-                        db_output,
-                        ["audio", "deltas", "advs"],
-                        filepath_key="basenames",
-                        sample_rate=16000
-                    )
+                    for wav_file in ["audio", "deltas", "advs"]:
+
+                        outpath = path.join(self.outdir, db_file_path)
+                        outpath += "_{}.wav".format(wav_file)
+
+                        WavFile.write(
+                            outpath,
+                            db_output[wav_file],
+                            sample_rate=16000,
+                            bit_depth=16
+                        )
 
 
 class FullFileWriter:
@@ -62,11 +67,16 @@ class FullFileWriter:
                     self.example_db.open(db_file_path).put(db_output)
 
                     # -- Write audio data.
-                    dump_wavs(
-                        example_dir,
-                        db_output,
-                        ["audios", "deltas", "advs"],
-                        filepath_key="basenames",
-                        sample_rate=16000
-                    )
+                    for wav_file in ["audio", "deltas", "advs"]:
+
+                        outpath = path.join(self.outdir, db_file_path)
+                        outpath += "_{}.wav".format(wav_file)
+
+                        WavFile.write(
+                            outpath,
+                            db_output[wav_file],
+                            sample_rate=16000,
+                            bit_depth=16
+                        )
+
 
