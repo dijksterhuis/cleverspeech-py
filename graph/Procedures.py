@@ -1,6 +1,8 @@
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
+from cleverspeech.utils.Utils import l_map
+
 
 class AbstractProcedure(ABC):
     def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
@@ -33,8 +35,11 @@ class AbstractProcedure(ABC):
 
         self.attack.optimiser.create_optimiser()
 
-        opt_vars = self.attack.optimiser.variables
-        opt_vars += self.attack.graph.opt_vars
+        opt_vars = self.attack.graph.opt_vars
+
+        # optimiser.variables is always a {int: list} dictionary
+        for val in self.attack.optimiser.variables.values():
+            opt_vars += val
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
@@ -78,10 +83,14 @@ class AbstractProcedure(ABC):
 
         a, b = self.attack, self.attack.batch
 
+        def reassign_tf_delta_vars(idx, delta):
+            return a.graph.raw_deltas[idx].assign(tf.round(delta))
+
         deltas = a.sess.run(a.graph.raw_deltas)
-        a.sess.run(
-            a.graph.raw_deltas.assign(tf.round(deltas))
+        assigns = l_map(
+            lambda x: reassign_tf_delta_vars(x[0], x[1]), enumerate(deltas)
         )
+        a.sess.run(assigns)
 
     @abstractmethod
     def check_for_success(self, batched_results):
@@ -454,10 +463,13 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
         self.alignment_graph.optimiser.create_optimiser()
         self.attack.optimiser.create_optimiser()
 
-        opt_vars = self.attack.graph.opt_vars
-        opt_vars += [self.alignment_graph.graph.initial_alignments]
-        opt_vars += self.attack.optimiser.variables
+        opt_vars = [self.alignment_graph.graph.initial_alignments]
         opt_vars += self.alignment_graph.optimiser.variables
+
+        for val in self.attack.optimiser.variables.values():
+            opt_vars += val
+
+        opt_vars += self.attack.graph.opt_vars
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
