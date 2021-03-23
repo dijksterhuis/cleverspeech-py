@@ -16,8 +16,8 @@ def lcomp(v, i=None):
         return [x for x in v]
 
 
-def l_map(f, x):
-    return list(map(f, x))
+def l_map(f, *x):
+    return list(map(f, *x))
 
 
 def np_arr(x, t):
