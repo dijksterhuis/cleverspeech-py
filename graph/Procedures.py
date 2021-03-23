@@ -239,9 +239,7 @@ class AbstractProcedure(ABC):
 
                 # update graph variables when successful i.e. hard constraint
                 self.do_success_updates(batched_results)
-
                 queue.put(batched_results)
-                yield batched_results
 
             # Do the actual optimisation
             attack.optimiser.optimise(attack.feeds.attack)
@@ -466,8 +464,7 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
 
     def run(self, queue, health_check):
         self.alignment_graph.optimise(self.attack.victim)
-        for r in super().run(queue, health_check):
-            yield r
+        super().run(queue, health_check)
 
 
 class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
