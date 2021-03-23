@@ -14,6 +14,8 @@ class BaseLoss:
         initial = weight_settings[0]
         increment = weight_settings[1]
 
+        self.__sess = sess
+
         self.weights = tf.Variable(
             tf.ones(batch_size, dtype=tf.float32),
             trainable=False,
@@ -22,24 +24,24 @@ class BaseLoss:
         )
 
         initial_vals = initial * np.ones([batch_size], dtype=np.float32)
-        sess.run(self.weights.assign(initial_vals))
+        self.__sess.run(self.weights.assign(initial_vals))
 
         self.increment = float(increment)
 
-    def update_one(self, sess, idx):
-        weights = sess.run(self.weights)
+    def update_one(self, idx):
+        weights = self.__sess.run(self.weights)
         weights[idx] += self.increment
-        sess.run(self.weights.assign(weights))
+        self.__sess.run(self.weights.assign(weights))
 
-    def update_many(self, sess, batch_successes):
+    def update_many(self, batch_successes):
 
-        weights = sess.run(self.weights)
+        weights = self.__sess.run(self.weights)
 
         for idx, success_check in enumerate(batch_successes):
             if success_check is True:
                 weights[idx] += self.increment
 
-        sess.run(self.weights.assign(weights))
+        self.__sess.run(self.weights.assign(weights))
 
 
 class CarliniL2Loss(BaseLoss):
