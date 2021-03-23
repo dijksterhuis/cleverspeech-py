@@ -106,7 +106,7 @@ def args(experiments):
         master_settings, "max_examples", args.max_examples[0]
     )
     update_master_settings(
-        master_settings, "random_seed", args.max_examples[0]
+        master_settings, "random_seed", args.random_seed[0]
     )
 
     if args.random_seed[0] is not None:
