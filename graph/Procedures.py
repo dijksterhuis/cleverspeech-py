@@ -9,7 +9,6 @@ class AbstractProcedure(ABC):
         """
         Base class that sets up a wealth of stuff to execute the attack over a
         number of iterations.
-
         This class should never be initialised by itself, it should always be
         extended. See examples below.
 
@@ -28,7 +27,7 @@ class AbstractProcedure(ABC):
         """
         We must wait to initialise the optimiser so that we can initialise only
         the attack variables (i.e. not the deepspeech ones).
-
+        ========================================================================
         This must be called in **EVERY** child classes' __init__() method so we
         can do the CTCAlign* procedures (special case).
         """
@@ -60,26 +59,32 @@ class AbstractProcedure(ABC):
 
     def do_warm_up(self):
         """
-        Should anything else be done before we start? e.g. start with a
-        randomised delta?
-
+        Should anything else be done before we start?
+        ========================================================================
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
+
+        For example, you could start with a randomised delta.
         """
         pass
 
     def decode_step_logic(self):
         """
-        What should we do at decoding steps?
-        """
-        # ==> every x steps apply integer level rounding prior to decoding.
-        # this helps the attacks work against the deepspeech native client api
-        # which only accepts tf.int16 type inputs. Although it doesn't work 100%
-        # of the time so use `bin/classify.py` to get the true success rate.
+        Should we do any post optimisation processing during the decoding step?
+        ========================================================================
+        N.B. This method is not abstract as it is *not* required to run an
+        attack, but feel free to override it.
 
-        # We could do a line search etc. after running optimisation, but doing
-        # things during attack optimisation seems to help it find a solution in
-        # integer space all by itself (vs. fiddling with the examples after).
+        Every x steps apply integer level rounding prior to decoding.
+
+        This helps the attacks work against the deepspeech native client api
+        which only accepts tf.int16 type inputs. Although it doesn't work 100%
+        of the time so use `bin/classify.py` to get the true success rate.
+
+        We could do a line search etc. after running optimisation, but doing
+        things during attack optimisation seems to help it find a solution in
+        integer space all by itself (vs. fiddling with the examples after).
+        """
 
         a, b = self.attack, self.attack.batch
 
@@ -161,14 +166,22 @@ class AbstractProcedure(ABC):
 
         # TODO: Fix nesting here or over in file write subprocess (as is now)?
         initial_tau = self.attack.hard_constraint.initial_taus
-        distance_raw = [self.attack.hard_constraint.analyse(d) for d in deltas]
-        bound_eps = [x / i_t for x, i_t in zip(bounds_raw, initial_tau)]
-        distance_eps = [x / i_t for x, i_t in zip(distance_raw, initial_tau)]
 
-        batched_tokens = [b.targets["tokens"] for _ in range(b.size)]
+        distance_raw = l_map(
+            self.attack.hard_constraint.analyse, deltas
+        )
+        bound_eps = l_map(
+            lambda x: x[0] / x[1], zip(bounds_raw, initial_tau)
+        )
+        distance_eps = l_map(
+            lambda x: x[0] / x[1], zip(distance_raw, initial_tau)
+        )
+        batched_tokens = l_map(
+            lambda _: b.targets["tokens"], range(b.size)
+        )
 
         batched_results = {
-            "step": [self.current_step for _ in range(b.size)],
+            "step": l_map(lambda _: self.current_step, range(b.size)),
             "tokens": batched_tokens,
             "losses": losses_transposed,
             "total_loss": total_losses,
@@ -197,11 +210,9 @@ class AbstractProcedure(ABC):
         batched_results.update(auds)
         batched_results.update(targs)
 
-        successes = [
-            success for success in self.check_for_success(batched_results)
-        ]
-
-        batched_results["success"] = successes
+        batched_results["success"] = l_map(
+            lambda x: x, self.check_for_success(batched_results)
+        )
 
         return batched_results
 
@@ -255,6 +266,12 @@ class AbstractProcedure(ABC):
 
 
 class Unbounded(AbstractProcedure):
+    """
+    Never update the constraint or loss weightings.
+    ========================================================================
+    Useful to validate that an attack works correctly as all unbounded
+    attacks should eventually find successful adversarial examples.
+    """
     def __init__(self, attack, *args, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
@@ -263,15 +280,55 @@ class Unbounded(AbstractProcedure):
         self.finished = False
 
     def check_for_success(self, batched_results):
-        """
-        Stop optimising when the decoding of every example in a batch matches
-        the target phrase we want.
-        """
 
-        current_n_successes = sum(
-            [batched_results["success"] for _ in range(self.attack.batch.size)]
+        lefts = batched_results["decodings"]
+        rights = batched_results["phrases"]
+
+        z = zip(lefts, rights)
+
+        self.finished = all([left == right for left, right in z])
+
+        for idx, (left, right) in enumerate(z):
+
+            if left == right:
+                yield True
+
+            else:
+                yield False
+
+    def steps_rule(self):
+        """
+        Stop optimising once everything in a batch is successful, or we've hit a
+        maximum number of iteration steps.
+        """
+        return self.finished is not True or self.current_step < self.steps
+
+    def do_success_updates(self, idx):
+        """
+        if successful do nothing
+        """
+        pass
+
+
+class HardcoreMode(Unbounded):
+    """
+    Optimise forever (or until you KeyboardInterrupt).
+    ========================================================================
+    Useful for development: leave it running overnight to see how long an
+    extreme optimisation case takes to finish.
+    """
+    def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
+        super().__init__(
+            attack,
+            *args,
+            loss_lower_bound=loss_lower_bound,
+            **kwargs
         )
-        self.finished = self.attack.batch.size == current_n_successes
+
+    def check_for_success(self, batched_results):
+        """
+        Never stop optimising, but report if decoding is successful.
+        """
 
         lefts = batched_results["decodings"]
         rights = batched_results["phrases"]
@@ -288,21 +345,15 @@ class Unbounded(AbstractProcedure):
 
     def steps_rule(self):
         """
-        Stop optimising once everything in a batch is successful.
+        Keep optimising regardless of any kind of success.
         """
-        return self.finished is not True
-
-    def do_success_updates(self, idx):
-        """
-        if successful do nothing
-        """
-        pass
+        return True
 
 
 class UpdateOnSuccess(AbstractProcedure):
     """
     MixIn to update bounds and loss weightings.
-
+    ========================================================================
     This class should never be initialised by itself, it should always be
     extended.
     """
@@ -418,29 +469,6 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
                 yield False
 
 
-class HardcoreMode(UpdateOnLoss):
-    """
-    Updates bounds and loss weightings once loss has reached some extreme value.
-    Optimises one example forever (or until you KeyboardInterrupt).
-
-    Useful for development: leave it running overnight to see how long an
-    extreme optimisation case takes to finish.
-    """
-    def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
-        super().__init__(
-            attack,
-            *args,
-            loss_lower_bound=loss_lower_bound,
-            **kwargs
-        )
-
-    def steps_rule(self):
-        """
-        Keep optimising regardless of any kind of success.
-        """
-        return True
-
-
 class CTCAlignMixIn(AbstractProcedure, ABC):
     """
     Abstract MixIn class to be used to initialise the CTC alignment search graph
@@ -482,7 +510,7 @@ class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
     pass
 
 
-class CTCAlignUnbounded(UpdateOnDecoding, CTCAlignMixIn):
+class CTCAlignUnbounded(Unbounded, CTCAlignMixIn):
     pass
 
 
