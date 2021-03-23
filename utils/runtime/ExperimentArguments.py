@@ -25,7 +25,8 @@ def args(experiments):
         "outdir": str,
         "targets_path": str,
         "spawn_delay": int,
-        "max_examples": int
+        "max_examples": int,
+        "random_seed": int
     }
 
     parser = argparse.ArgumentParser()
@@ -104,11 +105,18 @@ def args(experiments):
     update_master_settings(
         master_settings, "max_examples", args.max_examples[0]
     )
+    update_master_settings(
+        master_settings, "random_seed", args.max_examples[0]
+    )
 
-    seed = 420
+    if args.random_seed[0] is not None:
+        seed = args.random_seed[0]
+    else:
+        seed = 420
+
     random.seed(seed)
     np.random.seed(seed)
-    tf.set_random_seed(420)
+    tf.set_random_seed(seed)
 
     experiments[experiment](master_settings)
 
