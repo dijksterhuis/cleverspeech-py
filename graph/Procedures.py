@@ -224,22 +224,21 @@ class AbstractProcedure(ABC):
             if self.current_step == 1:
                 health_check.send(True)
 
-            # Normal optimisation procedure steps defined by the
-            # `decode_step_logic` method. Can be overridden.
-
             is_decode_step = self.current_step % self.decode_step == 0
             is_zeroth_step = self.current_step == 0
+            is_round_step = is_decode_step and not is_zeroth_step
+
+            if is_round_step:
+                self.decode_step_logic()
 
             if is_decode_step or is_zeroth_step:
 
-                self.decode_step_logic()
-
                 # Generate output data and pass it to the results writer process
                 batched_results = self.get_current_attack_state()
+                queue.put(batched_results)
 
                 # update graph variables when successful i.e. hard constraint
                 self.do_success_updates(batched_results)
-                queue.put(batched_results)
 
             # Do the actual optimisation
             attack.optimiser.optimise(attack.feeds.attack)
