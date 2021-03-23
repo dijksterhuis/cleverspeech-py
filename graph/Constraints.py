@@ -123,6 +123,21 @@ class LNorm(ABC):
         current_bounds[index][0] = new_bound
         self.tf_run(self.bounds.assign(current_bounds))
 
+    def update_many(self, deltas, successes):
+
+        current_bounds = self.tf_run(self.bounds)
+
+        for index, (delta, success) in enumerate(zip(deltas, successes)):
+
+            current_bound = current_bounds[index][0]
+
+            if success is True:
+                current_distance = self.analyse(delta)
+                new_bound = self.get_new_bound(current_bound, current_distance)
+                current_bounds[index][0] = new_bound
+
+        self.tf_run(self.bounds.assign(current_bounds))
+
     def update(self, new_bounds):
         self.tf_run(self.bounds.assign(new_bounds))
 
@@ -169,7 +184,6 @@ class Linf(LNorm):
         if type(res) != list:
             res = [res]
         return res
-
 
     def clip(self, x):
         # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the

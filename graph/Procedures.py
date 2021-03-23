@@ -237,10 +237,8 @@ class AbstractProcedure(ABC):
                 # Generate output data and pass it to the results writer process
                 batched_results = self.get_current_attack_state()
 
-                # update everything if we've been successful
-                for idx, success_check in enumerate(batched_results["success"]):
-                    if success_check:
-                        self.do_success_updates(idx)
+                # update graph variables when successful i.e. hard constraint
+                self.do_success_updates(batched_results)
 
                 queue.put(batched_results)
                 yield batched_results
@@ -315,24 +313,24 @@ class UpdateOnSuccess(AbstractProcedure):
 
         self.update_loss = loss_update_idx
 
-    def do_success_updates(self, idx):
-        """
-        Update both the hard constraint bound and the loss weightings.
-        """
+    def update_hard_constraint(self, batched_results):
+        self.attack.hard_constraint.update_many(
+            batched_results["deltas"], batched_results["success"]
+        )
 
-        # update the delta hard constraint
-        delta = self.tf_run(self.attack.graph.final_deltas)[idx]
-        self.attack.hard_constraint.update_one(delta, idx)
+    def update_losses(self, batched_results):
+        for loss_idx in self.update_loss:
+            loss_to_update = self.attack.loss[loss_idx]
+            loss_to_update.update_many(batched_results["success"])
 
-        # update any loss weightings
+    def do_success_updates(self, batched_results):
+        """
+        Update both hard constraint bound and any loss weightings.
+        """
+        self.update_hard_constraint(batched_results)
+
         if self.update_loss is not None:
-
-            if type(self.update_loss) == int:
-                self.attack.loss[self.update_loss].update(self.attack.sess, idx)
-
-            elif type(self.update_loss) in [list, tuple]:
-                for idx in self.update_loss:
-                    self.attack.loss[idx].update(self.attack.sess, idx)
+            self.update_losses(batched_results)
 
 
 class UpdateOnDecoding(UpdateOnSuccess):

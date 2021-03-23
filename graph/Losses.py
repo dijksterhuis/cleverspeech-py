@@ -26,9 +26,19 @@ class BaseLoss:
 
         self.increment = float(increment)
 
-    def update(self, sess, idx):
+    def update_one(self, sess, idx):
         weights = sess.run(self.weights)
         weights[idx] += self.increment
+        sess.run(self.weights.assign(weights))
+
+    def update_many(self, sess, batch_successes):
+
+        weights = sess.run(self.weights)
+
+        for idx, success_check in enumerate(batch_successes):
+            if success_check is True:
+                weights[idx] += self.increment
+
         sess.run(self.weights.assign(weights))
 
 
