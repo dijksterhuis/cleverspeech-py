@@ -119,5 +119,3 @@ def args(experiments):
     tf.set_random_seed(seed)
 
     experiments[experiment](master_settings)
-
-    exit(0)
