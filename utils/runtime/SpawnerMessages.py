@@ -1,5 +1,5 @@
 import numpy as np
-from cleverspeech.utils.Utils import log
+from cleverspeech.utils.Utils import log, l_map
 
 
 def bytes_to_megabytes_str(x, power=2):
@@ -12,26 +12,26 @@ class SpawnerMessages(object):
 
     @staticmethod
     def reset():
-        log("Restarted spawner variables.", wrap=False)
+        log("Restarted spawner variables.", wrap=True)
 
     @staticmethod
     def new_process(process):
-        log("Spawned new attack with PID: {}".format(process.pid), wrap=False)
+        log("Spawned new attack with PID: {}".format(process.pid), wrap=True)
 
     @staticmethod
     def alive_process_count(n_spawn_attempts, n_processes_alive, max_processes):
 
-        s = "Current spawn attempts: {}\n".format(
+        s = "Spawns attempt:\t{}\n".format(
             n_spawn_attempts
         )
-        s += "Current alive processes: {}\n".format(
+        s += "Spawns alive:\t{}\n".format(
             n_processes_alive
         )
-        s += "Max spawns: {}".format(
+        s += "Spawns max:\t{}".format(
             max_processes
         )
 
-        log(s, wrap=False)
+        log(s, wrap=True)
 
     @staticmethod
     def healthy(p):
@@ -63,41 +63,37 @@ class SpawnerMessages(object):
         log(s, wrap=False)
 
     @staticmethod
-    def gpu_mem_usage_stats(free, previous, batches):
+    def gpu_mem_usage_stats(total, used, free):
 
-        mem_mean = np.mean(batches)
-        mem_max = np.max(batches)
-        mem_min = np.min(batches)
-
-        mem_all = "\t".join([bytes_to_megabytes_str(x) for x in batches])
-
-        s = "GPU Memory Usage:\n"
-
-        s += "Free:\t{}\n".format(
+        s = "Overall GPU Memory:\n"
+        s += "Total:\t{}\n".format(
+            bytes_to_megabytes_str(
+                total
+            )
+        )
+        s += "Used:\t{}\n".format(
+            bytes_to_megabytes_str(
+                used
+            )
+        )
+        s += "Free:\t{}".format(
             bytes_to_megabytes_str(
                 free
             )
         )
-        s += "Last:\t{}\n".format(
-            bytes_to_megabytes_str(
-                previous
-            )
-        )
-        s += "Max:\t{}\n".format(
-            bytes_to_megabytes_str(
-                mem_max
-            )
-        )
-        s += "Min:\t{}\n".format(
-            bytes_to_megabytes_str(
-                mem_min
-            )
-        )
-        s += "Mean:\t{}\n".format(
-            bytes_to_megabytes_str(
-                mem_mean
-            )
-        )
-
-        s += "All:\t" + mem_all
         log(s, wrap=True)
+
+    @staticmethod
+    def gpu_process_usage_stats(compute_processes):
+
+        s = "Per Process GPU Memory Usage:\n"
+
+        def str_fmt(p, m):
+            return "PID:\t{p}\tUSAGE: {m}".format(
+                    p=p, m=bytes_to_megabytes_str(m)
+                )
+
+        s += "\n".join([str_fmt(p, m) for p, m in compute_processes.items()])
+
+        log(s, wrap=True)
+

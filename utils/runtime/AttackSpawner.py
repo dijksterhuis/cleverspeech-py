@@ -79,9 +79,12 @@ class AttackSpawner:
             self.__messenger.healthy(p)
 
         self.__wait()
+
         self.processes.check_alive()
+
         self.gpu_memory.update_usage()
-        self.gpu_memory.update_batch()
+        self.gpu_memory.update_pid_usage(self.processes.processes)
+        self.gpu_memory.update_process_stats()
 
         self.__messenger.alive_process_count(
             self.processes.attempts,
@@ -90,9 +93,13 @@ class AttackSpawner:
         )
 
         self.__messenger.gpu_mem_usage_stats(
-            self.gpu_memory.current_free,
-            self.gpu_memory.max_batch,
-            self.gpu_memory.all_batch,
+            self.gpu_memory.total,
+            self.gpu_memory.used,
+            self.gpu_memory.free,
+        )
+
+        self.__messenger.gpu_process_usage_stats(
+            self.gpu_memory.pid_mem_usage,
         )
 
         gpu = self.gpu_memory.check_resource()
