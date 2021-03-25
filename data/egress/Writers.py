@@ -17,7 +17,7 @@ class SingleFileWriter:
             if queue.empty() is not True:
                 batched_outs = queue.get()
 
-                for log_result, db_output in self.extracter.run(batched_outs):
+                for log_result, db_output in self.extracter.gen(batched_outs):
 
                     log(
                         log_result,
@@ -59,7 +59,7 @@ class FullFileWriter:
 
                 batched_outs = queue.get()
 
-                log_result, db_output = self.extracter.run(batched_outs)
+                log_result, db_output = self.extracter.gen(batched_outs)
                 log(log_result, wrap=False, outdir=self.outdir, stdout=False)
 
                 if db_output is not None:
