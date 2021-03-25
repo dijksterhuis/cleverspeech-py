@@ -1,11 +1,6 @@
 import time
-import traceback
-
 import multiprocessing as mp
-import tensorflow as tf
 
-from cleverspeech.utils.Utils import log, run_decoding_check
-from cleverspeech.utils.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.runtime.ResourceManagment.Processes import Processes
 from cleverspeech.utils.runtime.ResourceManagment.GPU import GpuMemory
 from cleverspeech.utils.runtime.SpawnerMessages import SpawnerMessages
@@ -23,16 +18,18 @@ class AttackSpawner:
 
         self.processes = Processes(max_processes)
         self.gpu_memory = GpuMemory(self.device)
+
         self.__results_queue = mp.Queue()
+        self.__messenger = SpawnerMessages()
+
         if file_writer is not None:
             self.__writer_process = mp.Process(
                 target=file_writer.write, args=(self.__results_queue,)
             )
             self.__writer_process.start()
+            self.__messenger.new_writer_process(self.__writer_process.pid)
         else:
             self.__writer_process = None
-
-        self.__messenger = SpawnerMessages()
 
         self.__reset__()
 
@@ -45,16 +42,30 @@ class AttackSpawner:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # we'll always want to close results and kill writer process on exit
-        self.__results_queue.close()
-        if self.__writer_process is not None:
-            self.__writer_process.terminate()
 
-        # if there's a problem we also kill child processes and raise exception
-        # in parent process.
+        # if there's a problem kill everything once last results are dealt with
+
+        # otherwise, block until results queue is empty and then try to
+        # close everything nicely. if writer process doesn't behave then hit it
+        # with a hammer
+
         if exc_val:
-            self.processes.terminate()
 
+            self.processes.terminate()
+            self.__writer_process.terminate()
+            self.__results_queue.close()
+
+        else:
+
+            self.processes.close()
+            self.__results_queue.join()
+            self.__writer_process.close()
+            self.__results_queue.close()
+
+            # if writer doesn't close then terminate it (try to handle zombies!)
+            if self.__writer_process.is_alive():
+                self.__writer_process.terminate()
+            
     def __wait(self):
         self.__messenger.waiting(self.delay)
         time.sleep(self.delay)

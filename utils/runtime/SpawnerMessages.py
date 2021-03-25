@@ -15,6 +15,11 @@ class SpawnerMessages(object):
         log("Restarted spawner variables.", wrap=True)
 
     @staticmethod
+    def new_writer_process(pid):
+        s = "Created new writer process with PID: {}".format(pid)
+        log(s, wrap=True)
+
+    @staticmethod
     def new_process(process):
         log("Spawned new attack with PID: {}".format(process.pid), wrap=True)
 

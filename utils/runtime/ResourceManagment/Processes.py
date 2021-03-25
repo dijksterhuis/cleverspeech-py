@@ -47,9 +47,15 @@ class Processes:
         for process, _ in self.processes:
             process.join()
 
+    def close(self):
+        for process, _ in self.processes:
+            if process.is_alive():
+                process.close()
+
     def terminate(self):
         for process, _ in self.processes:
-            process.terminate()
+            if process.is_alive():
+                process.terminate()
 
     def check_last(self):
         _, pipe = self.processes[-1]
