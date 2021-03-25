@@ -5,7 +5,6 @@ from collections import OrderedDict
 
 from cleverspeech.data.egress.eval.ErrorRates import character_error_rate
 from cleverspeech.data.egress.eval.ErrorRates import word_error_rate
-from cleverspeech.data.egress.eval.PerceptualStatsOnline import get_perceptual_stats
 
 
 class Standard(ABC):
@@ -171,10 +170,7 @@ class Standard(ABC):
                     example_data["tokens"], example_data["softmax_logits"]
                 )
 
-                perceptual_stats = get_perceptual_stats(db_output)
-                db_output.update(perceptual_stats)
-
-                db_output = self.custom_success_modifications(example_data)
+                db_output = self.custom_success_modifications(db_output)
 
                 yield step_logs, db_output
 
