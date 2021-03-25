@@ -70,28 +70,38 @@ class AbstractProcedure(ABC):
 
     def decode_step_logic(self):
         """
-        Should we do any post optimisation processing during the decoding step?
+        Should we do any post optimisation + pre-decoding processing?
         ========================================================================
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
 
-        Every x steps apply integer level rounding prior to decoding.
+        BELOW: For each perturbation sample (delta_n) find the closest integer
+        less than the current float value.
 
         This helps the attacks work against the deepspeech native client api
         which only accepts tf.int16 type inputs. Although it doesn't work 100%
         of the time so use `bin/classify.py` to get the true success rate.
 
-        We could do a line search etc. after running optimisation, but doing
-        things during attack optimisation seems to help it find a solution in
-        integer space all by itself (vs. fiddling with the examples after).
+        We could do this after running optimisation, but doing things during
+        attacks seems to help find a 16 bit int solution... At least that's my
+        excuse.
+
+        N.B. Reassign perturbations that were bounded by the hard constraint
+        => raw_delta samples values can be much larger than the final_delta
+        sample values.
         """
 
         a, b = self.attack, self.attack.batch
 
         def reassign_tf_delta_vars(idx, delta):
-            return a.graph.raw_deltas[idx].assign(tf.round(delta))
 
-        deltas = a.sess.run(a.graph.raw_deltas)
+            signs = tf.sign(delta)
+            abs_floor = tf.floor(tf.abs(delta))
+            new_delta = signs * abs_floor
+
+            return a.graph.raw_deltas[idx].assign(new_delta)
+
+        deltas = a.sess.run(a.graph.final_deltas)
         assigns = l_map(
             lambda x: reassign_tf_delta_vars(x[0], x[1]), enumerate(deltas)
         )
