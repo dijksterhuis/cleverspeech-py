@@ -209,7 +209,7 @@ def write_to_csv(stats_data, out_file_path):
     else:
         write_headers = False
 
-    with open(out_file_path, 'w+') as outfile:
+    with open(out_file_path, 'a+') as outfile:
         writer = csv.writer(outfile)
 
         if write_headers:
