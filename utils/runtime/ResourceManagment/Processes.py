@@ -54,8 +54,7 @@ class Processes:
 
     def terminate(self):
         for process, _ in self.processes:
-            if process.is_alive():
-                process.terminate()
+            process.terminate()
 
     def check_last(self):
         _, pipe = self.processes[-1]

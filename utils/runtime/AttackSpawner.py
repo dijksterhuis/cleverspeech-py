@@ -43,27 +43,10 @@ class AttackSpawner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
 
-        # if there's a problem kill everything once last results are dealt with
-
-        # otherwise, block until results queue is empty and then try to
-        # close everything nicely. if writer process doesn't behave then hit it
-        # with a hammer
-
-        if exc_val:
-
-            self.processes.terminate()
-            self.__writer_process.terminate()
-            self.__results_queue.close()
-
-        else:
-
-            self.processes.close()
-            self.__writer_process.close()
-            self.__results_queue.close()
-
-            # if writer doesn't close then terminate it (try to handle zombies!)
-            if self.__writer_process.is_alive():
-                self.__writer_process.terminate()
+        # hit everything with a hammer to kill processes.
+        self.processes.terminate()
+        self.__writer_process.terminate()
+        self.__results_queue.close()
             
     def __wait(self):
         self.__messenger.waiting(self.delay)
