@@ -38,7 +38,7 @@ def start_deepspeech_package_model():
         deepspeech_files_path, "alphabet.txt"
     )
     model_chkpoint_file_path = os.path.join(
-        deepspeech_files_path, "output_graph.pb"
+        deepspeech_files_path, "output_graph.pbmm"
     )
     lm_file_path = os.path.join(
         deepspeech_files_path, "lm.binary"
