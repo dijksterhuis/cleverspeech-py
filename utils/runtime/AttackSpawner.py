@@ -58,7 +58,6 @@ class AttackSpawner:
         else:
 
             self.processes.close()
-            self.__results_queue.join()
             self.__writer_process.close()
             self.__results_queue.close()
 
