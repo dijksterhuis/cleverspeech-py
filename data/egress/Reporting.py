@@ -28,8 +28,11 @@ def start_deepspeech_package_model():
     n_context = 9
 
     # TODO: Switch to environment variable rather than relative directory path?
+    module_file_path = os.path.abspath(os.path.dirname(__file__))
 
-    cleverspeech_path = "../../../"
+    cleverspeech_path = os.path.abspath(
+        os.path.join(module_file_path, "../../../")
+    )
     deepspeech_files_path = os.path.join(
         cleverspeech_path, "models/DeepSpeech_v041/data/models/"
     )
