@@ -27,9 +27,9 @@ def start_deepspeech_package_model():
     n_features = 26
     n_context = 9
 
-    # TODO: Need to include output_graph.pb in the docker image builds
+    # TODO: Switch to environment variable rather than relative directory path?
 
-    cleverspeech_path = "/home/dijksterhuis/0-dox/1-dev/3-attacks/cleverSpeech/"
+    cleverspeech_path = "../../../"
     deepspeech_files_path = os.path.join(
         cleverspeech_path, "models/DeepSpeech_v041/data/models/"
     )
