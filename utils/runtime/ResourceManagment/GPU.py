@@ -64,9 +64,17 @@ class GpuMemory:
                 self.pid_mem_usage[pid] = mem_usage
 
     def update_process_stats(self):
-        self.total_processes = sum(self.pid_mem_usage.values())
-        self.max_processes = max(self.pid_mem_usage.values())
         self.all_processes = [m for m in self.pid_mem_usage.values()]
+        self.total_processes = sum(self.all_processes)
+
+        # max won't return 0 if list is empty. if there are no processes we
+        # want to return some sort of bytes object, so just use the value from
+        # the sum (they'll both be zero anyway).
+        if len(self.all_processes) == 0:
+            self.max_processes = self.total_processes
+
+        else:
+            self.max_processes = max(self.all_processes)
 
     def check_resource(self):
         return self.max_processes > self.free * self.budget_factor
