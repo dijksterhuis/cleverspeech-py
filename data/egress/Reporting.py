@@ -256,6 +256,8 @@ def generate_stats_file(indir):
         with open(json_file_path, "r") as in_f:
             data = json.load(in_f)[0]
 
+        log("Loaded: {}".format(json_file_path), wrap=False, timings=True)
+
         # ==== TRANSFORM
 
         audio_data, weights, audio_file_names = preprocess_audio_data(
@@ -362,17 +364,16 @@ def generate_stats_file(indir):
 
         write_to_csv(stats, stats_out_filepath)
 
-        s = "\rWrote statistics for {f_in} to {f_out} | {a} of {b}.".format(
+        s = "Wrote statistics for {f_in} to {f_out} | {a} of {b}.".format(
             f_in=json_file_path,
             f_out=stats_out_filepath,
             a=idx + 1,
             b=len(example_json_results_file_paths)
         )
-        sys.stdout.write(s)
-        sys.stdout.flush()
+        log(s, wrap=False, timings=True)
 
 
 if __name__ == '__main__':
-    args = sys.argv[1]
-    generate_stats_file(args)
+    indir = sys.argv[1]
+    generate_stats_file(indir)
 
