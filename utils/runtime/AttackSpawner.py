@@ -45,8 +45,9 @@ class AttackSpawner:
 
         # hit everything with a hammer to kill processes.
         self.processes.terminate()
-        self.__writer_process.terminate()
         self.__results_queue.close()
+        self.__writer_process.join()
+        self.__writer_process.close()
             
     def __wait(self):
         self.__messenger.waiting(self.delay)
