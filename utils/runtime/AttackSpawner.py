@@ -48,7 +48,7 @@ class AttackSpawner:
         self.__results_queue.put(False)
         self.__writer_process.join()
         self.__results_queue.close()
-        self.__writer_process.close()
+        self.__writer_process.terminate()
             
     def __wait(self):
         self.__messenger.waiting(self.delay)
