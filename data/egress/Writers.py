@@ -15,6 +15,10 @@ class SingleFileWriter:
     def write(self, queue):
         while queue:
             if queue.empty() is not True:
+
+                if queue.get() is False:
+                    break
+
                 batched_outs = queue.get()
 
                 for log_result, db_output in self.extracter.gen(batched_outs):
