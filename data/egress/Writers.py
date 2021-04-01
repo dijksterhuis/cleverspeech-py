@@ -11,31 +11,29 @@ class SingleFileWriter:
         self.outdir = outdir
         self.extracter = extracter
         self.example_db = SingleJsonDB(outdir)
-        self.__closed_queue_signal = False
 
     def write(self, queue):
-        while queue:
+        while True:
 
-            if queue.empty() is True and self.__closed_queue_signal is True:
+            data = queue.get()
 
-                # if the queue is empty and we've received a signal telling us
-                # there will be no more data coming then exit out of the
-                # infinite while
-
-                break
-
-            elif queue.get() is False:
+            if data == "dead":
 
                 # This is a signal telling us there's no more data inbound.
-                # Obviously we don't want to write this to disk!
+                # Obviously we don't want to write this to disk, so tell parent
+                # that we're done with this item and break the while loop.
 
-                self.__closed_queue_signal = True
+                queue.task_done()
+                break
 
-            else:
+            elif data != "dead":
 
                 # There is still valid data in the Queue. Keep writing.
+                # Make sure to tell the JoinableQueue when we're done processing
+                # so it can block and unblock when the spawner context manager
+                # exits.
 
-                batched_outs = queue.get()
+                batched_outs = data
 
                 for log_result, db_output in self.extracter.gen(batched_outs):
 
@@ -65,6 +63,8 @@ class SingleFileWriter:
                                 sample_rate=16000,
                                 bit_depth=16
                             )
+
+                queue.task_done()
 
 
 class FullFileWriter:

@@ -15,8 +15,28 @@ class SpawnerMessages(object):
         log("Restarted spawner variables.", wrap=True)
 
     @staticmethod
+    def start_exiting():
+        log("Exiting spawner.", wrap=False)
+
+    @staticmethod
+    def finishing_writes(queue_size):
+        s = "Finishing up writes to disk.\nApprox. {} writes to go".format(
+            queue_size
+        )
+        log(s, wrap=False)
+
+    @staticmethod
+    def finish_exiting():
+        log("All data should now be written and processes closed.", wrap=True)
+
+    @staticmethod
     def new_writer_process(pid):
         s = "Created new writer process with PID: {}".format(pid)
+        log(s, wrap=True)
+
+    @staticmethod
+    def exit_writer_process(pid):
+        s = "Exiting writer process with PID: {}".format(pid)
         log(s, wrap=True)
 
     @staticmethod
@@ -63,8 +83,8 @@ class SpawnerMessages(object):
 
     @staticmethod
     def stop_blocking():
-        s = "\nLast attack process finished: "
-        s += "Will spawn additional attacks now."
+        s = "Last attack process finished: "
+        s += "Can spawn additional attacks now."
         log(s, wrap=False)
 
     @staticmethod

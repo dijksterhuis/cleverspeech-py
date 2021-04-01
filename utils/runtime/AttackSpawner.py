@@ -19,7 +19,7 @@ class AttackSpawner:
         self.processes = Processes(max_processes)
         self.gpu_memory = GpuMemory(self.device)
 
-        self.__results_queue = mp.Queue()
+        self.__results_queue = mp.JoinableQueue()
         self.__messenger = SpawnerMessages()
 
         if file_writer is not None:
@@ -43,12 +43,23 @@ class AttackSpawner:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
 
+        self.__messenger.start_exiting()
         # hit everything with a hammer to kill processes.
         self.processes.terminate()
-        self.__results_queue.put(False)
-        self.__writer_process.join()
+
+        # Close up the results queue.
+        self.__messenger.finishing_writes(self.__results_queue.qsize())
+        self.__results_queue.put("dead")
+        self.__results_queue.join()
         self.__results_queue.close()
+
+        # close the writer process, hopefully without stopping remaining writes!
+        self.__messenger.exit_writer_process(self.__writer_process.pid)
+        self.__writer_process.join()
         self.__writer_process.terminate()
+
+        # all done.
+        self.__messenger.finish_exiting()
             
     def __wait(self):
         self.__messenger.waiting(self.delay)
@@ -105,6 +116,7 @@ class AttackSpawner:
             # once finished, reset all the __restart__ variables and start again
             self.__messenger.start_blocking()
             self.processes.block()
+            self.processes.terminate()
             self.__reset__()
             self.__messenger.stop_blocking()
 
