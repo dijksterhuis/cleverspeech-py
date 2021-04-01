@@ -23,7 +23,8 @@ class SingleFileWriter:
                         log_result,
                         wrap=False,
                         outdir=self.outdir,
-                        stdout=False
+                        stdout=False,
+                        timings=True,
                     )
 
                     if db_output is not None:
@@ -51,7 +52,7 @@ class FullFileWriter:
 
         self.outdir = outdir
         self.extracter = extracter
-        self.example_db = FullJsonDB(outdir)
+        self.example_db = SingleJsonDB(outdir)
 
     def write(self, queue):
         while queue:
@@ -60,16 +61,24 @@ class FullFileWriter:
                 batched_outs = queue.get()
 
                 log_result, db_output = self.extracter.gen(batched_outs)
-                log(log_result, wrap=False, outdir=self.outdir, stdout=False)
+                log(
+                    log_result,
+                    wrap=False,
+                    outdir=self.outdir,
+                    stdout=False,
+                    timings=True,
+                )
 
                 if db_output is not None:
 
-                    example_dir = path.join(self.outdir, db_output['basename'])
+                    example_dir = db_output['basename']
 
-                    if not path.exists(example_dir):
-                        mkdir(example_dir)
+                    if not path.exists(path.join(self.outdir, example_dir)):
+                        mkdir(path.join(self.outdir, example_dir))
 
-                    db_file_path = example_dir + "/" + "step{}".format(db_output["step"])
+                    db_file_path = path.join(
+                        example_dir, "/" + "step{}".format(db_output["step"])
+                    )
                     self.example_db.open(db_file_path).put(db_output)
 
                     # -- Write audio data.
@@ -82,7 +91,7 @@ class FullFileWriter:
                             outpath,
                             db_output[wav_file],
                             sample_rate=16000,
-                            bit_depth=16
+                            bit_depth=16,
                         )
 
 
