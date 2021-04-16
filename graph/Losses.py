@@ -225,7 +225,7 @@ class BiggioMaxMin(BaseLogitDiffLoss):
             weight_settings=weight_settings,
         )
 
-        self.max_min = self.max_other_logit - self.target_logit
+        self.max_min = - self.target_logit + self.max_other_logit
         self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
 
         self.loss_fn = self.loss_fn * self.weights
@@ -326,7 +326,7 @@ class CWMaxDiff(BaseLogitDiffLoss):
             weight_settings=weight_settings,
         )
 
-        self.max_diff_abs = self.max_other_logit - self.target_logit
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
         self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
         self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
 
