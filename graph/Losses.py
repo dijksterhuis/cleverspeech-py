@@ -368,7 +368,7 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class RepeatsCTCLoss(BaseLoss):
+class AlignmentsCTCLoss(BaseLoss):
     """
     Adversarial CTC Loss that ignores the blank tokens for higher confidence.
     Does not actually work for adversarial attacks as characters from target
