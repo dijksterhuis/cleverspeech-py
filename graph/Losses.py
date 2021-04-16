@@ -216,6 +216,21 @@ class BaseLogitDiffLoss(BaseLoss):
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
+class BiggioMaxMin(BaseLogitDiffLoss):
+    def __init__(self, attack_graph, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack_graph,
+            target_logits,
+            weight_settings=weight_settings,
+        )
+
+        self.max_min = self.max_other_logit - self.target_logit
+        self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
+
+        self.loss_fn = self.loss_fn * self.weights
+
+
 class CWImproved(BaseLoss):
     def __init__(self, attack_graph, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
         """
