@@ -424,7 +424,7 @@ class AlignmentsCTCLoss(BaseLoss):
         ) * self.weights
 
 
-class AntiCTC(BaseLoss):
+class GreedyOtherAlignmentsCTCLoss(BaseLoss):
     def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
 
         """
