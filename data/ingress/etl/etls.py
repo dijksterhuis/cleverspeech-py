@@ -7,6 +7,9 @@ from cleverspeech.utils.Utils import np_arr, lcomp, l_map
 from cleverspeech.utils import WavFile
 
 
+TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
+
+
 def get_audio_file_path_pool(indir, numb_examples, file_size_sort=True, filter_term=None, max_file_size=None, min_file_size=None):
 
     if not os.path.exists(indir):
@@ -58,15 +61,9 @@ def get_target_phrase_pool(indir, numb):
 def create_audio_batch_from_wav_files(batched_file_path_data, dtype="int16"):
 
     audio_fps = l_map(lambda x: x[1], batched_file_path_data)
-    metadata_fps = lcomp([f.replace(".wav", ".json") for f in audio_fps])
     basenames = l_map(lambda x: x[2], batched_file_path_data)
 
     audios = lcomp([WavFile.load(f, dtype) for f in audio_fps])
-    metadatas = lcomp(json.load(open(f, 'r'))[0] for f in metadata_fps)
-
-    correct_transcriptions = l_map(
-        lambda x: x["correct_transcription"], metadatas
-    )
 
     maxlen = max(map(len, audios))
     maximum_length = maxlen + utils.Audios.padding(maxlen)
@@ -98,6 +95,7 @@ def create_audio_batch_from_wav_files(batched_file_path_data, dtype="int16"):
     )
 
     return {
+        "file_paths": audio_fps,
         "max_samples": maximum_length,
         "max_feats": maximum_feature_lengths[0],
         "audio": audios,
@@ -106,11 +104,47 @@ def create_audio_batch_from_wav_files(batched_file_path_data, dtype="int16"):
         "n_samples": actual_lengths,
         "ds_feats": maximum_feature_lengths,
         "real_feats": actual_feature_lengths,
-        "true_targets": correct_transcriptions,
     }
 
 
-def create_standard_target_batch(data, tokens=" abcdefghijklmnopqrstuvwxyz'-"):
+def create_true_batch(audio_batch, tokens=TOKENS):
+    metadata_fps = l_map(
+        lambda fp: fp.replace(".wav", ".json"), audio_batch["file_paths"]
+    )
+
+    metadatas = l_map(
+        lambda fp: json.load(open(fp, 'r'))[0], metadata_fps
+    )
+
+    true_transcriptions = l_map(
+        lambda m: m["correct_transcription"], metadatas
+    )
+
+    true_transcriptions_indices = l_map(
+        lambda t: utils.Targets.get_indices(t, tokens),
+        true_transcriptions
+    )
+
+    true_transcriptions_lengths = l_map(len, true_transcriptions)
+    max_len = max(true_transcriptions_lengths)
+
+    def pad_trues(xs):
+        for x in xs:
+            b = np.zeros(max_len - x.size, np.int32)
+            yield np.concatenate([x, b])
+
+    padded_true_trans_indices = [
+        t for t in pad_trues(true_transcriptions_indices)
+    ]
+    return {
+        "true_targets": true_transcriptions,
+        "padded_indices": padded_true_trans_indices,
+        "indices": true_transcriptions_indices,
+        "lengths": true_transcriptions_lengths,
+    }
+
+
+def create_standard_target_batch(data, tokens=TOKENS):
     target_phrases = list(map(lambda x: x[0], data))
     target_ids = list(map(lambda x: x[1], data))
 

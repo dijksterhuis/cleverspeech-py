@@ -4,11 +4,12 @@ from cleverspeech.utils.Utils import log, l_map
 
 
 class Batch:
-    def __init__(self, size, audios, targets):
+    def __init__(self, size, audios, targets, trues):
 
         self.size = size
         self.audios = audios
         self.targets = targets
+        self.trues = trues
 
 
 def standard(settings):
@@ -50,6 +51,9 @@ def standard(settings):
         audio_batch_data = BatchGen.popper(audio_file_paths_pool, batch_size)
         audios_batch = etls.create_audio_batch_from_wav_files(audio_batch_data)
 
+        # load the correct transcription for the audio files
+        trues_batch = etls.create_true_batch(audios_batch)
+
         #  we need to make sure target phrase length < n audio feats.
         # also, the first batch should also have the longest target phrase
         # and longest audio examples so we can easily manage GPU Memory
@@ -57,7 +61,7 @@ def standard(settings):
 
         target_phrase = BatchGen.pop_target_phrase(
             targets_pool,
-            audios_batch["true_targets"],
+            trues_batch["true_targets"],
             min(audios_batch["real_feats"]) - 4
         )
 
@@ -74,6 +78,7 @@ def standard(settings):
             batch_size,
             audios_batch,
             targets_batch,
+            trues_batch,
         )
 
         yield idx, batch
@@ -93,6 +98,7 @@ def dense(settings):
             batch_size,
             batch.audios,
             targets_batch,
+            batch.trues
         )
 
         yield idx, batch
@@ -112,6 +118,7 @@ def sparse(settings):
             batch_size,
             batch.audios,
             targets_batch,
+            batch.trues
         )
 
         yield idx, batch
