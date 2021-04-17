@@ -184,9 +184,15 @@ class BatchGen(object):
         )
 
     @staticmethod
-    def pop_target_phrase(all_targets, min_feats, idx=0):
+    def pop_target_phrase(all_targets, true_targets, min_feats, idx=0):
         candidate_target = random.choice(all_targets)
-        if len(candidate_target[0]) > min_feats:
-            BatchGen.pop_target_phrase(all_targets, min_feats, idx=idx + 1)
+
+        length_test = len(candidate_target[0]) > min_feats
+        matches_true_test = candidate_target[0] in true_targets
+
+        if length_test or matches_true_test:
+            BatchGen.pop_target_phrase(
+                all_targets, true_targets, min_feats, idx=idx + 1
+            )
         else:
             return candidate_target
