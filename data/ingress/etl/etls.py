@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 
 from cleverspeech.data.ingress.etl import utils
@@ -54,12 +55,18 @@ def get_target_phrase_pool(indir, numb):
     return targets[:numb]
 
 
-def create_audio_batch(batched_file_path_data, dtype="int16"):
+def create_audio_batch_from_wav_files(batched_file_path_data, dtype="int16"):
 
     audio_fps = l_map(lambda x: x[1], batched_file_path_data)
+    metadata_fps = lcomp([f.replace(".wav", ".json") for f in audio_fps])
     basenames = l_map(lambda x: x[2], batched_file_path_data)
 
     audios = lcomp([WavFile.load(f, dtype) for f in audio_fps])
+    metadatas = lcomp(json.load(open(f, 'r'))[0] for f in metadata_fps)
+
+    correct_transcriptions = l_map(
+        lambda x: x["correct_transcription"], metadatas
+    )
 
     maxlen = max(map(len, audios))
     maximum_length = maxlen + utils.Audios.padding(maxlen)
@@ -99,6 +106,7 @@ def create_audio_batch(batched_file_path_data, dtype="int16"):
         "n_samples": actual_lengths,
         "ds_feats": maximum_feature_lengths,
         "real_feats": actual_feature_lengths,
+        "true_targets": correct_transcriptions,
     }
 
 
