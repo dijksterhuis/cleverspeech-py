@@ -20,7 +20,7 @@ def standard(settings):
         settings["audio_indir"],
         settings["max_examples"],
         filter_term=".wav",
-        max_samples=settings["max_audio_length"]
+        max_file_size=settings["max_audio_length"]
     )
 
     targets_pool = etls.get_target_phrase_pool(
@@ -88,7 +88,7 @@ def dense(settings):
         settings["audio_indir"],
         settings["max_examples"],
         filter_term=".wav",
-        max_samples=settings["max_audio_length"]
+        max_file_size=settings["max_audio_length"]
     )
 
     targets_pool = etls.get_target_phrase_pool(
@@ -164,7 +164,7 @@ def sparse(settings):
         settings["audio_indir"],
         settings["max_examples"],
         filter_term=".wav",
-        max_samples=settings["max_audio_length"]
+        max_file_size=settings["max_audio_length"]
     )
 
     targets_pool = etls.get_target_phrase_pool(
@@ -240,7 +240,7 @@ def validation(settings):
         settings["audio_indir"],
         settings["max_examples"],
         filter_term=".wav",
-        max_samples=settings["max_audio_length"]
+        max_file_size=settings["max_audio_length"]
     )
 
     targets_pool = etls.get_target_phrase_pool(
