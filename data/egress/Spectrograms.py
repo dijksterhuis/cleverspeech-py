@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 from matplotlib import pyplot as plt
-from cleverspeech.eval.DetectionMetrics import to_db
+from cleverspeech.data.egress.eval.DetectionMetrics import to_db
 
 # FROM: https://stackoverflow.com/a/49157454/5945794
 
