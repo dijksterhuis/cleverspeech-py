@@ -49,7 +49,7 @@ class AbstractProcedure(ABC):
 
         self.attack.optimiser.create_optimiser()
 
-        opt_vars = self.attack.graph.opt_vars
+        opt_vars = self.attack.delta_graph.opt_vars
 
         # optimiser.variables is always a {int: list} dictionary
         for val in self.attack.optimiser.variables.values():
@@ -81,7 +81,7 @@ class AbstractProcedure(ABC):
 
         For example, you could start with randomised perturbations.
         """
-        self.attack.graph.apply_perturbation_randomisation(self.attack.sess)
+        self.attack.delta_graph.apply_perturbation_randomisation(self.attack.sess)
 
     def post_optimisation_hook(self):
         """
@@ -93,7 +93,7 @@ class AbstractProcedure(ABC):
         Default is to apply integer level rounding to the perturbations.
         """
 
-        self.attack.graph.apply_perturbation_rounding(self.attack.sess)
+        self.attack.delta_graph.apply_perturbation_rounding(self.attack.sess)
 
     @abstractmethod
     def check_for_successful_examples(self):
@@ -277,7 +277,7 @@ class UpdateOnSuccess(AbstractProcedure):
         Update both hard constraint bound and any loss weightings.
         """
 
-        deltas = self.tf_run(self.attack.graph.final_deltas)
+        deltas = self.tf_run(self.attack.perturbations)
         successes = l_map(
             lambda x: x, self.check_for_successful_examples()
         )
@@ -417,7 +417,7 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
         for val in self.attack.optimiser.variables.values():
             opt_vars += val
 
-        opt_vars += self.attack.graph.opt_vars
+        opt_vars += self.attack.delta_graph.opt_vars
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 

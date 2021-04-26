@@ -53,9 +53,9 @@ def get_current_attack_state(attack):
     graph_variables = [
         a.loss_fn,
         a.hard_constraint.bounds,
-        a.graph.final_deltas,
-        a.graph.adversarial_examples,
-        a.graph.opt_vars,
+        a.perturbations,
+        a.adversarial_examples,
+        a.delta_graph.opt_vars,
         a.victim.logits,
         tf.transpose(a.victim.raw_logits, [1, 0, 2]),
     ]

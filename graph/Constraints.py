@@ -40,14 +40,14 @@ class AbstractLNorm(ABC):
     :param sess: a tensorflow Session object
     :param batch: the input batch, a
         cleverspeech.data.ingress.batch_generators.batch object
-    :param maxval: the maximum possible value for the initial bound
+    :param bit_depth: the maximum possible value for the initial bound
     :param r_constant: how much to reduce the constraint by if updated
     :param update_method: how to perform updates, choice of 'lin', 'geom',
         or 'log'
     :param lowest_bound: if we should stop updating at a specified bound, what
         should that bound be?
     """
-    def __init__(self, sess, batch, maxval=2**15, r_constant=0.95, update_method="geom", lowest_bound=None):
+    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, update_method="geom", lowest_bound=None):
 
         assert type(r_constant) == float or type(r_constant) == np.float32
         assert 0 < r_constant < 1.0
@@ -61,7 +61,7 @@ class AbstractLNorm(ABC):
 
         assert update_method in ["lin", "geom", "log"]
 
-        self.maximum = maxval
+        self.__bit_depth = bit_depth
         self.r_constant = r_constant
 
         self.tf_run = sess.run
@@ -92,7 +92,7 @@ class AbstractLNorm(ABC):
         :return: the maximum bound to allow when starting optimisation.
         """
         for l in act_lengths:
-            yield self.analyse([self.maximum for _ in range(l)])
+            yield self.analyse([self.__bit_depth for _ in range(l)])
 
     @abstractmethod
     def analyse(self, x):
@@ -243,12 +243,12 @@ class L2(AbstractLNorm):
     :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
     """
 
-    def __init__(self, sess, batch, maxval=2**15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
 
         super().__init__(
             sess,
             batch,
-            maxval=maxval,
+            bit_depth=bit_depth,
             r_constant=r_constant,
             lowest_bound=lowest_bound,
             update_method=update_method
@@ -289,11 +289,11 @@ class Linf(AbstractLNorm):
     :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
     :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
     """
-    def __init__(self, sess, batch, maxval=2**15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
             batch,
-            maxval=maxval,
+            bit_depth=bit_depth,
             r_constant=r_constant,
             lowest_bound=lowest_bound,
             update_method=update_method,

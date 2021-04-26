@@ -12,12 +12,6 @@ TODO: Create a new AbstractAttackGraphConstructor
 
 TODO: Can we set up defaults and add classes only when required?
 
-TODO: Rename add_graph method to add_perturbation_sub_graph
-
-TODO: Rename .graph attribute to .perturbations
-
-TODO: Add an add_placeholders method.
-
 --------------------------------------------------------------------------------
 """
 
@@ -92,9 +86,13 @@ class Constructor(ABC):
         self.batch = batch
         self.feeds = feeds
         self.sess = sess
+        self.bit_depth = 2**15
 
-        self.graph = None
+        self.placeholders = None
         self.hard_constraint = None
+        self.delta_graph = None
+        self.perturbations = None
+        self.adversarial_examples = None
         self.victim = None
         self.loss = None
         self.distance_loss = None
@@ -103,6 +101,10 @@ class Constructor(ABC):
         self.optimiser = None
         self.procedure = None
         self.outputs = None
+
+    def add_placeholders(self, placeholders):
+        self.placeholders = placeholders(self.batch)
+        self.feeds.create_feeds(self.placeholders)
 
     def add_hard_constraint(self, constraint, *args, **kwargs):
         """
@@ -120,12 +122,13 @@ class Constructor(ABC):
             self.sess,
             self.batch,
             *args,
-            **kwargs
+            **kwargs,
+            maxval=self.bit_depth
         )
 
-    def add_graph(self, graph, *args, **kwargs):
+    def add_perturbation_subgraph(self, graph, *args, **kwargs):
         """
-        Add a adversarial example variable graph to the attack graph.
+        Add a perturbation variables to the attack graph.
 
         :param graph: an uninitialised reference to a
             cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
@@ -134,21 +137,26 @@ class Constructor(ABC):
         :return: None
         """
         # TODO
+        self.delta_graph = graph(
+            self.sess,
+            self.batch,
+            *args,
+            **kwargs,
+        )
+
         if self.hard_constraint:
-            self.graph = graph(
-                self.sess,
-                self.batch,
-                self.hard_constraint,
-                *args,
-                **kwargs,
+            self.perturbations = self.hard_constraint.clip(
+                self.delta_graph.final_deltas
             )
         else:
-            self.graph = graph(
-                self.sess,
-                self.batch,
-                *args,
-                **kwargs,
-            )
+            self.perturbations = self.delta_graph.final_deltas
+
+        # clip example to valid range
+        self.adversarial_examples = tf.clip_by_value(
+            self.perturbations + self.placeholders.audios,
+            clip_value_min=-self.bit_depth,
+            clip_value_max=self.bit_depth - 1
+        )
 
     def add_victim(self, model, *args, **kwargs):
         """
@@ -162,7 +170,7 @@ class Constructor(ABC):
         """
         self.victim = model(
             self.sess,
-            self.graph.adversarial_examples,
+            self.adversarial_examples,
             self.batch,
             *args,
             **kwargs
@@ -236,17 +244,6 @@ class Constructor(ABC):
         """
         self.procedure = procedure(self, *args, **kwargs)
 
-    def add_outputs(self, outputs, *args, **kwargs):
-        """
-        TODO: This method is not required anymore.
-
-        :param outputs:
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-        self.outputs = outputs(self, self.batch, *args, **kwargs)
-
     def run(self, *args, **kwargs):
         """
         Start running an attack.
@@ -264,30 +261,6 @@ class Constructor(ABC):
         # self.procedure.run(queue, health_check, *args, **kwargs)
         for x in self.procedure.run(*args, **kwargs):
             yield x
-
-    def update_bound(self, *args, **kwargs):
-        """
-        Update hard constraint bounds.
-
-        TODO: This method is not used and is very stale.
-
-        :param args: any args with which are required to update a bound
-        :param kwargs: any optional args with which to update a bound
-        :return: output of the update_bound() method.
-        """
-        results = self.optimiser.update_bound(*args, **kwargs)
-        return results
-
-    def create_feeds(self):
-        """
-        Run the create_feeds() method on the cleverspeech.data.ingress.Feeds
-        object.
-
-        TODO: Run immediately after placeholders have been added.
-
-        :return: None
-        """
-        self.feeds.create_feeds(self.graph)
 
     def validate(self):
         """
@@ -311,10 +284,3 @@ class Constructor(ABC):
         s = ["{:.0f}".format(x) for x in self.batch.audios["n_samples"]]
         log("Real Samples: ", "\n".join(s), wrap=True)
 
-
-class Placeholders(object):
-    def __init__(self, batch_size: int, maxlen: int):
-        self.audios = tf.placeholder(tf.float32, [batch_size, maxlen], name="new_input")
-        self.audio_lengths = tf.placeholder(tf.int32, [batch_size], name='qq_featlens')
-        self.targets = tf.placeholder(tf.int32, [batch_size, None], name='qq_targets')
-        self.target_lengths = tf.placeholder(tf.int32, [batch_size], name='qq_target_lengths')

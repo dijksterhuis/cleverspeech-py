@@ -20,7 +20,7 @@ import numpy as np
 
 from abc import ABC, abstractmethod
 
-from cleverspeech.graph.GraphConstructor import Placeholders
+from cleverspeech.graph.Placeholders import Placeholders
 from cleverspeech.utils.Utils import np_arr, lcomp
 
 
@@ -65,7 +65,7 @@ class AbstractVariableGraph(ABC):
                     m.append(0)
             yield m
 
-    def __init__(self, sess, batch, hard_constraint, placeholders=None):
+    def __init__(self, sess, batch):
 
         batch_size = batch.size
         max_len = batch.audios["max_samples"]
@@ -74,11 +74,6 @@ class AbstractVariableGraph(ABC):
         self.bit_depth = 2**15
         self.raw_deltas = None
         self.opt_vars = None
-
-        if placeholders is not None:
-            self.placeholders = placeholders
-        else:
-            self.placeholders = Placeholders(batch_size, max_len)
 
         masks = tf.Variable(
             tf.zeros([batch_size, max_len]),
@@ -101,17 +96,8 @@ class AbstractVariableGraph(ABC):
         lower = -self.bit_depth
         upper = self.bit_depth - 1
 
-        valid_deltas = tf.clip_by_value(
+        self.final_deltas = tf.clip_by_value(
             deltas,
-            clip_value_min=lower,
-            clip_value_max=upper
-        )
-
-        self.final_deltas = hard_constraint.clip(valid_deltas)
-
-        # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.final_deltas + self.placeholders.audios,
             clip_value_min=lower,
             clip_value_max=upper
         )

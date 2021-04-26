@@ -7,7 +7,7 @@ from cleverspeech.graph.GraphConstructor import Constructor
 
 def create_tf_ctc_alignment_search_graph(attack, batch, feeds):
     alignment_graph = Constructor(attack.sess, batch, feeds)
-    alignment_graph.add_graph(Graph, attack)
+    alignment_graph.add_perturbation_subgraph(Graph, attack)
     alignment_graph.add_loss(Loss)
     alignment_graph.create_loss_fn()
     alignment_graph.add_optimiser(Procedure)

@@ -7,7 +7,7 @@ Independent optimisers should only be used with the IndependentVariableGraph.
 
 TODO: Auto handle batch vs. indy depending on the pert. sub graph?
 
-TODO: self.attack.graph.opt_vars -> tf.Graph.TRAINABLE_VARIABLES ???
+TODO: self.attack.delta_graph.opt_vars -> tf.Graph.TRAINABLE_VARIABLES ???
 
 --------------------------------------------------------------------------------
 """
@@ -71,7 +71,7 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
 
             grad_var = opt.compute_gradients(
                 self.attack.loss_fn,
-                [self.attack.graph.opt_vars[idx]],
+                [self.attack.delta_graph.opt_vars[idx]],
                 colocate_gradients_with_ops=True
             )
 
@@ -99,7 +99,7 @@ class AbstractBatchwiseOptimiser(AbstractOptimiser):
 
         grad_var = self.optimizer.compute_gradients(
             self.attack.loss_fn,
-            self.attack.graph.opt_vars,
+            self.attack.delta_graph.opt_vars,
             colocate_gradients_with_ops=True
         )
 

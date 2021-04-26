@@ -87,18 +87,18 @@ class CarliniL2Loss(BaseLoss):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
-    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
-        l2delta = tf.reduce_mean(attack_graph.bounded_deltas ** 2, axis=1)
+        l2delta = tf.reduce_mean(attack.perturbations ** 2, axis=1)
         self.loss_fn = l2delta / self.weights
 
 
@@ -108,23 +108,23 @@ class CTCLoss(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-            attack_graph.graph.placeholders.targets,
-            attack_graph.graph.placeholders.target_lengths
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
         )
 
         self.loss_fn = tf.nn.ctc_loss(
             labels=tf.cast(self.ctc_target, tf.int32),
-            inputs=attack_graph.victim.raw_logits,
-            sequence_length=attack_graph.batch.audios["ds_feats"]
+            inputs=attack.victim.raw_logits,
+            sequence_length=attack.batch.audios["ds_feats"]
         ) * self.weights
 
 
@@ -134,24 +134,24 @@ class CTCLossV2(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-            attack_graph.graph.placeholders.targets,
-            attack_graph.graph.placeholders.target_lengths
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
         )
 
         self.loss_fn = tf.nn.ctc_loss_v2(
             labels=tf.cast(self.ctc_target, tf.int32),
-            logits=attack_graph.victim.raw_logits,
-            label_length=attack_graph.graph.placeholders.target_lengths,
-            logit_length=attack_graph.batch.audios["ds_feats"],
+            logits=attack.victim.raw_logits,
+            label_length=attack.placeholders.target_lengths,
+            logit_length=attack.batch.audios["ds_feats"],
             blank_index=-1
         ) * self.weights
 
@@ -161,17 +161,17 @@ class EntropyLoss(BaseLoss):
     Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
     to try to detect adversarial examples.
     """
-    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
 
         assert type(weight_settings) in list, tuple
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
-        x = attack_graph.victim.logits
+        x = attack.victim.logits
 
         log_mult_sum = tf.reduce_sum(x * tf.log(x), axis=2)
         neg_max = tf.reduce_max(-log_mult_sum, axis=1)
@@ -185,18 +185,18 @@ class SampleL2Loss(BaseLoss):
 
     Use the original example's L2 norm for normalisation.
     """
-    def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
 
         assert type(weight_settings) in list, tuple
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
-        original = attack_graph.placeholders.audios
-        delta = attack_graph.bounded_deltas
+        original = attack.placeholders.audios
+        delta = attack.perturbations
 
         self.l2original = tf.reduce_sum(tf.abs(original ** 2), axis=1)
         self.l2delta = tf.abs(delta) ** 2
@@ -215,15 +215,13 @@ class BaseLogitDiffLoss(BaseLoss):
     :param: softmax:
     :param: weight_settings:
     """
-    def __init__(self, attack_graph, target_argmax, softmax=False, weight_settings=(None, None)):
+    def __init__(self, attack, target_argmax, softmax=False, weight_settings=(None, None)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
-
-        g = attack_graph
 
         # We only use the argmax of the generated alignments so we don't have
         # to worry about finding "exact" alignments
@@ -234,9 +232,9 @@ class BaseLogitDiffLoss(BaseLoss):
         # current_argmax is for debugging purposes only
 
         if softmax is False:
-            self.current = tf.transpose(g.victim.raw_logits, [1, 0, 2])
+            self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
         else:
-            self.current = g.victim.logits
+            self.current = attack.victim.logits
 
         # Create one hot matrices to multiply by current logits.
         # These essentially act as a filter to keep only the target logit or
@@ -266,10 +264,10 @@ class BaseLogitDiffLoss(BaseLoss):
 
 
 class BiggioMaxMin(BaseLogitDiffLoss):
-    def __init__(self, attack_graph, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph,
+            attack,
             target_logits,
             weight_settings=weight_settings,
         )
@@ -307,16 +305,16 @@ class CWImproved(BaseLoss):
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     The loss can be >>> 0 for a successful decoding (e.g. 400)
 
-    :param attack_graph:
+    :param attack:
     :param target_logits:
     :param k:
     :param weight_settings:
     """
-    def __init__(self, attack_graph, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
@@ -324,7 +322,7 @@ class CWImproved(BaseLoss):
         self.target_max = tf.reduce_max(self.target, axis=2)
         self.argmax_target = tf.argmax(self.target, dimension=2)
 
-        self.current = tf.transpose(attack_graph.victim.raw_logits, [1, 0, 2])
+        self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
         self.current_max = tf.reduce_max(self.current, axis=2)
         self.argmax_current = tf.argmax(self.current, dimension=2)
 
@@ -359,15 +357,15 @@ class CWMaxDiff(BaseLogitDiffLoss):
     But it does a much better job than the ArgmaxLowConfidence
     implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
 
-    :param: attack_graph:
+    :param: attack:
     :param: target_logits:
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack_graph, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph,
+            attack,
             target_logits,
             weight_settings=weight_settings,
         )
@@ -406,10 +404,10 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
     :param: weight_settings
 
     """
-    def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph,
+            attack,
             target_argmax,
             weight_settings=weight_settings,
         )
@@ -455,30 +453,30 @@ class AlignmentsCTCLoss(BaseLoss):
     :param: alignment
     :param: weight_settings
     """
-    def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings,
         )
 
-        seq_lengths = attack_graph.batch.audios["ds_feats"]
+        seq_lengths = attack.batch.audios["ds_feats"]
 
         if alignment is not None:
             log("Using CTC alignment search.", wrap=True)
             self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
                 alignment,
-                attack_graph.batch.audios["ds_feats"],
+                attack.batch.audios["ds_feats"],
             )
         else:
             log("Using repeated alignment.", wrap=True)
             self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                attack_graph.graph.placeholders.targets,
-                attack_graph.graph.placeholders.target_lengths,
+                attack.placeholders.targets,
+                attack.placeholders.target_lengths,
             )
 
-        logits_shape = attack_graph.victim.raw_logits.get_shape().as_list()
+        logits_shape = attack.victim.raw_logits.get_shape().as_list()
 
         blank_token_pad = tf.zeros(
             [logits_shape[0], logits_shape[1], 1],
@@ -486,7 +484,7 @@ class AlignmentsCTCLoss(BaseLoss):
         )
 
         logits_mod = tf.concat(
-            [attack_graph.victim.raw_logits, blank_token_pad],
+            [attack.victim.raw_logits, blank_token_pad],
             axis=2
         )
 
@@ -509,21 +507,21 @@ class GreedyOtherAlignmentsCTCLoss(BaseLoss):
     :param: weight_settings
 
     """
-    def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0)):
 
         super().__init__(
-            attack_graph.sess,
-            attack_graph.batch.size,
+            attack.sess,
+            attack.batch.size,
             weight_settings=weight_settings
         )
 
-        seq_lengths = attack_graph.batch.audios["ds_feats"]
+        seq_lengths = attack.batch.audios["ds_feats"]
 
         self.target_argmax = alignment  # [b x feats]
 
         # Current logits is [b, feats, chars]
         # current_argmax is for debugging purposes only
-        self.current = tf.transpose(attack_graph.victim.raw_logits, [1, 0, 2])
+        self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
 
         # Create one hot matrices to multiply by current logits.
         # These essentially act as a filter to keep only the target logit or
@@ -554,16 +552,16 @@ class GreedyOtherAlignmentsCTCLoss(BaseLoss):
             log("Using CTC alignment search.", wrap=True)
             self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
                 alignment,
-                attack_graph.batch.audios["ds_feats"],
+                attack.batch.audios["ds_feats"],
             )
         else:
             log("Using repeated alignment.", wrap=True)
             self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                attack_graph.graph.placeholders.targets,
-                attack_graph.graph.placeholders.target_lengths,
+                attack.placeholders.targets,
+                attack.placeholders.target_lengths,
             )
 
-        logits_shape = attack_graph.victim.raw_logits.get_shape().as_list()
+        logits_shape = attack.victim.raw_logits.get_shape().as_list()
 
         blank_token_pad = tf.zeros(
             [logits_shape[0], logits_shape[1], 1],

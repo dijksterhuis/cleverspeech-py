@@ -16,8 +16,7 @@ class Attack(object):
         Holds the feeds which will be passed into DeepSpeech for normal or
         attack evaluation.
 
-        :param audio_batch: a batch of audio examples (`Audios` class)
-        :param target_batch: a batch of target phrases (`Targets` class)
+        :param batch: a batch of input data
         """
 
         self.audio = batch.audios
@@ -26,31 +25,31 @@ class Attack(object):
         self.attack = None
         self.alignments = None
 
-    def create_feeds(self, graph):
+    def create_feeds(self, placeholders):
         """
         Create the actual feed references from an attack graph. The attack
         graph does not need to be completely constructed yet. We could add a
         VariableGraph and then create the feeds.
 
-        :param graph: the attack graph which holds the input placeholders
+        :param placeholders: the placeholders for the attack
         :return: feed_dict for both plain examples and attack optimisation
         """
         # TODO - this is nasty!
         self.alignments = {
-            graph.placeholders.targets: self.targets["indices"],
-            graph.placeholders.target_lengths: self.targets["lengths"],
+            placeholders.targets: self.targets["indices"],
+            placeholders.target_lengths: self.targets["lengths"],
         }
 
         self.examples = {
-            graph.placeholders.audios: self.audio["padded_audio"],
-            graph.placeholders.audio_lengths: self.audio["ds_feats"],
+            placeholders.audios: self.audio["padded_audio"],
+            placeholders.audio_lengths: self.audio["ds_feats"],
         }
 
         self.attack = {
-            graph.placeholders.audios: self.audio["padded_audio"],
-            graph.placeholders.audio_lengths: self.audio["ds_feats"],
-            graph.placeholders.targets: self.targets["indices"],
-            graph.placeholders.target_lengths: self.targets["lengths"],
+            placeholders.audios: self.audio["padded_audio"],
+            placeholders.audio_lengths: self.audio["ds_feats"],
+            placeholders.targets: self.targets["indices"],
+            placeholders.target_lengths: self.targets["lengths"],
         }
 
         return self.examples, self.attack
