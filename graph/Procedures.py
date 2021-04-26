@@ -79,184 +79,43 @@ class AbstractProcedure(ABC):
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
 
-        For example, you could start with a randomised delta.
+        For example, you could start with randomised perturbations.
         """
-        pass
+        self.attack.graph.apply_perturbation_randomisation(self.attack.sess)
 
-    def decode_step_logic(self):
+    def post_optimisation_hook(self):
         """
         Should we do any post optimisation + pre-decoding processing?
 
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
 
-        BELOW: For each perturbation sample (delta_n) find the closest integer
-        less than the current float value.
-
-        This helps the attacks work against the deepspeech native client api
-        which only accepts tf.int16 type inputs. Although it doesn't work 100%
-        of the time so use `bin/classify.py` to get the true success rate.
-
-        We could do this after running optimisation, but doing things during
-        attacks seems to help find a 16 bit int solution... At least that's my
-        excuse.
-
-        N.B. Reassign perturbations that were bounded by the hard constraint
-        => raw_delta samples values can be much larger than the final_delta
-        sample values.
+        Default is to apply integer level rounding to the perturbations.
         """
 
-        a, b = self.attack, self.attack.batch
-
-        def reassign_tf_delta_vars(idx, delta):
-
-            signs = tf.sign(delta)
-            abs_floor = tf.floor(tf.abs(delta))
-            new_delta = signs * abs_floor
-
-            return a.graph.raw_deltas[idx].assign(new_delta)
-
-        deltas = a.sess.run(a.graph.final_deltas)
-        assigns = l_map(
-            lambda x: reassign_tf_delta_vars(x[0], x[1]), enumerate(deltas)
-        )
-        a.sess.run(assigns)
+        self.attack.graph.apply_perturbation_rounding(self.attack.sess)
 
     @abstractmethod
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
         """
         Check if we've been successful and run the update steps if we have
         This should be defined in **EVERY** child implementation of this class.
         """
         pass
 
-    def get_current_attack_state(self):
-        """
-        Get the current values of a bunch of attack graph variables.
-
-        TODO: This should live in cleverspeech.data.egress!!!
-
-        """
-
-        a, b = self.attack, self.attack.batch
-
-        # can use either tf or deepspeech decodings ("ds" or "batch")
-        # "batch" is prefered as it's what the actual model would use.
-        # It does mean switching to CPU every time we want to do
-        # inference but it's not a major hit to performance
-
-        # keep the top 5 scoring decodings and their probabilities as that might
-        # be useful come analysis time...
-
-        top_5_decodings, top_5_probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=True,
-        )
-
-        decodings, probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            decoder="batch",
-            top_five=False,
-        )
-
-        graph_losses = [l.loss_fn for l in a.loss]
-        losses = a.procedure.tf_run(graph_losses)
-
-        losses_transposed = [
-            [
-                losses[loss_idx][batch_idx] for loss_idx in range(len(a.loss))
-            ] for batch_idx in range(b.size)
-        ]
-
-        graph_variables = [
-            a.loss_fn,
-            a.hard_constraint.bounds,
-            a.graph.final_deltas,
-            a.graph.adversarial_examples,
-            a.graph.opt_vars,
-            a.victim.logits,
-            tf.transpose(a.victim.raw_logits, [1, 0, 2]),
-        ]
-        outs = a.procedure.tf_run(graph_variables)
-
-        [
-            total_losses,
-            bounds_raw,
-            deltas,
-            adv_audio,
-            delta_vars,
-            softmax_logits,
-            raw_logits,
-        ] = outs
-
-        # TODO: Fix nesting here or over in file write subprocess (as is now)?
-        initial_tau = self.attack.hard_constraint.initial_taus
-
-        distance_raw = l_map(
-            self.attack.hard_constraint.analyse, deltas
-        )
-        bound_eps = l_map(
-            lambda x: x[0] / x[1], zip(bounds_raw, initial_tau)
-        )
-        distance_eps = l_map(
-            lambda x: x[0] / x[1], zip(distance_raw, initial_tau)
-        )
-        batched_tokens = l_map(
-            lambda _: b.targets["tokens"], range(b.size)
-        )
-
-        batched_results = {
-            "step": l_map(lambda _: self.current_step, range(b.size)),
-            "tokens": batched_tokens,
-            "losses": losses_transposed,
-            "total_loss": total_losses,
-            "initial_taus": initial_tau,
-            "bounds_raw": bounds_raw,
-            "distances_raw": distance_raw,
-            "bounds_eps": bound_eps,
-            "distances_eps": distance_eps,
-            "deltas": deltas,
-            "advs": adv_audio,
-            "delta_vars": [d for d in delta_vars[0]],
-            "softmax_logits": softmax_logits,
-            "raw_logits": raw_logits,
-            "decodings": decodings,
-            "top_five_decodings": top_5_decodings,
-            "probs": probs,
-            "top_five_probs": top_5_probs,
-        }
-
-        targs_batch_exclude = ["tokens"]
-        targs = {k: v for k, v in b.targets.items() if k not in targs_batch_exclude}
-
-        audio_batch_exclude = ["max_samples", "max_feats"]
-        auds = {k: v for k, v in b.audios.items() if k not in audio_batch_exclude}
-
-        batched_results.update(auds)
-        batched_results.update(targs)
-
-        batched_results["success"] = l_map(
-            lambda x: x, self.check_for_success(batched_results)
-        )
-
-        return batched_results
-
     @abstractmethod
-    def do_success_updates(self, idx):
+    def post_results_hook(self):
         """
         How should we update the attack for whatever we consider a success?
         This should be defined in **EVERY** child implementation of this class.
         """
         pass
 
-    def run(self, queue, health_check):
+    def run(self):
         """
         Do the actual optimisation.
         """
-        attack, g, b = self.attack, self.attack.graph, self.attack.batch
+        a = self.attack
 
         while self.steps_rule():
 
@@ -265,31 +124,23 @@ class AbstractProcedure(ABC):
             if self.current_step == 0:
                 self.do_warm_up()
 
-            # We've performed one step of optimisation. let the parent spawner
-            # process know if everything is working. Any exception will have
-            # been caught by the attack spawner boilerplate.
-
-            if self.current_step == 1:
-                health_check.send(True)
-
             is_decode_step = self.current_step % self.decode_step == 0
             is_zeroth_step = self.current_step == 0
             is_round_step = is_decode_step and not is_zeroth_step
 
             if is_round_step:
-                self.decode_step_logic()
+                self.post_optimisation_hook()
 
             if is_decode_step or is_zeroth_step:
 
-                # Generate output data and pass it to the results writer process
-                batched_results = self.get_current_attack_state()
-                queue.put(batched_results)
+                # signal that we've finished a decoding step **BEFORE** doing
+                # any updates (e.g. hard constraint bounds) to attack variables.
 
-                # update graph variables when successful i.e. hard constraint
-                self.do_success_updates(batched_results)
+                yield True
+                self.post_results_hook()
 
             # Do the actual optimisation
-            attack.optimiser.optimise(attack.feeds.attack)
+            a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
 
 
@@ -307,12 +158,18 @@ class Unbounded(AbstractProcedure):
 
         self.finished = False
 
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
 
-        lefts = batched_results["decodings"]
-        rights = batched_results["phrases"]
+        decodings, _ = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
 
-        z = zip(lefts, rights)
+        phrases = self.attack.batch.targets["phrases"]
+
+        z = zip(decodings, phrases)
 
         self.finished = all([left == right for left, right in z])
 
@@ -331,7 +188,7 @@ class Unbounded(AbstractProcedure):
         """
         return self.finished is not True or self.current_step < self.steps
 
-    def do_success_updates(self, idx):
+    def post_results_hook(self):
         """
         if successful do nothing
         """
@@ -353,15 +210,21 @@ class HardcoreMode(Unbounded):
             **kwargs
         )
 
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
         """
         Never stop optimising, but report if decoding is successful.
         """
 
-        lefts = batched_results["decodings"]
-        rights = batched_results["phrases"]
+        decodings, _ = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
 
-        z = zip(lefts, rights)
+        phrases = self.attack.batch.targets["phrases"]
+
+        z = zip(decodings, phrases)
 
         for idx, (left, right) in enumerate(z):
 
@@ -398,24 +261,31 @@ class UpdateOnSuccess(AbstractProcedure):
 
         self.update_loss = loss_update_idx
 
-    def update_hard_constraint(self, batched_results):
+    def __update_hard_constraint(self, deltas , successes):
+
         self.attack.hard_constraint.update_many(
-            batched_results["deltas"], batched_results["success"]
+            deltas, successes
         )
 
-    def update_losses(self, batched_results):
+    def __update_losses(self, successes):
         for loss_idx in self.update_loss:
             loss_to_update = self.attack.loss[loss_idx]
-            loss_to_update.update_many(batched_results["success"])
+            loss_to_update.update_many(successes)
 
-    def do_success_updates(self, batched_results):
+    def post_results_hook(self):
         """
         Update both hard constraint bound and any loss weightings.
         """
-        self.update_hard_constraint(batched_results)
+
+        deltas = self.tf_run(self.attack.graph.final_deltas)
+        successes = l_map(
+            lambda x: x, self.check_for_successful_examples()
+        )
+
+        self.__update_hard_constraint(deltas, successes)
 
         if self.update_loss is not None:
-            self.update_losses(batched_results)
+            self.__update_losses(successes)
 
 
 class UpdateOnDecoding(UpdateOnSuccess):
@@ -427,14 +297,20 @@ class UpdateOnDecoding(UpdateOnSuccess):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
         """
         Success is when the decoding matches the target phrase.
         """
-        lefts = batched_results["decodings"]
-        rights = batched_results["phrases"]
+        decodings, _ = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
 
-        z = zip(lefts, rights)
+        phrases = self.attack.batch.targets["phrases"]
+
+        z = zip(decodings, phrases)
 
         for idx, (left, right) in enumerate(z):
 
@@ -457,15 +333,14 @@ class UpdateOnLoss(UpdateOnSuccess):
 
         self.loss_bound = loss_lower_bound
 
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
         """
         Success is when the loss reaches a specified threshold.
         """
+        loss = self.tf_run(self.attack.loss_fn)
+        threshold = [self.loss_bound for _ in range(self.attack.batch.size)]
 
-        lefts = batched_results["total_loss"]
-        rights = [self.loss_bound for _ in range(self.attack.batch.size)]
-
-        z = zip(lefts, rights)
+        z = zip(loss, threshold)
 
         for idx, (left, right) in enumerate(z):
 
@@ -488,16 +363,22 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
 
         self.probs_diff = probs_diff
 
-    def check_for_success(self, batched_results):
+    def check_for_successful_examples(self):
         """
         Success is when log likelihood (decoder probabilities) have reached a
         certain threshold.
         """
 
-        lefts = batched_results["probs"]
-        rights = [self.probs_diff for _ in range(self.attack.batch.size)]
+        _, probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            decoder="batch",
+            top_five=False,
+        )
 
-        z = zip(lefts, rights)
+        threshold = [self.probs_diff for _ in range(self.attack.batch.size)]
+
+        z = zip(probs, threshold)
 
         for idx, (left, right) in enumerate(z):
 
@@ -540,9 +421,10 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
 
-    def run(self, queue, health_check):
+    def run(self):
         self.alignment_graph.optimise(self.attack.victim)
-        super().run(queue, health_check)
+        for x in super().run():
+            yield x
 
 
 class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):

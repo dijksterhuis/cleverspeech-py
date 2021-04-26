@@ -26,6 +26,8 @@ import tensorflow as tf
 
 from abc import ABC
 
+from cleverspeech.utils.Utils import log
+
 
 class Constructor(ABC):
     """
@@ -245,7 +247,7 @@ class Constructor(ABC):
         """
         self.outputs = outputs(self, self.batch, *args, **kwargs)
 
-    def run(self, queue, health_check, *args, **kwargs):
+    def run(self, *args, **kwargs):
         """
         Start running an attack.
 
@@ -259,7 +261,9 @@ class Constructor(ABC):
         :param kwargs: any optional args with which to start running attack
         :return:
         """
-        self.procedure.run(queue, health_check, *args, **kwargs)
+        # self.procedure.run(queue, health_check, *args, **kwargs)
+        for x in self.procedure.run(*args, **kwargs):
+            yield x
 
     def update_bound(self, *args, **kwargs):
         """
@@ -284,6 +288,28 @@ class Constructor(ABC):
         :return: None
         """
         self.feeds.create_feeds(self.graph)
+
+    def validate(self):
+        """
+        Do an initial decoding to verify everything is working
+        """
+        decodings, probs = self.victim.inference(
+            self.batch,
+            feed=self.feeds.examples,
+            decoder="batch"
+        )
+        z = zip(self.batch.audios["basenames"], probs, decodings)
+        s = ["{}\t{:.3f}\t{}".format(b, p, d) for b, p, d in z]
+        log("Initial decodings:", '\n'.join(s), wrap=True)
+
+        s = ["{:.0f}".format(x) for x in self.batch.audios["real_feats"]]
+        log("Real Features: ", "\n".join(s), wrap=True)
+
+        s = ["{:.0f}".format(x) for x in self.batch.audios["ds_feats"]]
+        log("DS Features: ", "\n".join(s), wrap=True)
+
+        s = ["{:.0f}".format(x) for x in self.batch.audios["n_samples"]]
+        log("Real Samples: ", "\n".join(s), wrap=True)
 
 
 class Placeholders(object):

@@ -1,9 +1,127 @@
 import numpy as np
+import tensorflow as tf
 
 from collections import OrderedDict
 
 from cleverspeech.data.egress.eval.ErrorRates import character_error_rate
 from cleverspeech.data.egress.eval.ErrorRates import word_error_rate
+
+from cleverspeech.utils.Utils import l_map
+
+
+def get_current_attack_state(attack):
+    """
+    Get the current values of a bunch of attack graph variables.
+
+    TODO: This should live in cleverspeech.data.egress!!!
+
+    """
+
+    a, b = attack, attack.batch
+
+    # can use either tf or deepspeech decodings ("ds" or "batch")
+    # "batch" is prefered as it's what the actual model would use.
+    # It does mean switching to CPU every time we want to do
+    # inference but it's not a major hit to performance
+
+    # keep the top 5 scoring decodings and their probabilities as that might
+    # be useful come analysis time...
+
+    top_5_decodings, top_5_probs = a.victim.inference(
+        b,
+        feed=a.feeds.attack,
+        decoder="batch",
+        top_five=True,
+    )
+
+    decodings, probs = a.victim.inference(
+        b,
+        feed=a.feeds.attack,
+        decoder="batch",
+        top_five=False,
+    )
+
+    graph_losses = [l.loss_fn for l in a.loss]
+    losses = a.procedure.tf_run(graph_losses)
+
+    losses_transposed = [
+        [
+            losses[loss_idx][batch_idx] for loss_idx in range(len(a.loss))
+        ] for batch_idx in range(b.size)
+    ]
+
+    graph_variables = [
+        a.loss_fn,
+        a.hard_constraint.bounds,
+        a.graph.final_deltas,
+        a.graph.adversarial_examples,
+        a.graph.opt_vars,
+        a.victim.logits,
+        tf.transpose(a.victim.raw_logits, [1, 0, 2]),
+    ]
+    outs = a.procedure.tf_run(graph_variables)
+
+    [
+        total_losses,
+        bounds_raw,
+        deltas,
+        adv_audio,
+        delta_vars,
+        softmax_logits,
+        raw_logits,
+    ] = outs
+
+    # TODO: Fix nesting here or over in file write subprocess (as is now)?
+    initial_tau = a.hard_constraint.initial_taus
+
+    distance_raw = l_map(
+        a.hard_constraint.analyse, deltas
+    )
+    bound_eps = l_map(
+        lambda x: x[0] / x[1], zip(bounds_raw, initial_tau)
+    )
+    distance_eps = l_map(
+        lambda x: x[0] / x[1], zip(distance_raw, initial_tau)
+    )
+    batched_tokens = l_map(
+        lambda _: b.targets["tokens"], range(b.size)
+    )
+
+    batched_results = {
+        "step": l_map(lambda _: a.procedure.current_step, range(b.size)),
+        "tokens": batched_tokens,
+        "losses": losses_transposed,
+        "total_loss": total_losses,
+        "initial_taus": initial_tau,
+        "bounds_raw": bounds_raw,
+        "distances_raw": distance_raw,
+        "bounds_eps": bound_eps,
+        "distances_eps": distance_eps,
+        "deltas": deltas,
+        "advs": adv_audio,
+        "delta_vars": [d for d in delta_vars[0]],
+        "softmax_logits": softmax_logits,
+        "raw_logits": raw_logits,
+        "decodings": decodings,
+        "top_five_decodings": top_5_decodings,
+        "probs": probs,
+        "top_five_probs": top_5_probs,
+    }
+
+    targs_batch_exclude = ["tokens"]
+    targs = {k: v for k, v in b.targets.items() if k not in targs_batch_exclude}
+
+    audio_batch_exclude = ["max_samples", "max_feats"]
+    auds = {k: v for k, v in b.audios.items() if k not in audio_batch_exclude}
+
+    batched_results.update(auds)
+    batched_results.update(targs)
+
+    batched_results["success"] = l_map(
+        lambda x: x, a.procedure.check_for_successful_examples()
+    )
+
+    return batched_results
 
 
 class Standard:

@@ -3,7 +3,7 @@ import traceback
 import multiprocessing as mp
 import tensorflow as tf
 
-from cleverspeech.utils.Utils import log, run_decoding_check
+from cleverspeech.utils.Utils import log
 from cleverspeech.utils.runtime.TensorflowRuntime import TFRuntime
 
 
@@ -70,7 +70,7 @@ class Processes:
         return self.attempts >= self.max
 
 
-def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
+def boilerplate(results_queue, healthy_conn, attack_args):
 
     # we *must* call the tensorflow session within the batch loop so the
     # graph gets reset: the maximum example length in a batch affects the
@@ -79,6 +79,7 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
     # tensorflow sessions can't be passed between processes either, so we have
     # to create it here (at least, not easily).
 
+    settings, attack_fn, batch, res_fn = attack_args
     try:
         tf_runtime = TFRuntime(settings["gpu_device"])
         with tf_runtime.session as sess, tf_runtime.device as tf_device:
@@ -89,26 +90,30 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
 
             # log some useful things for debugging before the attack runs
 
-            run_decoding_check(attack, batch)
+            attack.validate()
 
-            log(
-                "Created Attack Graph and Feeds. Loaded TF Operations:",
-                wrap=False
-            )
+            s = "Created Attack Graph and Feeds. Loaded TF Operations:"
+            log(s, wrap=False)
             log(funcs=tf_runtime.log_attack_tensors)
 
-            log(
-                "Beginning attack run...\nMonitor progress in: {}".format(
-                    settings["outdir"] + "log.txt"
-                )
+            s = "Beginning attack run...\nMonitor progress in: {}".format(
+                settings["outdir"] + "log.txt"
             )
+            log(s)
 
             # Start the attacks.
-            attack.run(results_queue, healthy_conn)
+            # attack.run(results_queue, healthy_conn)
+            for idx, _ in enumerate(attack.run()):
+
+                if idx == 0:
+                    healthy_conn.send(True)
+
+                # batched_results = attack.procedure.get_current_attack_state()
+                results_queue.put(res_fn(attack))
 
     except tf.errors.ResourceExhaustedError as e:
 
-        # Fail gracefully for OOM GPU issues.
+        # Fail for OOM GPU issues.
         tb = "".join(traceback.format_exception(None, e, e.__traceback__))
 
         s = "Out of GPU Memory! Attack failed to run for these examples:\n"
@@ -116,7 +121,7 @@ def boilerplate(results_queue, healthy_conn, settings, attack_fn, batch):
         s += "\n\nError Traceback:\n{e}".format(e=tb)
 
         log(s, wrap=True)
-        healthy_conn.send(True)
+        healthy_conn.send(False)
 
     except Exception as e:
 
