@@ -91,25 +91,4 @@ def enum(x):
     return enumerate(x)
 
 
-def run_decoding_check(attack, batch):
-    """
-    Do an initial decoding to verify everything is working
-    """
-    decodings, probs = attack.victim.inference(
-        batch,
-        feed=attack.feeds.examples,
-        decoder="batch"
-    )
-    z = zip(batch.audios["basenames"], probs, decodings)
-    s = ["{}\t{:.3f}\t{}".format(b, p, d) for b, p, d in z]
-    log("Initial decodings:", '\n'.join(s), wrap=True)
-
-    s = ["{:.0f}".format(x) for x in batch.audios["real_feats"]]
-    log("Real Features: ", "\n".join(s), wrap=True)
-
-    s = ["{:.0f}".format(x) for x in batch.audios["ds_feats"]]
-    log("DS Features: ", "\n".join(s), wrap=True)
-
-    s = ["{:.0f}".format(x) for x in batch.audios["n_samples"]]
-    log("Real Samples: ", "\n".join(s), wrap=True)
 

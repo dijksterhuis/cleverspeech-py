@@ -7,7 +7,7 @@ import multiprocessing as mp
 import tensorflow as tf
 import numpy as np
 
-from cleverspeech.utils.Utils import log, run_decoding_check
+from cleverspeech.utils.Utils import log
 
 
 class AttackFailedException(Exception):
