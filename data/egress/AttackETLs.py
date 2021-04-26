@@ -3,9 +3,9 @@ import tensorflow as tf
 
 from collections import OrderedDict
 
-from cleverspeech.data.egress.eval.ErrorRates import character_error_rate
-from cleverspeech.data.egress.eval.ErrorRates import word_error_rate
-from cleverspeech.data.egress.eval.DetectionMetrics import lnorm
+from cleverspeech.data.egress.metrics.ErrorRates import character_error_rate
+from cleverspeech.data.egress.metrics.ErrorRates import word_error_rate
+from cleverspeech.data.egress.metrics.DetectionMetrics import lnorm
 
 from cleverspeech.utils.Utils import l_map
 

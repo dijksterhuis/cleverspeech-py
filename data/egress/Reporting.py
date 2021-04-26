@@ -9,8 +9,8 @@ from collections import OrderedDict
 from cleverspeech.utils.Utils import log
 from cleverspeech.utils import WavFile
 
-from cleverspeech.data.egress.eval import DetectionMetrics
-from cleverspeech.data.egress.eval import NoiseWeightings
+from cleverspeech.data.egress.metrics import DetectionMetrics
+from cleverspeech.data.egress.metrics import NoiseWeightings
 
 from deepspeech import Model
 
