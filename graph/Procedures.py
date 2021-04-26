@@ -81,7 +81,7 @@ class AbstractProcedure(ABC):
 
         For example, you could start with randomised perturbations.
         """
-        self.attack.delta_graph.apply_perturbation_randomisation(self.attack.sess)
+        pass
 
     def post_optimisation_hook(self):
         """
@@ -89,11 +89,8 @@ class AbstractProcedure(ABC):
 
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
-
-        Default is to apply integer level rounding to the perturbations.
         """
-
-        self.attack.delta_graph.apply_perturbation_rounding(self.attack.sess)
+        pass
 
     @abstractmethod
     def check_for_successful_examples(self):
@@ -150,6 +147,33 @@ class AbstractProcedure(ABC):
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
+
+
+class RandomUniformWarmUp(AbstractProcedure):
+    def do_warm_up(self):
+        """
+        Should anything else be done before we start?
+
+        N.B. This method is not abstract as it is *not* required to run an
+        attack, but feel free to override it.
+
+        For example, you could start with randomised perturbations.
+        """
+        self.attack.delta_graph.apply_perturbation_randomisation(
+            self.attack.sess, bit_depth_percent=0.5
+        )
+
+
+class IntegerRoundingHook(AbstractProcedure):
+    def post_optimisation_hook(self):
+        """
+        Apply integer level rounding to the perturbations after a certain number
+        of optimisation steps have completed.
+        """
+
+        self.attack.delta_graph.apply_perturbation_rounding(
+            self.attack.sess
+        )
 
 
 class Unbounded(AbstractProcedure):
@@ -397,6 +421,10 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
                 yield False
 
 
+class StandardProcedure(UpdateOnDecoding, IntegerRoundingHook):
+    pass
+
+
 class CTCAlignMixIn(AbstractProcedure, ABC):
     """
     Abstract MixIn class to be used to initialise the CTC alignment search graph
@@ -441,6 +469,10 @@ class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
 
     Update when current decoding matches the target transcription.
     """
+    pass
+
+
+class StandardCTCAlignProcedure(CTCAlignUpdateOnDecode, IntegerRoundingHook):
     pass
 
 
