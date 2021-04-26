@@ -71,6 +71,7 @@ class AbstractVariableGraph(ABC):
         max_len = batch.audios["max_samples"]
         act_lengths = batch.audios["n_samples"]
 
+        self.bit_depth = 2**15
         self.raw_deltas = None
         self.opt_vars = None
 
@@ -97,8 +98,8 @@ class AbstractVariableGraph(ABC):
 
         # Restrict delta to valid space before applying constraints
 
-        lower = -2.0 ** 15
-        upper = 2.0 ** 15 - 1
+        lower = -self.bit_depth
+        upper = self.bit_depth - 1
 
         valid_deltas = tf.clip_by_value(
             deltas,
@@ -122,6 +123,71 @@ class AbstractVariableGraph(ABC):
         )
 
         sess.run(masks.assign(initial_masks))
+
+    def get_valid_perturbations(self, sess):
+        return sess.run(self.final_deltas)
+
+    def get_raw_perturbations(self, sess):
+        return sess.run(self.raw_deltas)
+
+    def get_optimisable_variables(self):
+        return self.opt_vars
+
+    @abstractmethod
+    def deltas_apply(self, deltas, func):
+        pass
+
+    def apply_perturbation_rounding(self, sess):
+
+        """
+        For each perturbation sample (delta_n) find the closest integer
+        less than the current float value.
+
+        This helps the attacks work against the deepspeech native client api
+        which only accepts tf.int16 type inputs. Although it doesn't work 100%
+        of the time so use `bin/classify.py` to get the true success rate.
+
+        We could do this after running optimisation, but doing things during
+        attacks seems to help find a 16 bit int solution... At least that's my
+        excuse.
+
+        N.B. Reassign perturbations that were bounded by the hard constraint
+        => raw_delta samples values can be much larger than the final_delta
+        sample values.
+
+        :param sess: a tensorflow session object
+        :return: None
+        """
+        def rounding_func(delta):
+            signs = tf.sign(delta)
+            abs_floor = tf.floor(tf.abs(delta))
+            return signs * abs_floor
+
+        deltas = sess.run(self.final_deltas)
+        sess.run(self.deltas_apply(deltas, rounding_func))
+
+    def apply_perturbation_randomisation(self, sess, bit_depth_percent=0.5):
+
+        """
+        Randomise each perturbation sample (delta_n) using a random uniform
+        distribution, with max and min values based on a percentage of the
+        perturbation bit depth.
+
+        :param sess: a tensorflow session object
+        :param bit_depth_percent: base the random uniform dist. on our bit depth
+        :return: None
+        """
+        def random_uniform_func(delta):
+            rand_uni = tf.random_uniform(
+                delta.shape,
+                minval=-bit_depth_percent * self.bit_depth,
+                maxval=bit_depth_percent * self.bit_depth,
+                dtype=tf.float32
+            )
+            return delta + rand_uni
+
+        deltas = sess.run(self.final_deltas)
+        sess.run(self.deltas_apply(deltas, random_uniform_func))
 
 
 class Independent(AbstractVariableGraph):
@@ -166,6 +232,18 @@ class Independent(AbstractVariableGraph):
 
         return tf.stack(self.raw_deltas, axis=0)
 
+    def deltas_apply(self, deltas, func):
+        assign_ops = []
+        for idx, delta in enumerate(deltas):
+
+            new_delta = func(delta)
+
+            assign_ops.append(
+                self.raw_deltas[idx].assign(new_delta)
+            )
+
+        return assign_ops
+
 
 class Batch(AbstractVariableGraph):
     """
@@ -200,6 +278,18 @@ class Batch(AbstractVariableGraph):
 
         self.opt_vars = [self.raw_deltas]
         return self.raw_deltas
+
+    def deltas_apply(self, deltas, func):
+        new_deltas = []
+        for idx, delta in enumerate(deltas):
+
+            new_delta = func(delta)
+            new_deltas.append(new_delta)
+
+        new_deltas = np.asarray(new_deltas)
+        assign_op = self.raw_deltas.assign(new_deltas)
+
+        return assign_op
 
 
 class Synthesis:
