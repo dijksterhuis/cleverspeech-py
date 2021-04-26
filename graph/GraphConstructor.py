@@ -81,12 +81,12 @@ class Constructor(ABC):
         the tensorflow graph placeholders and batch data), a
         cleverspeech.data.ingress.Feeds object
     """
-    def __init__(self, sess, batch, feeds):
+    def __init__(self, sess, batch, feeds, bit_depth=2**15):
 
         self.batch = batch
         self.feeds = feeds
         self.sess = sess
-        self.bit_depth = 2**15
+        self.bit_depth = bit_depth
 
         self.placeholders = None
         self.hard_constraint = None
