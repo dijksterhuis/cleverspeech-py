@@ -2,11 +2,11 @@ import tensorflow as tf
 import numpy as np
 
 from cleverspeech.utils.Utils import log, lcomp
-from cleverspeech.graph.GraphConstructor import Constructor
+from cleverspeech.graph.AttackConstructors import CTCPathSearchConstructor
 
 
 def create_tf_ctc_alignment_search_graph(attack, batch, feeds):
-    alignment_graph = Constructor(attack.sess, batch, feeds)
+    alignment_graph = CTCPathSearchConstructor(attack.sess, batch, feeds)
     alignment_graph.add_perturbation_subgraph(Graph, attack)
     alignment_graph.add_loss(Loss)
     alignment_graph.create_loss_fn()
@@ -31,8 +31,8 @@ class Loss(object):
 
 
 class Graph:
-    def __init__(self, sess, batch, attack_graph):
-        batched_alignment_shape = attack_graph.victim.logits.shape.as_list()
+    def __init__(self, sess, batch, attack):
+        batched_alignment_shape = attack.victim.logits.shape.as_list()
 
         self.initial_alignments = tf.Variable(
             tf.zeros(batched_alignment_shape),
@@ -62,8 +62,8 @@ class Graph:
         self.target_alignments = tf.argmax(self.softmax_alignments, axis=2)
 
         # TODO - this should be loaded from feeds later on
-        self.targets = attack_graph.graph.placeholders.targets
-        self.target_lengths = attack_graph.graph.placeholders.target_lengths
+        self.targets = attack.placeholders.targets
+        self.target_lengths = attack.placeholders.target_lengths
 
         per_logit_lengths = batch.audios["real_feats"]
         maxlen = batched_alignment_shape[1]

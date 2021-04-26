@@ -27,15 +27,15 @@ class AbstractProcedure(ABC):
     :param: decode_step: when to stop and check a current decoding
 
     """
-    def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
+    def __init__(self, attack, steps: int = 5000, update_step: int = 10):
 
         assert type(steps) in [float, int]
-        assert type(decode_step) in [float, int]
-        assert steps > decode_step
+        assert type(update_step) in [float, int]
+        assert steps > update_step
         assert attack.optimiser is not None
 
         self.attack = attack
-        self.steps, self.decode_step = steps + 1, decode_step
+        self.steps, self.update_step, self.results_step = steps + 1, update_step, update_step
         self.current_step = 0
 
     def init_optimiser_variables(self):
@@ -103,6 +103,9 @@ class AbstractProcedure(ABC):
         """
         pass
 
+    def results_hook(self):
+        return True
+
     @abstractmethod
     def post_results_hook(self):
         """
@@ -124,19 +127,24 @@ class AbstractProcedure(ABC):
             if self.current_step == 0:
                 self.do_warm_up()
 
-            is_decode_step = self.current_step % self.decode_step == 0
+            is_update_step = self.current_step % self.update_step == 0
+            is_results_step = self.current_step % self.results_step == 0
             is_zeroth_step = self.current_step == 0
-            is_round_step = is_decode_step and not is_zeroth_step
+            is_round_step = is_update_step and not is_zeroth_step
 
             if is_round_step:
                 self.post_optimisation_hook()
 
-            if is_decode_step or is_zeroth_step:
+            if is_results_step:
 
-                # signal that we've finished a decoding step **BEFORE** doing
-                # any updates (e.g. hard constraint bounds) to attack variables.
+                # signal that we've finished optimisation for now **BEFORE**
+                # doing any updates (e.g. hard constraint bounds) to attack
+                # variables.
 
-                yield True
+                yield self.results_hook()
+
+            if is_update_step or is_zeroth_step:
+
                 self.post_results_hook()
 
             # Do the actual optimisation

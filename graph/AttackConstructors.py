@@ -4,26 +4,16 @@ attack. Most classes interact with this object when accessing other parts of an
 attack, e.g. doing inference is usually done by accessing the victim object's
 methods here, i.e. attack.victim.inference()
 
-TODO: Rename to AttackGraphConstructors
-
-TODO: Create a new UnboundedAttackGraphConstructor
-
-TODO: Create a new AbstractAttackGraphConstructor
-
-TODO: Can we set up defaults and add classes only when required?
-
 --------------------------------------------------------------------------------
 """
 
 
 import tensorflow as tf
-
-from abc import ABC
-
+from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import log
 
 
-class Constructor(ABC):
+class AbstractAttackConstructor(ABC):
     """
     Allows a modular yet standardised definition of attacks.
 
@@ -33,7 +23,7 @@ class Constructor(ABC):
 
     For example, adding an L2 hard constraint would look like this:
 
-    >>> graph = Constructor()
+    >>> graph = EvasionAttackConstructor()
     >>> graph.add_hard_constraint(
     >>>    cleverspeech.graph.Constraints.L2, # the raw, uninitialised class ref
     >>>    some_arg_for_l2_class,
@@ -48,7 +38,7 @@ class Constructor(ABC):
 
     For example, this line calls the L2 hard constraint's `analyse()` method:
 
-    >>> graph.hard_constraint.analyse(some_perturbation)
+    >>> graph.hard_constraint.analyse(graph.perturbations)
 
     This helps keep everything as standardised as possible and means we can use
     an instance of this `Constructor` class as a common interface for all other
@@ -69,7 +59,7 @@ class Constructor(ABC):
 
     TODO: Add/update additional methods to control an attack e.g. update_bounds
 
-    TODO: Rename this class to EvasionAttackGraphConstructor
+    TODO: Can we set up defaults and add classes only when required?
 
     ----------------------------------------------------------------------------
 
@@ -108,8 +98,7 @@ class Constructor(ABC):
 
     def add_hard_constraint(self, constraint, *args, **kwargs):
         """
-        Add some hard constraint which we will clip the adversarial examples
-        with. Often this constraint will be iteratively reduced over time.
+        Override this method to in child classes if needed.
 
         :param constraint: reference to the **uninitialised**
             cleverspeech.graph.Constraints class
@@ -118,17 +107,12 @@ class Constructor(ABC):
         :return: None
         """
 
-        self.hard_constraint = constraint(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-            maxval=self.bit_depth
-        )
+        pass
 
+    @abstractmethod
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
         """
-        Add a perturbation variables to the attack graph.
+        Must be implemented in child classes -- add a perturbation graph.
 
         :param graph: an uninitialised reference to a
             cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
@@ -136,27 +120,7 @@ class Constructor(ABC):
         :param kwargs: any optional args with which to initialise the class
         :return: None
         """
-        # TODO
-        self.delta_graph = graph(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-        )
-
-        if self.hard_constraint:
-            self.perturbations = self.hard_constraint.clip(
-                self.delta_graph.final_deltas
-            )
-        else:
-            self.perturbations = self.delta_graph.final_deltas
-
-        # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.perturbations + self.placeholders.audios,
-            clip_value_min=-self.bit_depth,
-            clip_value_max=self.bit_depth - 1
-        )
+        pass
 
     def add_victim(self, model, *args, **kwargs):
         """
@@ -175,18 +139,6 @@ class Constructor(ABC):
             *args,
             **kwargs
         )
-
-    def create_loss_fn(self):
-        """
-        Given the loss classes that have been added to the graph, create the
-        final loss function by performing a sum over all the loss classes.
-
-        TODO: Add a ref_fn=sum kwarg.
-
-        :return: None
-        """
-        assert self.loss is not None
-        self.loss_fn = sum(l.loss_fn for l in self.loss)
 
     def add_loss(self, loss, *args, **kwargs):
         """
@@ -208,6 +160,18 @@ class Constructor(ABC):
         else:
             self.loss = self.loss + [new_loss]
             self.loss_fn = self.loss_fn + new_loss.loss_fn
+
+    def create_loss_fn(self):
+        """
+        Given the loss classes that have been added to the graph, create the
+        final loss function by performing a sum over all the loss classes.
+
+        TODO: Add a ref_fn=sum kwarg.
+
+        :return: None
+        """
+        assert self.loss is not None
+        self.loss_fn = sum(l.loss_fn for l in self.loss)
 
     def add_optimiser(self, optimiser, *args, **kwargs):
         """
@@ -248,17 +212,10 @@ class Constructor(ABC):
         """
         Start running an attack.
 
-        TODO: queue + health_check should be *args, may not want in all cases
-
-        :param queue: a multiprocessing.Queue object to pass data back to the
-            separate cleverspeech.data.egress.Writer subprocess.
-        :param health_check: a multiprocessing.Pipe object to pass the status of
-            and attack back to the cleverspeech.utils.Runtime.AttackSpawner
         :param args: any args with which are required to start running attack
         :param kwargs: any optional args with which to start running attack
-        :return:
+        :return: True given some condition on when to return results.
         """
-        # self.procedure.run(queue, health_check, *args, **kwargs)
         for x in self.procedure.run(*args, **kwargs):
             yield x
 
@@ -284,3 +241,148 @@ class Constructor(ABC):
         s = ["{:.0f}".format(x) for x in self.batch.audios["n_samples"]]
         log("Real Samples: ", "\n".join(s), wrap=True)
 
+
+class EvasionAttackConstructor(AbstractAttackConstructor):
+    """
+    Construct an evasion attack with a hard constraint for security evaluations.
+    ----------------------------------------------------------------------------
+
+    :param sess: a tensorflow session object
+    :param batch: the current batch of input data to run the attack with,
+        a cleverspeech.data.ingress.batch_generators.batch object
+
+    :param feeds: the input feeds for the tensorflow graph (references between
+        the tensorflow graph placeholders and batch data), a
+        cleverspeech.data.ingress.Feeds object
+    """
+    def __init__(self, sess, batch, feeds, bit_depth=2**15):
+
+        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+
+    def add_hard_constraint(self, constraint, *args, **kwargs):
+        """
+        Add some hard constraint which we will clip the adversarial examples
+        with. Often this constraint will be iteratively reduced over time.
+
+        :param constraint: reference to the **uninitialised**
+            cleverspeech.graph.Constraints class
+        :param args: any args with which are required to initialise the class
+        :param kwargs: any optional args with which to initialise the class
+        :return: None
+        """
+
+        self.hard_constraint = constraint(
+            self.sess,
+            self.batch,
+            *args,
+            **kwargs,
+            bit_depth=self.bit_depth
+        )
+
+    def add_perturbation_subgraph(self, graph, *args, **kwargs):
+        """
+        Add a perturbation variables to the attack graph.
+
+        :param graph: an uninitialised reference to a
+            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
+        :param args: any args with which are required to initialise the class
+        :param kwargs: any optional args with which to initialise the class
+        :return: None
+        """
+        self.delta_graph = graph(
+            self.sess,
+            self.batch,
+            *args,
+            **kwargs,
+        )
+
+        self.perturbations = self.hard_constraint.clip(
+            self.delta_graph.final_deltas
+        )
+
+        # clip example to valid range
+        self.adversarial_examples = tf.clip_by_value(
+            self.perturbations + self.placeholders.audios,
+            clip_value_min=-self.bit_depth,
+            clip_value_max=self.bit_depth - 1
+        )
+
+
+class UnboundedAttackConstructor(AbstractAttackConstructor):
+    """
+    Construct an unbounded attack with no constraints.
+    ----------------------------------------------------------------------------
+
+    :param sess: a tensorflow session object
+    :param batch: the current batch of input data to run the attack with,
+        a cleverspeech.data.ingress.batch_generators.batch object
+    :param feeds: the input feeds for the tensorflow graph (references between
+        the tensorflow graph placeholders and batch data), a
+        cleverspeech.data.ingress.Feeds object
+    """
+
+    def __init__(self, sess, batch, feeds, bit_depth=2 ** 15):
+
+        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+
+    def add_perturbation_subgraph(self, graph, *args, **kwargs):
+        """
+        Add a perturbation variables to the attack graph.
+
+        :param graph: an uninitialised reference to a
+            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
+        :param args: any args with which are required to initialise the class
+        :param kwargs: any optional args with which to initialise the class
+        :return: None
+        """
+        self.delta_graph = graph(
+            self.sess,
+            self.batch,
+            *args,
+            **kwargs,
+        )
+
+        self.perturbations = self.delta_graph.final_deltas
+
+        # clip example to valid range
+        self.adversarial_examples = tf.clip_by_value(
+            self.perturbations + self.placeholders.audios,
+            clip_value_min=-self.bit_depth,
+            clip_value_max=self.bit_depth - 1
+        )
+
+
+class CTCPathSearchConstructor(AbstractAttackConstructor):
+    """
+    Construct an unbounded attack with no constraints.
+    ----------------------------------------------------------------------------
+
+    :param sess: a tensorflow session object
+    :param batch: the current batch of input data to run the attack with,
+        a cleverspeech.data.ingress.batch_generators.batch object
+    :param feeds: the input feeds for the tensorflow graph (references between
+        the tensorflow graph placeholders and batch data), a
+        cleverspeech.data.ingress.Feeds object
+    """
+
+    def __init__(self, sess, batch, feeds, bit_depth=2 ** 15):
+
+        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+        self.graph = None
+
+    def add_perturbation_subgraph(self, graph, *args, **kwargs):
+        """
+        Add a perturbation variables to the attack graph.
+
+        :param graph: an uninitialised reference to a
+            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
+        :param args: any args with which are required to initialise the class
+        :param kwargs: any optional args with which to initialise the class
+        :return: None
+        """
+        self.graph = graph(
+            self.sess,
+            self.batch,
+            *args,
+            **kwargs,
+        )

@@ -5,12 +5,6 @@ TODO: Move hard constraint and adversarial example steps out to Constructors
 
 TODO: Rename to PerturbationsSubGraph
 
-TODO: Functional? Only need opt_vars, raw + final deltas (no class state)
-
-TODO: Add rounding() method **here**, not in Procedures!
-
-
-
 --------------------------------------------------------------------------------
 """
 
@@ -24,21 +18,14 @@ from cleverspeech.graph.Placeholders import Placeholders
 from cleverspeech.utils.Utils import np_arr, lcomp
 
 
-class AbstractVariableGraph(ABC):
+class AbstractPerturbationSubGraph(ABC):
     """
     Abstract Base Class to define how an adversarial examples are created.
     Mostly to get tensorflow to do x_{adv} = x + delta correctly when working
     in batches by applying masks etc.
 
-    TODO: The hard constraint shouldn't be applied in AbstractVariableGraph.
-
-    TODO: Rename to AbstractPerturbationsGraph.
-
     :param sess: a tensorflow Session object
     :param batch: a cleverspeech.data.ingress.batch_generators.batch object
-    :param hard_constraint: a cleverspeech.graph.Constraints object to clip the
-           perturbation, according to Dist(delta) < tau
-    :param placeholders: optional custom tensorflow placeholders
     """
 
     @abstractmethod
@@ -65,13 +52,13 @@ class AbstractVariableGraph(ABC):
                     m.append(0)
             yield m
 
-    def __init__(self, sess, batch):
+    def __init__(self, sess, batch, bit_depth=2**15):
 
         batch_size = batch.size
         max_len = batch.audios["max_samples"]
         act_lengths = batch.audios["n_samples"]
 
-        self.bit_depth = 2**15
+        self.__bit_depth = bit_depth
         self.raw_deltas = None
         self.opt_vars = None
 
@@ -93,8 +80,8 @@ class AbstractVariableGraph(ABC):
 
         # Restrict delta to valid space before applying constraints
 
-        lower = -self.bit_depth
-        upper = self.bit_depth - 1
+        lower = -self.__bit_depth
+        upper = self.__bit_depth - 1
 
         self.final_deltas = tf.clip_by_value(
             deltas,
@@ -166,8 +153,8 @@ class AbstractVariableGraph(ABC):
         def random_uniform_func(delta):
             rand_uni = tf.random_uniform(
                 delta.shape,
-                minval=-bit_depth_percent * self.bit_depth,
-                maxval=bit_depth_percent * self.bit_depth,
+                minval=-bit_depth_percent * self.__bit_depth,
+                maxval=bit_depth_percent * self.__bit_depth,
                 dtype=tf.float32
             )
             return delta + rand_uni
@@ -176,7 +163,7 @@ class AbstractVariableGraph(ABC):
         sess.run(self.deltas_apply(deltas, random_uniform_func))
 
 
-class Independent(AbstractVariableGraph):
+class Independent(AbstractPerturbationSubGraph):
     """
     This graph creates a batch of B perturbations which are combined with B
     optimisers to directly optimise each delta_b with optimiser_b so that each
@@ -231,7 +218,7 @@ class Independent(AbstractVariableGraph):
         return assign_ops
 
 
-class Batch(AbstractVariableGraph):
+class Batch(AbstractPerturbationSubGraph):
     """
     This graph creates a batch of B perturbations to be optimised by a single
     optimiser. This seems to have side effects such as learning rates being

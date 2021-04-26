@@ -1,4 +1,4 @@
-from cleverspeech.graph import GraphConstructor
+from cleverspeech.graph import AttackConstructors
 from cleverspeech.graph import Constraints
 from cleverspeech.graph import PerturbationSubGraphs
 from cleverspeech.graph import Losses
