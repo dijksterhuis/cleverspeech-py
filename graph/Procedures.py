@@ -1,3 +1,14 @@
+"""
+Procedures govern **how** an attack will be run, i.e. how to update a bound (if
+doing an evasion attack), when to run a decoding step (if at all) and such like.
+
+Generally speaking, Procedures do a lot of the heavy lifting when it comes to
+actually doing an attack.
+
+--------------------------------------------------------------------------------
+"""
+
+
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
@@ -5,14 +16,18 @@ from cleverspeech.utils.Utils import l_map
 
 
 class AbstractProcedure(ABC):
-    def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
-        """
-        Base class that sets up a wealth of stuff to execute the attack over a
-        number of iterations.
-        This class should never be initialised by itself, it should always be
-        extended. See examples below.
+    """
+    Base class that sets up a wealth of stuff to execute the attack over a
+    number of iterations.
+    This class should never be initialised by itself, it should always be
+    extended. See examples below.
 
-        """
+    :param: attack: an attack graph
+    :param: steps: number of iterations to run the attack for
+    :param: decode_step: when to stop and check a current decoding
+
+    """
+    def __init__(self, attack, steps: int = 5000, decode_step: int = 10):
 
         assert type(steps) in [float, int]
         assert type(decode_step) in [float, int]
@@ -27,7 +42,7 @@ class AbstractProcedure(ABC):
         """
         We must wait to initialise the optimiser so that we can initialise only
         the attack variables (i.e. not the deepspeech ones).
-        ========================================================================
+
         This must be called in **EVERY** child classes' __init__() method so we
         can do the CTCAlign* procedures (special case).
         """
@@ -60,7 +75,7 @@ class AbstractProcedure(ABC):
     def do_warm_up(self):
         """
         Should anything else be done before we start?
-        ========================================================================
+
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
 
@@ -71,7 +86,7 @@ class AbstractProcedure(ABC):
     def decode_step_logic(self):
         """
         Should we do any post optimisation + pre-decoding processing?
-        ========================================================================
+
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
 
@@ -118,6 +133,9 @@ class AbstractProcedure(ABC):
     def get_current_attack_state(self):
         """
         Get the current values of a bunch of attack graph variables.
+
+        TODO: This should live in cleverspeech.data.egress!!!
+
         """
 
         a, b = self.attack, self.attack.batch
@@ -278,7 +296,7 @@ class AbstractProcedure(ABC):
 class Unbounded(AbstractProcedure):
     """
     Never update the constraint or loss weightings.
-    ========================================================================
+
     Useful to validate that an attack works correctly as all unbounded
     attacks should eventually find successful adversarial examples.
     """
@@ -323,7 +341,7 @@ class Unbounded(AbstractProcedure):
 class HardcoreMode(Unbounded):
     """
     Optimise forever (or until you KeyboardInterrupt).
-    ========================================================================
+
     Useful for development: leave it running overnight to see how long an
     extreme optimisation case takes to finish.
     """
@@ -363,7 +381,7 @@ class HardcoreMode(Unbounded):
 class UpdateOnSuccess(AbstractProcedure):
     """
     MixIn to update bounds and loss weightings.
-    ========================================================================
+
     This class should never be initialised by itself, it should always be
     extended.
     """
@@ -401,6 +419,9 @@ class UpdateOnSuccess(AbstractProcedure):
 
 
 class UpdateOnDecoding(UpdateOnSuccess):
+    """
+    Perform updates when decoding matches a target transcription.
+    """
     def __init__(self, attack, *args, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
@@ -425,6 +446,10 @@ class UpdateOnDecoding(UpdateOnSuccess):
 
 
 class UpdateOnLoss(UpdateOnSuccess):
+    """
+    Perform updates when loss reaches a specified threshold.
+    """
+
     def __init__(self, attack, *args, loss_lower_bound=10.0, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
@@ -452,6 +477,10 @@ class UpdateOnLoss(UpdateOnSuccess):
 
 
 class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
+    """
+    Perform updates when deepspeech decoder log probs reach a specified
+    threshold.
+    """
     def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
@@ -517,16 +546,42 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
 
 
 class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
+    """
+    For CTC Alignment Search attacks.
+
+    Update when current decoding matches the target transcription.
+    """
     pass
 
 
 class CTCAlignUnbounded(Unbounded, CTCAlignMixIn):
+    """
+    For CTC Alignment Search attacks.
+
+    Never update the constraint or loss weightings.
+
+    Useful to validate that an attack works correctly as all unbounded
+    attacks should eventually find successful adversarial examples.
+    """
     pass
 
 
 class CTCAlignUpdateOnLoss(UpdateOnLoss, CTCAlignMixIn):
+    """
+    For CTC Alignment Search attacks.
+
+    Perform updates when loss reaches a specified threshold.
+    """
     pass
 
 
 class CTCAlignHardcoreMode(HardcoreMode, CTCAlignMixIn):
+    """
+    For CTC Alignment Search attacks.
+
+    Optimise forever (or until you KeyboardInterrupt).
+
+    Useful for development: leave it running overnight to see how long an
+    extreme optimisation case takes to finish.
+    """
     pass

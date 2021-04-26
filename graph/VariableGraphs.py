@@ -1,3 +1,20 @@
+"""
+Variable graphs determine how to create perturbations.
+
+TODO: Move hard constraint and adversarial example steps out to Constructors
+
+TODO: Rename to PerturbationsSubGraph
+
+TODO: Functional? Only need opt_vars, raw + final deltas (no class state)
+
+TODO: Add rounding() method **here**, not in Procedures!
+
+
+
+--------------------------------------------------------------------------------
+"""
+
+
 import tensorflow as tf
 import numpy as np
 
@@ -8,6 +25,21 @@ from cleverspeech.utils.Utils import np_arr, lcomp
 
 
 class AbstractVariableGraph(ABC):
+    """
+    Abstract Base Class to define how an adversarial examples are created.
+    Mostly to get tensorflow to do x_{adv} = x + delta correctly when working
+    in batches by applying masks etc.
+
+    TODO: The hard constraint shouldn't be applied in AbstractVariableGraph.
+
+    TODO: Rename to AbstractPerturbationsGraph.
+
+    :param sess: a tensorflow Session object
+    :param batch: a cleverspeech.data.ingress.batch_generators.batch object
+    :param hard_constraint: a cleverspeech.graph.Constraints object to clip the
+           perturbation, according to Dist(delta) < tau
+    :param placeholders: optional custom tensorflow placeholders
+    """
 
     @abstractmethod
     def create_perturbations(self, batch_size, max_len):
@@ -21,6 +53,7 @@ class AbstractVariableGraph(ABC):
 
         :param lengths: number of samples per audio example in a batch
         :param max_len: maximum numb. of samples of audio examples in a batch
+
         :yield: 0/1 valued mask vector of length max_len
         """
         for l in lengths:
@@ -34,12 +67,6 @@ class AbstractVariableGraph(ABC):
 
     def __init__(self, sess, batch, hard_constraint, placeholders=None):
 
-        """
-        :param sess: tf.Session which will be used in the attack.
-        :param batch: A batch of data.
-        :param hard_constraint: the constraint (Lnorm) used in the attack.
-
-        """
         batch_size = batch.size
         max_len = batch.audios["max_samples"]
         act_lengths = batch.audios["n_samples"]
@@ -103,11 +130,25 @@ class Independent(AbstractVariableGraph):
     optimisers to directly optimise each delta_b with optimiser_b so that each
     example is optimised independently of other items in a batch
 
-    To be used with *IndependentOptimiser classes. Each delta_b is optimised by
-    the same optimiser. Uses more GPU memory than BatchVariableGraph.
+    To be used with classes that inherit the AbstractIndependentOptimiser ABC
+    class.
+
+    Uses more GPU memory than a Batch graph.
+
+    TODO: Rename to IndependentPerturbationsSubGraph
+
     """
 
     def create_perturbations(self, batch_size, max_len):
+        """
+        Method to generate the perturbations as a B x [N] vectors for a
+        independent variable graph.
+
+        :param batch_size: size of the current batch
+        :param max_len: maximum number of audio samples (don't forget padding!)
+        :return: stacked raw_deltas vectors, a tf.Variable of size [B x N] with
+            type float32
+        """
 
         self.raw_deltas = []
 
@@ -128,14 +169,27 @@ class Independent(AbstractVariableGraph):
 
 class Batch(AbstractVariableGraph):
     """
-    This graph creates a batch of B perturbations.
+    This graph creates a batch of B perturbations to be optimised by a single
+    optimiser. This seems to have side effects such as learning rates being
+    affected by constraint updates on other examples in a batch
 
-    To be used with *BatchOptimiser classes. Each delta_b is optimised by
-    the same optimiser. This can have side effects such as learning rates
-    being affected by constraint updates on other examples in a batch, but
-    it also uses less GPU memory!
+    To be used with optimisers that inherit from the AbstractBatchOptimiser
+    class.
+
+    Uses less GPU memory than the Independent graph.
+
+    TODO: Rename to BatchPerturbationsSubGraph
+
     """
     def create_perturbations(self, batch_size, max_len):
+        """
+        Method to generate the perturbations as a [B x N] matrix for a batch
+        variable graph.
+
+        :param batch_size: size of the current batch
+        :param max_len: maximum number of audio samples (don't forget padding!)
+        :return: raw_deltas, a tf.Variable of size [B x N] with type float32
+        """
         self.raw_deltas = tf.Variable(
             tf.zeros([batch_size, max_len], dtype=tf.float32),
             trainable=True,
@@ -152,6 +206,11 @@ class Synthesis:
     """
     Attack graph from 2018 Carlini & Wager Targeted Audio Attack modified to
     create perturbations from differentiable synthesis methods.
+
+    TODO: Rename to SynthesisPerturbationsSubGraph
+
+    TODO: Make this inherit from AbstractPerturbationGraph
+
     """
 
     @staticmethod

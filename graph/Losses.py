@@ -1,3 +1,20 @@
+"""
+These are the "stable" adversarial loss/objective functions used to generate
+adversarial examples.
+
+**IMPORTANT**: These loss functions do not perform perturbation
+minimisation, they only make examples adversarial (it is a common misconception
+that adversarial examples should be minimally perturbed -- Biggio et al. 2017)
+
+"stable" means they've been battle tested whilst living in some custom_loss.py
+script for a while and are a valid way of running an attack.
+
+The results, of course, depend on the loss function!
+
+--------------------------------------------------------------------------------
+"""
+
+
 import tensorflow as tf
 import numpy as np
 
@@ -5,7 +22,18 @@ from cleverspeech.utils.Utils import log
 
 
 class BaseLoss:
-    def __init__(self, sess, batch_size, weight_settings=(None, None)):
+    """
+    Abstract base loss which enables us to perform any loss weightings applied
+    during optimisation uniformly across all child classes.
+
+    :param: sess: a tensorflow session object.
+    :param: batch_size: the size of the input batch.
+    :param: weight_settings: how to weight this loss object, tuple of floats
+        with length 2 where the first entry is the initial weighting and the
+        second entry is how much to add to the current weighting after an
+        update.
+    """
+    def __init__(self, sess, batch_size: int, weight_settings: tuple = (None, None)):
 
         assert type(weight_settings) in [list, tuple]
         assert all(type(t) in [float, int] for t in weight_settings)
@@ -28,12 +56,23 @@ class BaseLoss:
 
         self.increment = float(increment)
 
-    def update_one(self, idx):
+    def update_one(self, idx: int):
+        """
+        Apply the loss weighting updates to only one example in a batch.
+
+        :param idx: the batch index of the example to update
+        """
         weights = self.__sess.run(self.weights)
         weights[idx] += self.increment
         self.__sess.run(self.weights.assign(weights))
 
-    def update_many(self, batch_successes):
+    def update_many(self, batch_successes: list):
+        """
+        Apply the loss weighting updates to only one example in a batch.
+
+        :param batch_successes: a list of True/False false indicating whether
+            the loss weighting should be updated for each example in a batch
+        """
 
         weights = self.__sess.run(self.weights)
 
@@ -118,6 +157,10 @@ class CTCLossV2(BaseLoss):
 
 
 class EntropyLoss(BaseLoss):
+    """
+    Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
+    to try to detect adversarial examples.
+    """
     def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
 
         assert type(weight_settings) in list, tuple
@@ -138,7 +181,9 @@ class EntropyLoss(BaseLoss):
 
 class SampleL2Loss(BaseLoss):
     """
-    Modified CTC Loss with L2 from the original code.
+    Normalised L2 loss component from https://arxiv.org/abs/1801.01944
+
+    Use the original example's L2 norm for normalisation.
     """
     def __init__(self, attack_graph, weight_settings=(1.0, 1.0)):
 
@@ -161,12 +206,16 @@ class SampleL2Loss(BaseLoss):
 
 
 class BaseLogitDiffLoss(BaseLoss):
-    def __init__(self, attack_graph, target_argmax, softmax=False, weight_settings=(None, None)):
+    """
+    Base class that can be used for logits difference losses, like CW f_6
+    and the adaptive kappa variant.
 
-        """
-        Base class that can be used for logits difference losses, like CW f_6
-        and the adaptive kappa variant.
-        """
+    :param: attack_graph:
+    :param: target_argmax:
+    :param: softmax:
+    :param: weight_settings:
+    """
+    def __init__(self, attack_graph, target_argmax, softmax=False, weight_settings=(None, None)):
 
         super().__init__(
             attack_graph.sess,
@@ -232,43 +281,38 @@ class BiggioMaxMin(BaseLogitDiffLoss):
 
 
 class CWImproved(BaseLoss):
+    """
+    Improved Loss as per the original work in https://arxiv.org/abs/1801.01944
+
+    It should be noted that this was developed to create `more efficient`
+    adversarial examples -- ctc loss makes already certain logits more
+    adversarial without needing to.
+
+    **This formulation optimises until the target tokens are the most likely
+    class.**
+
+    We use the argmax of the raw logits (target alignment and current)
+    to figure out if the target character is currently the most likely.
+
+    If the target character isn't most likely, calculate the max difference
+    between the target and current logits. If the most likely character is:
+
+    - far more likely than the target then we get a big difference.
+    - only just more likely than the target then we get a small difference.
+
+    Otherwise, set the difference to -k (we set k=0). Using a negative k
+    means that the difference between already optimised characters (e.g. -1)
+    and yet to be optimised (e.g. 40) can be made much larger.
+
+    N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+    The loss can be >>> 0 for a successful decoding (e.g. 400)
+
+    :param attack_graph:
+    :param target_logits:
+    :param k:
+    :param weight_settings:
+    """
     def __init__(self, attack_graph, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
-        """
-        Low Confidence Adversarial Audio Loss as per the original work in
-        https://arxiv.org/abs/1801.01944
-
-        It should be noted that this was developed to create `more efficient`
-        adversarial examples -- ctc loss makes already certain logits more
-        adversarial without needing to.
-
-        **This formulation optimises until the target tokens are the most likely
-        class.**
-
-        We use the argmax of the raw logits (target alignment and current)
-        to figure out if the target character is currently the most likely.
-
-        If the target character isn't most likely, calculate the max difference
-        between the target and current logits:
-
-            - If the most likely character is far more likely than the target
-                then we get a big difference.
-
-            - If the most likely character is only just more likely than the
-                target then we get a small difference.
-
-        Otherwise, set the difference to -k (we set k=0). Using a negative k
-        means that the difference between already optimised characters (e.g. -1)
-        and yet to be optimised (e.g. 40) can be made much larger.
-
-        N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
-        The loss can be >>> 0 for a successful decoding (e.g. 400)
-
-        :param attack_graph:
-        :param target_logits:
-        :param importance:
-        :param k:
-        :param loss_weight:
-        """
 
         super().__init__(
             attack_graph.sess,
@@ -293,32 +337,34 @@ class CWImproved(BaseLoss):
 
 
 class CWMaxDiff(BaseLogitDiffLoss):
+    """
+    This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
+    clipping update method.
+
+    Difference of:
+
+    - target logits value (B)
+    - max other logits value (A -- most likely other)
+
+    Once B > A, then B is most likely and we can stop optimising.
+
+    Unless -k > B, then k acts as a confidence threshold and continues
+    optimisation.
+
+    This will push B to become even more likely.
+
+    N.B. This loss does *not* seems to conform to:
+        l(x + d, t) <= 0 <==> C(x + d) = t
+
+    But it does a much better job than the ArgmaxLowConfidence
+    implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
+
+    :param: attack_graph:
+    :param: target_logits:
+    :param: k:
+    :param: weight_settings:
+    """
     def __init__(self, attack_graph, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
-        """
-        This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
-        clipping update method.
-
-        Difference of:
-        - target logits value (B)
-        - max other logits value (A -- 2nd most likely)
-
-        Once  B > A, then B is most likely and we can stop optimising.
-
-        Unless -k > B, then k acts as a confidence threshold and continues
-        optimisation.
-
-        This will push B to become even less likely.
-
-        N.B. This loss does *not* seems to conform to:
-            l(x + d, t) <= 0 <==> C(x + d) = t
-
-        But it does a much better job than the ArgmaxLowConfidence
-        implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
-
-        TODO: This needs testing.
-        TODO: normalise to 0 <= x + d <= 1 and convert to tanh space for `change
-              of variable` optimisation
-        """
 
         super().__init__(
             attack_graph,
@@ -334,26 +380,33 @@ class CWMaxDiff(BaseLogitDiffLoss):
 
 
 class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
+    """
+    This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
+    using the gradient clipping update method.
+
+    Difference of:
+    - target logits value (B)
+    - max other logits value (A -- 2nd most likely)
+
+    Once  B > A, then B is most likely and we can stop optimising.
+
+    Unless -kappa > B, then kappa acts as a confidence threshold and continues
+    optimisation.
+
+    Where kappa is an adaptive value based on the results of the reference
+    function on the softmax vector values for that frame.
+
+    Basically, each frame step should have a different k constant, so we
+    calculate it adaptively based on the frame's probability distribution.
+
+    :param: attack_graph
+    :param: target_argmax
+    :param: k
+    :param: ref_fn
+    :param: weight_settings
+
+    """
     def __init__(self, attack_graph, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
-        """
-        This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
-        using the gradient clipping update method.
-
-        Difference of:
-        - target logits value (B)
-        - max other logits value (A -- 2nd most likely)
-
-        Once  B > A, then B is most likely and we can stop optimising.
-
-        Unless -kappa > B, then kappa acts as a confidence threshold and continues
-        optimisation.
-
-        Where kappa is an adaptive value based on the results of the reference
-        function on the softmax vector values for that frame.
-
-        Basically, each frame step should have a different k constant, so we
-        calculate it adaptively based on the frame's probability distribution.
-        """
 
         super().__init__(
             attack_graph,
@@ -385,15 +438,22 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
 
 class AlignmentsCTCLoss(BaseLoss):
     """
-    Adversarial CTC Loss that ignores the blank tokens for higher confidence.
-    Does not actually work for adversarial attacks as characters from target
-    transcription end up being placed in like `----o--o-oo-o----p- ...` which
-    merges down to `ooop ...`
+    Adversarial CTC Loss that uses an alignment as a target instead of a
+    transcription.
 
-    Only used to demonstrate that regular CTC loss can't do what we want without
-    further modification to the back-end (recursive) calculations.
+    This means we can perform maximum likelihood estimation optimisation for a
+    specified target alignment. But it is inefficient as we don't need all the
+    CTC rules if we have a known target alignment that maps to a target
+    transcription.
+
+    Does not work for target transcriptions on their own as they end up like
+    `----o--o-oo-o----p- ...` which merges down to `ooop ...` instead of `open`.
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+
+    :param: attack_graph:
+    :param: alignment
+    :param: weight_settings
     """
     def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
 
@@ -440,12 +500,16 @@ class AlignmentsCTCLoss(BaseLoss):
 
 
 class GreedyOtherAlignmentsCTCLoss(BaseLoss):
-    def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
+    """
+    Goal: Make all other logits values *less likely* by optimising with CTC
+    loss for all valid alignments *except* our target alignment.
 
-        """
-        Goal: Make all other logits values *less likely* by optimising with CTC
-        loss for all valid alignments *except* our target alignment.
-        """
+    :param: attack_graph
+    :param: alignment
+    :param: weight_settings
+
+    """
+    def __init__(self, attack_graph, alignment=None, weight_settings=(1.0, 1.0)):
 
         super().__init__(
             attack_graph.sess,

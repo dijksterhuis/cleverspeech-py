@@ -1,14 +1,29 @@
+"""
+These are tensorflow optimisers with some specific modifications that we need to
+get things working.
+
+Batchwise optimisers should only be used with the BatchwiseVariableGraph.
+Independent optimisers should only be used with the IndependentVariableGraph.
+
+TODO: Auto handle batch vs. indy depending on the pert. sub graph?
+
+TODO: self.attack.graph.opt_vars -> tf.Graph.TRAINABLE_VARIABLES ???
+
+--------------------------------------------------------------------------------
+"""
+
+
 import tensorflow as tf
 from cleverspeech.utils.Utils import lcomp
 from abc import ABC, abstractmethod
 
 
 class AbstractOptimiser(ABC):
+    """
+    :param attack: The current attack graph perform optimisation with.
+    :param learning_rate: Learning rate for optimiser (currently Adam)
+    """
     def __init__(self, attack, learning_rate=10.0):
-        """
-        :param attack: The current attack graph perform optimisation with.
-        :param learning_rate: Learning rate for optimiser (currently Adam)
-        """
 
         self.attack = attack
         self.learning_rate = learning_rate
@@ -22,9 +37,9 @@ class AbstractOptimiser(ABC):
         """
         Run the optimisation operation.
 
-        The second line resets the RNN cell's state so the current optimisation
-        step is not affected by the leftover cell state from previous
-        optimisation steps.
+        Resets the RNN cell's state before and after optimisation. Means that
+        other parts of the attack are not affected by the leftover cell state
+        from previous optimisation steps.
 
         :param feed: attack feed dict with relevant placeholder and data mapping
         """
@@ -38,6 +53,9 @@ class AbstractOptimiser(ABC):
 
 
 class AbstractIndependentOptimiser(AbstractOptimiser):
+    """
+    Creates B optimisers for all perturbations in a batch of size B.
+    """
     def __init__(self, attack, learning_rate=10.0):
 
         super().__init__(attack, learning_rate)
@@ -67,6 +85,9 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
 
 
 class AbstractBatchwiseOptimiser(AbstractOptimiser):
+    """
+    Creates one optimiser for all perturbations in a batch.
+    """
     def __init__(self, attack, learning_rate=10.0):
         super().__init__(attack, learning_rate)
 
@@ -89,10 +110,10 @@ class AbstractBatchwiseOptimiser(AbstractOptimiser):
 
 
 class GradientDescentIndependentOptimiser(AbstractIndependentOptimiser):
+    """
+    Gradient descent optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0):
-        """
-        Create gradient descent optimiser.
-        """
 
         super().__init__(attack, learning_rate)
 
@@ -108,10 +129,10 @@ class GradientDescentIndependentOptimiser(AbstractIndependentOptimiser):
 
 
 class AdamIndependentOptimiser(AbstractIndependentOptimiser):
+    """
+    Create an Adam optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, beta1=0.9, beta2=0.999, epsilon=1e-8,):
-        """
-        Create an Adam optimiser.
-        """
         super().__init__(attack, learning_rate)
 
         self.beta1s = []
@@ -132,10 +153,11 @@ class AdamIndependentOptimiser(AbstractIndependentOptimiser):
 
 
 class AdaGradIndependentOptimiser(AbstractIndependentOptimiser):
+    """
+    Create an AdaGrad optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momementum=0.9):
-        """
-        Create an AdaGrad optimiser.
-        """
+
         super().__init__(attack, learning_rate)
 
         self.momentum = momementum
@@ -149,10 +171,10 @@ class AdaGradIndependentOptimiser(AbstractIndependentOptimiser):
 
 
 class RMSPropIndependentOptimiser(AbstractIndependentOptimiser):
+    """
+    Create a RMSProp optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momementum=0.9):
-        """
-        Create a RMSProp optimiser.
-        """
 
         super().__init__(attack, learning_rate)
 
@@ -166,10 +188,10 @@ class RMSPropIndependentOptimiser(AbstractIndependentOptimiser):
 
 
 class MomentumIndependentOptimiser(AbstractIndependentOptimiser):
+    """
+    Create a Momentum optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momentum=0.9):
-        """
-        Create a Momentum optimiser.
-        """
         super().__init__(attack, learning_rate)
 
         self.momentum = momentum
@@ -183,10 +205,10 @@ class MomentumIndependentOptimiser(AbstractIndependentOptimiser):
 
 
 class GradientDescentBatchwiseOptimiser(AbstractBatchwiseOptimiser):
+    """
+    Create gradient descent optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0):
-        """
-        Create gradient descent optimiser.
-        """
 
         super().__init__(attack, learning_rate)
 
@@ -196,10 +218,10 @@ class GradientDescentBatchwiseOptimiser(AbstractBatchwiseOptimiser):
 
 
 class AdamBatchwiseOptimiser(AbstractBatchwiseOptimiser):
+    """
+    Create an Adam optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, beta1=0.9, beta2=0.999, epsilon=1e-8,):
-        """
-        Create an Adam optimiser.
-        """
         super().__init__(attack, learning_rate)
 
         self.optimizer = tf.train.AdamOptimizer(
@@ -211,10 +233,10 @@ class AdamBatchwiseOptimiser(AbstractBatchwiseOptimiser):
 
 
 class AdaGradBatchwiseOptimiser(AbstractBatchwiseOptimiser):
+    """
+    Create an AdaGrad optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momementum=0.9):
-        """
-        Create an AdaGrad optimiser.
-        """
         super().__init__(attack, learning_rate)
 
         self.momentum = momementum
@@ -225,10 +247,10 @@ class AdaGradBatchwiseOptimiser(AbstractBatchwiseOptimiser):
 
 
 class RMSPropBatchwiseOptimiser(AbstractBatchwiseOptimiser):
+    """
+    Create a RMSProp optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momementum=0.9):
-        """
-        Create a RMSProp optimiser.
-        """
 
         super().__init__(attack, learning_rate)
 
@@ -240,10 +262,10 @@ class RMSPropBatchwiseOptimiser(AbstractBatchwiseOptimiser):
 
 
 class MomentumBatchwiseOptimiser(AbstractBatchwiseOptimiser):
+    """
+    Create a Momentum optimiser.
+    """
     def __init__(self, attack, learning_rate=10.0, momentum=0.9):
-        """
-        Create a Momentum optimiser.
-        """
         super().__init__(attack, learning_rate)
 
         self.momentum = momentum

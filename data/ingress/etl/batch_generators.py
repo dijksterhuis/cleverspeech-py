@@ -1,9 +1,29 @@
+"""
+A batch generator creates a batch (funnily enough) with generators (obviously).
+
+This means we can run multiple attacks at once by starting new server
+subprocesses for each attack.
+
+--------------------------------------------------------------------------------
+"""
+
+
 from cleverspeech.data.ingress.etl import etls
 from cleverspeech.data.ingress.etl.utils import BatchGen
 from cleverspeech.utils.Utils import log, l_map
 
 
 class Batch:
+    """
+    A batch of data to use in an attack.
+
+    TODO: Should Batch be a class, or a dictionary?!
+
+    :param size: the number of audio examples
+    :param audios: the audio data (and metadata)
+    :param targets: the targeting data (and metadata)
+    :param trues: the true transcriptions for each example
+    """
     def __init__(self, size, audios, targets, trues):
 
         self.size = size
