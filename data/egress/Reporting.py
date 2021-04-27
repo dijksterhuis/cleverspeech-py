@@ -46,7 +46,7 @@ def start_deepspeech_package_model():
     lm_file_path = os.path.join(
         deepspeech_files_path, "lm.binary"
     )
-    trie_file_path  = os.path.join(
+    trie_file_path = os.path.join(
         deepspeech_files_path, "trie"
     )
 
@@ -107,17 +107,26 @@ def get_file_metadata(json_file_path):
     exp = directory_split[result_dir_index+1]
     params = directory_split[result_dir_index + 2: -1]
 
-    hyper_params = {
-        "param_{}".format(idx): param for idx, param in enumerate(params)
-    }
+    # standardise the maximum number of params that we can use. 10 is a lot!
 
-    metadata = {
-        "exp": exp,
-        "hyperparams": hyper_params,
-        "created": created_time,
-        "modified": modified_time,
-        "sample": os.path.basename(json_file_path).rstrip(".json")
-    }
+    if len(params) < 10:
+        params += [""] * (10-len(params))
+
+    hyper_params = OrderedDict(
+        [
+            ("param_{}".format(idx), param) for idx, param in enumerate(params)
+        ]
+    )
+
+    metadata = OrderedDict(
+        [
+            ("exp", exp),
+            ("hyperparams", hyper_params),
+            ("created", created_time),
+            ("modified", modified_time),
+            ("sample", os.path.basename(json_file_path).rstrip(".json")),
+        ]
+    )
     return metadata
 
 
@@ -153,23 +162,31 @@ def preprocess_audio_data(delta, original, adv):
     itu_adv = NoiseWeightings.itu_weighting(adv)
 
     # return *everything* as 16 bit int arrays
-    outs = {
-        "deltas": {
-            "itu": itu_delta.astype(np.int16),
-            "a": a_delta.astype(np.int16),
-            "none": delta.astype(np.int16),
-        },
-        "advs": {
-            "itu": itu_adv.astype(np.int16),
-            "a": a_adv.astype(np.int16),
-            "none": adv.astype(np.int16),
-        },
-        "originals": {
-            "itu": itu_original.astype(np.int16),
-            "a": a_original.astype(np.int16),
-            "none": original.astype(np.int16),
-        },
-    }
+    outs = OrderedDict(
+        [
+            (
+                "deltas", OrderedDict([
+                    ("itu", itu_delta.astype(np.int16)),
+                    ("a", a_delta.astype(np.int16)),
+                    ("none", delta.astype(np.int16)),
+                ]),
+            ),
+            (
+                "advs", OrderedDict([
+                    ("itu", itu_adv.astype(np.int16)),
+                    ("a", a_adv.astype(np.int16)),
+                    ("none", adv.astype(np.int16)),
+                ]),
+            ),
+            (
+                "originals", OrderedDict([
+                    ("itu", itu_original.astype(np.int16)),
+                    ("a", a_original.astype(np.int16)),
+                    ("none", original.astype(np.int16)),
+                ]),
+            ),
+        ]
+    )
 
     weights = ["itu", "a", "none"]
     audio_file_names = ["deltas", "advs", "originals"]
@@ -266,36 +283,51 @@ def generate_stats_file(indir):
             data["advs"],
         )
 
-        client_decodings = {
-            k: ds.stt(audio_data[k]["none"], 16000).replace(" ", "=") for k in audio_file_names
-        }
+        client_decodings = OrderedDict(
+            [
+                (k, ds.stt(audio_data[k]["none"], 16000).replace(" ", "=")) for k in audio_file_names
+            ]
+        )
 
-        decodings = {
-            "client": client_decodings,
-            "cleverspeech": {
-                "decoding": data["decodings"][0],
-                "target": data["phrases"][0],
-                "log_probs": data["probs"][0],
-            }
-        }
+        decodings = OrderedDict(
+            [
+                ("client", client_decodings),
+                ("cleverspeech",
+                    OrderedDict(
+                        [
+                            ("decoding", data["decodings"][0]),
+                            ("target", data["phrases"][0]),
+                            ("log_probs", data["probs"][0]),
+                        ]
+                    )
+                )
+            ]
+        )
 
-        misc_data = {
-            "step": data["step"][0],
-            "loss": data["total_loss"][0],
-            "n_samples": data["n_samples"][0],
-            "real_feats": data["real_feats"][0],
-            "bounds": {
-                "raw": data["bounds_raw"][0],
-                "eps": data["bounds_eps"][0],
-                "initial": data["initial_taus"][0],
-            },
-            "distances": {
-                "raw": data["distances_raw"][0],
-                "eps": data["distances_eps"][0],
-            },
-            "decode": decodings
-
-        }
+        misc_data = OrderedDict(
+            [
+                ("step", data["step"][0]),
+                ("loss", data["total_loss"][0]),
+                ("n_samples", data["n_samples"][0]),
+                ("real_feats", data["real_feats"][0]),
+                ("bounds", OrderedDict(
+                        [
+                            ("raw", data["bounds_raw"][0]),
+                            ("eps", data["bounds_eps"][0]),
+                            ("initital", data["initial_taus"][0]),
+                        ]
+                    )
+                 ),
+                ("distances", OrderedDict(
+                    [
+                        ("raw", data["distances_raw"][0]),
+                        ("eps", data["distances_eps"][0]),
+                    ]
+                )
+                 ),
+                ("decode", decodings),
+            ]
+        )
 
         def calc_lnorm(d, norm_int, weight):
             for audio_file in audio_file_names:
@@ -306,53 +338,66 @@ def generate_stats_file(indir):
                 )
                 yield audio_file, value
 
-        lnorm_keys = {
-            "l1": 1,
-            "l2": 2,
-            "linf": np.inf,
-        }
+        lnorm_keys = OrderedDict([
+            ("l1", 1),
+             ("l2", 2),
+             ("linf", np.inf),
+        ])
 
-        l_norms = {
-            norm_str:
-                {
-                    weight: {
-                        file_k: v for file_k, v in calc_lnorm(audio_data, norm_int, weight)
-                    } for weight in weights
-                } for norm_str, norm_int in lnorm_keys.items()
-        }
+        l_norms = OrderedDict([
+            (norm_str,
+                OrderedDict([
+                    (weight,
+                        OrderedDict([
+                            (file_k, v) for file_k, v in calc_lnorm(
+                                audio_data,
+                                norm_int,
+                                weight
+                            )
+                        ])
+                     ) for weight in weights
+                ])
+            ) for norm_str, norm_int in lnorm_keys.items()
+        ])
 
-        snr_analysis_fns = {
-            "snr_energy_db": DetectionMetrics.snr_energy_db,
-            "snr_energy": DetectionMetrics.snr_energy,
-            "snr_pow_db": DetectionMetrics.snr_power_db,
-            "snr_pow": DetectionMetrics.snr_power,
-            "snr_seg_db": DetectionMetrics.snr_segmented,
-        }
+        snr_analysis_fns = OrderedDict([
+            ("snr_energy_db", DetectionMetrics.snr_energy_db),
+            ("snr_energy", DetectionMetrics.snr_energy),
+            ("snr_pow_db", DetectionMetrics.snr_power_db),
+            ("snr_pow", DetectionMetrics.snr_power),
+            ("snr_seg_db", DetectionMetrics.snr_segmented),
+        ])
 
-        snr_stats = {
-            snr_key: {
-                weight: snr_fn(
-                    audio_data["deltas"][weight], audio_data["originals"][weight]
-                ) for weight in weights
-            } for snr_key, snr_fn in snr_analysis_fns.items()
-        }
+        snr_stats = OrderedDict([
+            (snr_key,
+                OrderedDict([
+                    (
+                        weight,
+                        snr_fn(
+                            audio_data["deltas"][weight],
+                            audio_data["originals"][weight]
+                        )
+                    ) for weight in weights
+                ])
+             ) for snr_key, snr_fn in snr_analysis_fns.items()
+        ])
 
-        dsp_analysis_fns = {
-            "rms_amp_db": DetectionMetrics.rms_amplitude_db,
-            "rms_amp": DetectionMetrics.rms_amplitude,
-            "energy_db": DetectionMetrics.energy_db,
-            "energy": DetectionMetrics.energy,
-            "power_db": DetectionMetrics.power_db,
-            "power": DetectionMetrics.power,
-        }
+        dsp_analysis_fns = OrderedDict([
+            ("rms_amp_db", DetectionMetrics.rms_amplitude_db),
+            ("rms_amp", DetectionMetrics.rms_amplitude),
+            ("energy_db", DetectionMetrics.energy_db),
+            ("energy", DetectionMetrics.energy),
+            ("power_db", DetectionMetrics.power_db),
+            ("power", DetectionMetrics.power),
+        ])
 
-        dsp_stats = {
-            dsp_key: {
-                weight: {
-                    audio_file : dsp_fn(audio_data[audio_file][weight]) for audio_file in audio_file_names
-                } for weight in weights
-            } for dsp_key, dsp_fn in dsp_analysis_fns.items()
-        }
+        dsp_stats = OrderedDict([
+            (dsp_key, OrderedDict([
+                (weight, OrderedDict([
+                    (audio_file, dsp_fn(audio_data[audio_file][weight])) for audio_file in audio_file_names
+                ])) for weight in weights
+            ])) for dsp_key, dsp_fn in dsp_analysis_fns.items()
+        ])
 
         stats = metadata
         stats.update(misc_data)
