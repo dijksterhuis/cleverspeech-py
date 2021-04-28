@@ -439,7 +439,6 @@ class UnboundedResults:
                 try:
                     d[idx][k] = batched_results[k][idx]
                 except IndexError:
-                    print(idx, k, batched_results[k])
                     raise
 
         return d
@@ -469,12 +468,8 @@ class UnboundedResults:
                 ("loss{}".format(i), l) for i, l in enumerate(example_data["losses"])
             ]
 
-            example_data["linfs"] = [
-                lnorm(x, norm=np.inf) for x in example_data["deltas"]
-            ]
-            example_data["l2s"] = [
-                lnorm(x, norm=2) for x in example_data["deltas"]
-            ]
+            example_data["linfs"] = lnorm(example_data["deltas"], norm=np.inf)
+            example_data["l2s"] = lnorm(example_data["deltas"], norm=2)
 
             # convert spaces to "=" so we can tell what's what in logs
             example_data["decodings"] = example_data["decodings"].replace(" ", "=")
@@ -490,10 +485,10 @@ class UnboundedResults:
                 *all_losses,
                 ("cer", cer),
                 ("wer", wer),
-                ("targ", example_data["phrases"]),
-                ("decode", example_data["decodings"]),
                 ("l2", example_data["l2s"]),
                 ("linf", example_data["linfs"]),
+                ("targ", example_data["phrases"]),
+                ("decode", example_data["decodings"]),
             ]
 
             log_result.update(
