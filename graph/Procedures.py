@@ -191,6 +191,15 @@ class Unbounded(AbstractProcedure):
         self.finished = False
 
     def check_for_successful_examples(self):
+        """
+        Check whether current adversarial decodings match the target phrase,
+        yielding True if so, False if not.
+
+        Additionally, if all the decodings match all the target phrases then set
+        `self.finished = True` to stop the attack.
+
+        :return: bool
+        """
 
         decodings, _ = self.attack.victim.inference(
             self.attack.batch,
@@ -201,28 +210,29 @@ class Unbounded(AbstractProcedure):
 
         phrases = self.attack.batch.targets["phrases"]
 
-        z = zip(decodings, phrases)
+        z1, z2 = zip(decodings, phrases), zip(decodings, phrases)
 
-        self.finished = all([left == right for left, right in z])
-
-        for idx, (left, right) in enumerate(z):
-
+        for idx, (left, right) in enumerate(z1):
             if left == right:
                 yield True
 
             else:
                 yield False
 
+        self.finished = all(
+            [left == right for left, right in z2]
+        )
+
     def steps_rule(self):
         """
         Stop optimising once everything in a batch is successful, or we've hit a
         maximum number of iteration steps.
         """
-        return self.finished is not True or self.current_step < self.steps
+        return self.finished is not True and self.current_step < self.steps
 
     def post_results_hook(self):
         """
-        if successful do nothing
+        do nothing
         """
         pass
 
