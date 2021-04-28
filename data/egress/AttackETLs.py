@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
+from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 from cleverspeech.data.egress.metrics.ErrorRates import character_error_rate
@@ -212,23 +213,7 @@ def convert_unbounded_attack_state_to_dict(attack):
     return batched_results
 
 
-class EvasionResults:
-
-    def __init__(self, extra_logging_keys=None):
-        self.extra_logging_keys = extra_logging_keys
-
-        self.logging_keys = [
-            "step",
-            "basenames",
-            "success",
-            "total_loss",
-            "bounds_eps",
-            "distances_eps",
-            "probs",
-        ]
-        if self.extra_logging_keys is not None:
-            self.logging_keys += self.extra_logging_keys
-
+class AbstractResults(ABC):
     @staticmethod
     def get_argmax_alignment(tokens, logits):
         argmax_alignment = [tokens[i] for i in np.argmax(logits, axis=1)]
@@ -292,6 +277,34 @@ class EvasionResults:
     @staticmethod
     def fix_nestings(y):
         return [x[0] for x in y]
+
+    @abstractmethod
+    def transpose(self, batched_results):
+        pass
+
+    @abstractmethod
+    def gen(self, batched_results):
+        pass
+
+
+class EvasionResults(AbstractResults):
+
+    def __init__(self, extra_logging_keys=None):
+
+        self.logging_keys = [
+            "step",
+            "basenames",
+            "success",
+            "total_loss",
+            "bounds_eps",
+            "distances_eps",
+            "probs",
+        ]
+
+        self.extra_logging_keys = extra_logging_keys
+
+        if self.extra_logging_keys is not None:
+            self.logging_keys += self.extra_logging_keys
 
     def transpose(self, batched_results):
 
@@ -369,10 +382,9 @@ class EvasionResults:
                 yield step_logs, None
 
 
-class UnboundedResults:
+class UnboundedResults(AbstractResults):
 
     def __init__(self, extra_logging_keys=None):
-        self.extra_logging_keys = extra_logging_keys
 
         self.logging_keys = [
             "step",
@@ -381,71 +393,11 @@ class UnboundedResults:
             "total_loss",
             "probs",
         ]
+
+        self.extra_logging_keys = extra_logging_keys
+
         if self.extra_logging_keys is not None:
             self.logging_keys += self.extra_logging_keys
-
-    @staticmethod
-    def get_argmax_alignment(tokens, logits):
-        argmax_alignment = [tokens[i] for i in np.argmax(logits, axis=1)]
-        argmax_alignment = "".join(argmax_alignment)
-        return argmax_alignment
-
-    # noinspection PyMethodMayBeStatic
-    def custom_success_modifications(self, db_output):
-        """
-        Extend this class with custom modifications, e.g. to modify experiment
-        specific data per example.
-
-        :param db_output: current output data to be written to disk
-        :return: modified output data to be written to disk
-        """
-        return db_output
-
-    # noinspection PyMethodMayBeStatic
-    def custom_logging_modifications(self, log_output):
-        """
-        Extend this class with custom modifications, as above but for logging
-        only.
-
-        :param log_output: current log data
-        :return: modified output log data
-        """
-        return log_output
-
-    @staticmethod
-    def step_logging(step_results, delimiter="|"):
-        s = ""
-        for k, v in step_results.items():
-            if type(v) in (float, np.float32, np.float64):
-                s += "{k}: {v:.4f}{d}".format(k=k, v=v, d=delimiter)
-            elif type(v) in [int, np.int8, np.int16, np.int32, np.int64]:
-                s += "{k}: {v:.0f}{d}".format(k=k, v=v, d=delimiter)
-            else:
-                try:
-                    s += "{k}: {v}{d}".format(k=k, v=v, d=delimiter)
-                except TypeError:
-                    pass
-        return s
-
-    @staticmethod
-    def convert_to_example_wise(batched_results):
-
-        assert type(batched_results) is dict
-
-        d = {idx: {} for idx in range(len(batched_results["step"]))}
-
-        for k, v in batched_results.items():
-            for idx in d.keys():
-                try:
-                    d[idx][k] = batched_results[k][idx]
-                except IndexError:
-                    raise
-
-        return d
-
-    @staticmethod
-    def fix_nestings(y):
-        return [x[0] for x in y]
 
     def transpose(self, batched_results):
         return self.convert_to_example_wise(batched_results)
