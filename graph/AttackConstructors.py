@@ -360,14 +360,12 @@ class CTCPathSearchConstructor(AbstractAttackConstructor):
     :param sess: a tensorflow session object
     :param batch: the current batch of input data to run the attack with,
         a cleverspeech.data.ingress.batch_generators.batch object
-    :param feeds: the input feeds for the tensorflow graph (references between
-        the tensorflow graph placeholders and batch data), a
-        cleverspeech.data.ingress.Feeds object
+    :param feeds: not used, only included due to AbstractConstructor
     """
 
     def __init__(self, sess, batch, feeds, bit_depth=2 ** 15):
 
-        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+        super().__init__(sess, batch, None, bit_depth=bit_depth)
         self.graph = None
 
     def add_perturbation_subgraph(self, graph, *args, **kwargs):

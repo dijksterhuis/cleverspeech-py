@@ -5,9 +5,9 @@ from cleverspeech.utils.Utils import log, lcomp
 from cleverspeech.graph.AttackConstructors import CTCPathSearchConstructor
 
 
-def create_tf_ctc_alignment_search_graph(attack, batch, feeds):
-    alignment_graph = CTCPathSearchConstructor(attack.sess, batch, feeds)
-    alignment_graph.add_perturbation_subgraph(Graph, attack)
+def create_tf_ctc_alignment_search_graph(sess, batch):
+    alignment_graph = CTCPathSearchConstructor(sess, batch, None)
+    alignment_graph.add_perturbation_subgraph(Graph)
     alignment_graph.add_loss(Loss)
     alignment_graph.create_loss_fn()
     alignment_graph.add_optimiser(Procedure)
@@ -31,11 +31,21 @@ class Loss(object):
 
 
 class Graph:
-    def __init__(self, sess, batch, attack):
-        batched_alignment_shape = attack.victim.logits.shape.as_list()
+    def __init__(self, sess, batch):
+
+        self.targets = tf.placeholder(
+            tf.int32, [batch.size, None], name='qq_alignment_targets'
+        )
+        self.target_lengths = tf.placeholder(
+            tf.int32, [batch.size], name='qq_alignment_targets_lengths'
+        )
+
+        shape = [
+            batch.size, batch.audios["max_feats"], len(batch.targets["tokens"])
+        ]
 
         self.initial_alignments = tf.Variable(
-            tf.zeros(batched_alignment_shape),
+            tf.zeros(shape),
             dtype=tf.float32,
             trainable=True,
             name='qq_alignment'
@@ -50,7 +60,7 @@ class Graph:
         # to handle ragged inputs for tf.Variables etc.
 
         self.mask = tf.Variable(
-            tf.ones(batched_alignment_shape),
+            tf.ones(shape),
             dtype=tf.float32,
             trainable=False,
             name='qq_alignment_mask'
@@ -61,12 +71,8 @@ class Graph:
         self.softmax_alignments = tf.nn.softmax(self.logits_alignments)
         self.target_alignments = tf.argmax(self.softmax_alignments, axis=2)
 
-        # TODO - this should be loaded from feeds later on
-        self.targets = attack.placeholders.targets
-        self.target_lengths = attack.placeholders.target_lengths
-
         per_logit_lengths = batch.audios["real_feats"]
-        maxlen = batched_alignment_shape[1]
+        maxlen = shape[1]
 
         initial_masks = np.asarray(
             [m for m in self.gen_mask(per_logit_lengths, maxlen)],
@@ -119,9 +125,6 @@ class Procedure:
 
         g, v, b = self.graph, victim, batch
 
-        logits = v.get_logits(v.raw_logits, g.feeds.examples)
-        assert logits.shape == g.graph.raw_alignments.shape
-
         while True:
 
             train_ops = [
@@ -132,9 +135,14 @@ class Procedure:
                 self.train_alignment
             ]
 
+            feed = {
+                g.graph.targets: batch.targets["indices"],
+                g.graph.target_lengths: batch.targets["lengths"],
+            }
+
             ctc_limit, softmax, raw, m, _ = g.sess.run(
                 train_ops,
-                feed_dict=g.feeds.alignments
+                feed_dict=feed
             )
 
             decodings, probs = victim.inference(
