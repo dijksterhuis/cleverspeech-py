@@ -13,20 +13,24 @@ def args(attack_run, additional_args: dict = None):
     # choices = list(experiments.keys())
 
     standard_non_required_args = {
-        "gpu_device": [int, None, False, None],
-        "batch_size": [int, None, False, None],
-        "learning_rate": [float, None, False, None],
-        "nsteps": [int, None, False, None],
-        "decode_step": [int, None, False, None],
-        "constraint_update": [str, None, False, None],
-        "rescale": [float, None, False, None],
-        "max_spawns": [int, None, False, None],
-        "audio_indir": [str, None, False, None],
-        "outdir": [str, None, False, None],
-        "targets_path": [str, None, False, None],
-        "spawn_delay": [int, None, False, None],
-        "max_examples": [int, None, False, None],
-        "random_seed": [int, None, False, None],
+        "gpu_device": [int, 0, False, None],
+        "batch_size": [int, 1, False, None],
+        "learning_rate": [float, 10, False, None],
+        "nsteps": [int, 10000, False, None],
+        "decode_step": [int, 100, False, None],
+        "constraint_update": [str, "geom", False, ["geom", "lin", "log"]],
+        "rescale": [float, 0.9, False, None],
+        "max_spawns": [int, 1, False, None],
+        "audio_indir": [str, "./samples/all/", False, None],
+        "outdir": [str, "./adv/", False, None],
+        "targets_path": [str, "./samples/cv-valid-test.csv", False, None],
+        "spawn_delay": [int, 15, False, None],
+        "max_examples": [int, 100, False, None],
+        "max_targets": [int, 1000, False, None],
+        "max_audio_length": [int, 120000, False, None],
+        "beam_width": [int, 500, False, None],
+        "random_seed": [int, 420, False, None],
+        "decoder": [str, "batch", False, ["batch", "ds", "greedy", "tf"]]
     }
 
     if additional_args is not None:
