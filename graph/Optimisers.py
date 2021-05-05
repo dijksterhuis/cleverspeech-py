@@ -104,9 +104,9 @@ class AbstractBatchwiseOptimiser(AbstractOptimiser):
         )
 
         assert None not in lcomp(grad_var, i=0)
-        self.variables[0] = self.optimizer.variables()
-
         self.train = self.optimizer.apply_gradients(grad_var)
+
+        self.variables = {0: self.optimizer.variables()}
 
 
 class GradientDescentIndependentOptimiser(AbstractIndependentOptimiser):
