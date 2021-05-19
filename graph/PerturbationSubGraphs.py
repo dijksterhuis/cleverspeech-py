@@ -132,12 +132,13 @@ class AbstractPerturbationSubGraph(ABC):
         :return: None
         """
         def rounding_func(delta):
-            signs = tf.sign(delta)
-            abs_floor = tf.floor(tf.abs(delta))
+            signs = np.sign(delta)
+            abs_floor = np.floor(np.abs(delta))
             return signs * abs_floor
 
         deltas = sess.run(self.final_deltas)
-        sess.run(self.deltas_apply(deltas, rounding_func))
+        assign_op = self.deltas_apply(deltas, rounding_func)
+        sess.run(assign_op)
 
     def apply_perturbation_randomisation(self, sess, bit_depth_percent=0.5):
 
@@ -151,16 +152,17 @@ class AbstractPerturbationSubGraph(ABC):
         :return: None
         """
         def random_uniform_func(delta):
-            rand_uni = tf.random_uniform(
-                delta.shape,
-                minval=-bit_depth_percent * self.__bit_depth,
-                maxval=bit_depth_percent * self.__bit_depth,
-                dtype=tf.float32
+
+            rand_uni = np.random.uniform(
+                -bit_depth_percent * self.__bit_depth,
+                bit_depth_percent * self.__bit_depth,
+                delta.shape
             )
             return delta + rand_uni
 
         deltas = sess.run(self.final_deltas)
-        sess.run(self.deltas_apply(deltas, random_uniform_func))
+        assign_op = self.deltas_apply(deltas, random_uniform_func)
+        sess.run(assign_op)
 
 
 class Independent(AbstractPerturbationSubGraph):
@@ -206,7 +208,9 @@ class Independent(AbstractPerturbationSubGraph):
         return tf.stack(self.raw_deltas, axis=0)
 
     def deltas_apply(self, deltas, func):
+
         assign_ops = []
+
         for idx, delta in enumerate(deltas):
 
             new_delta = func(delta)
@@ -253,14 +257,16 @@ class Batch(AbstractPerturbationSubGraph):
         return self.raw_deltas
 
     def deltas_apply(self, deltas, func):
+
         new_deltas = []
+
         for idx, delta in enumerate(deltas):
 
             new_delta = func(delta)
             new_deltas.append(new_delta)
 
         new_deltas = np.asarray(new_deltas)
-        assign_op = self.raw_deltas.assign(new_deltas)
+        assign_op = [self.raw_deltas.assign(new_deltas)]
 
         return assign_op
 
