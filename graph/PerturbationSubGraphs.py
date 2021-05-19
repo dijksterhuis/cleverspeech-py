@@ -1,10 +1,6 @@
 """
 Variable graphs determine how to create perturbations.
 
-TODO: Move hard constraint and adversarial example steps out to Constructors
-
-TODO: Rename to PerturbationsSubGraph
-
 --------------------------------------------------------------------------------
 """
 
