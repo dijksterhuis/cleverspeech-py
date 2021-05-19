@@ -263,6 +263,33 @@ class BaseLogitDiffLoss(BaseLoss):
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
+class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack,
+            target_logits,
+            softmax=True,
+            weight_settings=weight_settings,
+        )
+        n_frames = self.target_logit.shape.as_list()[1]
+        self.loss_fn = tf.reduce_sum(-self.target_logit, axis=1) + n_frames
+
+        self.loss_fn *= self.weights
+
+
+class MaximiseTargetFramewiseActivations(BaseLogitDiffLoss):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack,
+            target_logits,
+            softmax=False,
+            weight_settings=weight_settings,
+        )
+        self.loss_fn = tf.reduce_sum(-self.target_logit, axis=1) * self.weights
+
+
 class BiggioMaxMin(BaseLogitDiffLoss):
     def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
 
@@ -276,6 +303,57 @@ class BiggioMaxMin(BaseLogitDiffLoss):
         self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
 
         self.loss_fn = self.loss_fn * self.weights
+
+
+class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack,
+            target_logits,
+            weight_settings=weight_settings,
+        )
+
+        self.max_min = - self.target_logit + self.max_other_logit
+        self.loss_fn = tf.reduce_max(self.max_min, axis=1)
+
+        self.loss_fn = self.loss_fn * self.weights
+
+
+class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack,
+            target_logits,
+            softmax=True,
+            weight_settings=weight_settings,
+        )
+
+        self.max_min = - self.target_logit + self.max_other_logit
+        self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
+
+        n_frames = self.max_min.shape.as_list()[1]
+
+        self.loss_fn = (self.loss_fn + n_frames) * self.weights
+
+
+class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack,
+            target_logits,
+            softmax=True,
+            weight_settings=weight_settings,
+        )
+
+        self.max_min = - self.target_logit + self.max_other_logit
+        self.loss_fn = tf.reduce_max(self.max_min, axis=1)
+
+        n_frames = self.max_min.shape.as_list()[1]
+
+        self.loss_fn = (self.loss_fn + n_frames) * self.weights
 
 
 class CWImproved(BaseLoss):
@@ -367,6 +445,31 @@ class CWMaxDiff(BaseLogitDiffLoss):
         super().__init__(
             attack,
             target_logits,
+            weight_settings=weight_settings,
+        )
+
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
+        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
+
+        self.loss_fn = self.loss_fn * self.weights
+
+
+class CWMaxDiffSoftmax(BaseLogitDiffLoss):
+    """
+    :param: attack:
+    :param: target_logits:
+    :param: k:
+    :param: weight_settings:
+    """
+    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
+
+        assert 0 < k < 1.0
+
+        super().__init__(
+            attack,
+            target_logits,
+            softmax=True,
             weight_settings=weight_settings,
         )
 
