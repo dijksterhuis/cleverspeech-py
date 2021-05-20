@@ -333,9 +333,7 @@ class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
         self.max_min = - self.target_logit + self.max_other_logit
         self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
 
-        n_frames = self.max_min.shape.as_list()[1]
-
-        self.loss_fn = (self.loss_fn + n_frames) * self.weights
+        self.loss_fn = self.loss_fn * self.weights
 
 
 class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
