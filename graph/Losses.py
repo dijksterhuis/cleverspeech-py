@@ -440,6 +440,8 @@ class CWMaxDiff(BaseLogitDiffLoss):
     """
     def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
 
+        assert k >= 0
+
         super().__init__(
             attack,
             target_logits,
@@ -462,7 +464,7 @@ class CWMaxDiffSoftmax(BaseLogitDiffLoss):
     """
     def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
 
-        assert 0 < k < 1.0
+        assert 0 <= k <= 1.0
 
         super().__init__(
             attack,
