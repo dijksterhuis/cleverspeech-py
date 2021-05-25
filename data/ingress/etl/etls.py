@@ -235,7 +235,7 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
     orig_indices = data["indices"]
     tokens = data["tokens"]
 
-    new_indices = np_arr(
+    new_transcription_indices = np_arr(
         l_map(
             lambda x: utils.SparseTargets.insert_target_blanks(x),
             orig_indices
@@ -245,21 +245,18 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
 
     # do linear expansion only on the existing indices (target phrases
     # are still valid as they are).
-    z = zip(new_indices, actual_feats)
+    z = zip(new_transcription_indices, actual_feats)
 
-    new_indices = np_arr(
-        [
-            l_map(
-                lambda x: x,
-                utils.SparseTargets.create_new_target_indices(x, y)
-            ) for x, y in z
-        ],
-        np.int32
-    )
+    new_alignment_indices = [
+        l_map(
+            lambda x: x,
+            utils.SparseTargets.create_new_target_indices(x, y)
+        ) for x, y in z
+    ]
 
-    # do padding for non-ctc loss
-    z = zip(new_indices, max_feats)
-    new_indices = np_arr(
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
         [
             l_map(
                 lambda x: x,
@@ -272,14 +269,14 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
     # update the target sequence lengths
     lengths = l_map(
         lambda x: x.size,
-        new_indices
+        padded_alignment_indices
     )
 
     return {
         "tokens": tokens,
         "phrases": target_phrases,
         "row_ids": target_ids,
-        "indices": new_indices,
+        "indices": padded_alignment_indices,
         "original_indices": orig_indices,
         "lengths": lengths,
     }
