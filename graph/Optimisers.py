@@ -80,11 +80,13 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
             assert None not in lcomp(grad_var, i=0)
             training_op = opt.apply_gradients(grad_var)
             train_ops.append(training_op)
-            gradients.append(grad_var[0])
+            print(idx, training_op)
+            gradients.append(grad_var[0][0])
+
             self.variables[idx] = opt.variables()
 
         self.train = tf.group(train_ops)
-        self.gradients = tf.group(gradients)
+        self.gradients = tf.stack(gradients, axis=0)
 
 
 class AbstractBatchwiseOptimiser(AbstractOptimiser):

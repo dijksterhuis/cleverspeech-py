@@ -58,6 +58,7 @@ def convert_evasion_attack_state_to_dict(attack):
         a.delta_graph.opt_vars,
         a.victim.logits,
         tf.transpose(a.victim.raw_logits, [1, 0, 2]),
+        a.optimiser.gradients,
     ]
     outs = a.procedure.tf_run(graph_variables)
 
@@ -69,6 +70,7 @@ def convert_evasion_attack_state_to_dict(attack):
         delta_vars,
         softmax_logits,
         raw_logits,
+        gradients,
     ] = outs
 
     # TODO: Fix nesting here or over in file write subprocess (as is now)?
@@ -99,6 +101,7 @@ def convert_evasion_attack_state_to_dict(attack):
         "distances_eps": distance_eps,
         "deltas": deltas,
         "advs": adv_audio,
+        "gradients": gradients,
         "delta_vars": [d for d in delta_vars[0]],
         "softmax_logits": softmax_logits,
         "raw_logits": raw_logits,
@@ -170,7 +173,9 @@ def convert_unbounded_attack_state_to_dict(attack):
         a.delta_graph.opt_vars,
         a.victim.logits,
         tf.transpose(a.victim.raw_logits, [1, 0, 2]),
+        a.optimiser.gradients,
     ]
+
     outs = a.procedure.tf_run(graph_variables)
 
     [
@@ -180,6 +185,7 @@ def convert_unbounded_attack_state_to_dict(attack):
         delta_vars,
         softmax_logits,
         raw_logits,
+        gradients,
     ] = outs
 
     batched_results = {
@@ -189,6 +195,7 @@ def convert_unbounded_attack_state_to_dict(attack):
         "deltas": deltas,
         "advs": adv_audio,
         "delta_vars": [d for d in delta_vars[0]],
+        "gradients": gradients,
         "softmax_logits": softmax_logits,
         "raw_logits": raw_logits,
         "decodings": decodings,
@@ -356,6 +363,7 @@ class EvasionResults(AbstractResults):
             )
             log_updates = [
                 *all_losses,
+                ("grads", sum(example_data["gradients"])),
                 ("cer", cer),
                 ("wer", wer),
                 ("targ", example_data["phrases"]),
@@ -435,6 +443,7 @@ class UnboundedResults(AbstractResults):
             )
             log_updates = [
                 *all_losses,
+                ("grads", sum(example_data["gradients"])),
                 ("cer", cer),
                 ("wer", wer),
                 ("l2", example_data["l2s"]),
