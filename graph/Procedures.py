@@ -286,8 +286,6 @@ class UpdateOnSuccess(AbstractProcedure):
 
         super().__init__(attack, *args, **kwargs)
 
-        self.init_optimiser_variables()
-
         if loss_update_idx is not None:
             assert type(loss_update_idx) in [tuple, list]
             for idx in loss_update_idx:
@@ -329,7 +327,6 @@ class UpdateOnDecoding(UpdateOnSuccess):
     def __init__(self, attack, *args, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
 
     def check_for_successful_examples(self):
         """
@@ -363,7 +360,6 @@ class UpdateOnLoss(UpdateOnSuccess):
     def __init__(self, attack, *args, loss_lower_bound=0.1, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
 
         self.loss_bound = loss_lower_bound
 
@@ -393,7 +389,6 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
     def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
 
         self.probs_diff = probs_diff
 
@@ -423,16 +418,20 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
                 yield False
 
 
-class StandardProcedure(UpdateOnDecoding):
-    pass
-
-
 class SimpleEvasion(UpdateOnDecoding):
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
+
+
+class StandardProcedure(SimpleEvasion):
     pass
 
 
 class HighConfidenceEvasion(UpdateOnLoss):
-    pass
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
 
 
 class CTCAlignMixIn(AbstractProcedure, ABC):
@@ -446,7 +445,6 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
         super().__init__(attack, *args, **kwargs)
 
         self.alignment_graph = alignment_graph
-
         self.init_optimiser_variables()
 
     def init_optimiser_variables(self):
@@ -482,11 +480,11 @@ class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
     pass
 
 
-class StandardCTCAlignProcedure(CTCAlignUpdateOnDecode):
+class SimpleCTCAlignEvasion(CTCAlignUpdateOnDecode):
     pass
 
 
-class SimpleCTCAlignEvasion(CTCAlignUpdateOnDecode):
+class StandardCTCAlignProcedure(SimpleCTCAlignEvasion):
     pass
 
 
