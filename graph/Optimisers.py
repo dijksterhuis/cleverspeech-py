@@ -30,6 +30,7 @@ class AbstractOptimiser(ABC):
 
         self.train = None
         self.variables = None
+        self.gradients = None
         self.optimizer = None
         self.optimizers = []
 
@@ -66,6 +67,7 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
         """
         train_ops = []
         self.variables = {}
+        gradients = []
 
         for idx, opt in enumerate(self.optimizers):
 
@@ -78,10 +80,11 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
             assert None not in lcomp(grad_var, i=0)
             training_op = opt.apply_gradients(grad_var)
             train_ops.append(training_op)
-
+            gradients.append(grad_var[0])
             self.variables[idx] = opt.variables()
 
         self.train = tf.group(train_ops)
+        self.gradients = tf.group(gradients)
 
 
 class AbstractBatchwiseOptimiser(AbstractOptimiser):
@@ -107,6 +110,7 @@ class AbstractBatchwiseOptimiser(AbstractOptimiser):
         self.train = self.optimizer.apply_gradients(grad_var)
 
         self.variables = {0: self.optimizer.variables()}
+        self.gradients = grad_var[0]
 
 
 class GradientDescentIndependentOptimiser(AbstractIndependentOptimiser):
