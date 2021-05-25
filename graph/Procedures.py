@@ -8,7 +8,7 @@ actually doing an attack.
 --------------------------------------------------------------------------------
 """
 
-
+import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
@@ -81,7 +81,18 @@ class AbstractProcedure(ABC):
 
         For example, you could start with randomised perturbations.
         """
-        pass
+        def random_uniform_func(delta):
+
+            rand_uni = np.random.uniform(
+                0.002 * self.attack.bit_depth * -1,
+                0.002 * self.attack.bit_depth,
+                delta.shape
+            )
+            return delta + rand_uni
+
+        self.attack.delta_graph.deltas_apply(
+            self.attack.sess, random_uniform_func
+        )
 
     def post_optimisation_hook(self):
         """
@@ -90,7 +101,15 @@ class AbstractProcedure(ABC):
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
         """
-        pass
+
+        def rounding_func(delta):
+            signs = np.sign(delta)
+            abs_floor = np.floor(np.abs(delta))
+            return signs * abs_floor
+
+        self.attack.delta_graph.deltas_apply(
+            self.attack.sess, rounding_func
+        )
 
     @abstractmethod
     def check_for_successful_examples(self):
@@ -147,33 +166,6 @@ class AbstractProcedure(ABC):
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
-
-
-class RandomUniformWarmUp(AbstractProcedure):
-    def do_warm_up(self):
-        """
-        Should anything else be done before we start?
-
-        N.B. This method is not abstract as it is *not* required to run an
-        attack, but feel free to override it.
-
-        For example, you could start with randomised perturbations.
-        """
-        self.attack.delta_graph.apply_perturbation_randomisation(
-            self.attack.sess, bit_depth_percent=0.5
-        )
-
-
-class IntegerRoundingHook(AbstractProcedure):
-    def post_optimisation_hook(self):
-        """
-        Apply integer level rounding to the perturbations after a certain number
-        of optimisation steps have completed.
-        """
-
-        self.attack.delta_graph.apply_perturbation_rounding(
-            self.attack.sess
-        )
 
 
 class Unbounded(AbstractProcedure):
@@ -368,7 +360,7 @@ class UpdateOnLoss(UpdateOnSuccess):
     Perform updates when loss reaches a specified threshold.
     """
 
-    def __init__(self, attack, *args, loss_lower_bound=10.0, **kwargs):
+    def __init__(self, attack, *args, loss_lower_bound=0.1, **kwargs):
 
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
@@ -431,7 +423,15 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
                 yield False
 
 
-class StandardProcedure(UpdateOnDecoding, IntegerRoundingHook):
+class StandardProcedure(UpdateOnDecoding):
+    pass
+
+
+class SimpleEvasion(UpdateOnDecoding):
+    pass
+
+
+class HighConfidenceEvasion(UpdateOnLoss):
     pass
 
 
@@ -482,7 +482,11 @@ class CTCAlignUpdateOnDecode(UpdateOnDecoding, CTCAlignMixIn):
     pass
 
 
-class StandardCTCAlignProcedure(CTCAlignUpdateOnDecode, IntegerRoundingHook):
+class StandardCTCAlignProcedure(CTCAlignUpdateOnDecode):
+    pass
+
+
+class SimpleCTCAlignEvasion(CTCAlignUpdateOnDecode):
     pass
 
 
@@ -504,6 +508,10 @@ class CTCAlignUpdateOnLoss(UpdateOnLoss, CTCAlignMixIn):
 
     Perform updates when loss reaches a specified threshold.
     """
+    pass
+
+
+class HighConfidenceCTCAlignEvasion(CTCAlignUpdateOnLoss):
     pass
 
 

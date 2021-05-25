@@ -103,62 +103,8 @@ class AbstractPerturbationSubGraph(ABC):
         return self.opt_vars
 
     @abstractmethod
-    def deltas_apply(self, deltas, func):
+    def deltas_apply(self, sess, func):
         pass
-
-    def apply_perturbation_rounding(self, sess):
-
-        """
-        For each perturbation sample (delta_n) find the closest integer
-        less than the current float value.
-
-        This helps the attacks work against the deepspeech native client api
-        which only accepts tf.int16 type inputs. Although it doesn't work 100%
-        of the time so use `bin/classify.py` to get the true success rate.
-
-        We could do this after running optimisation, but doing things during
-        attacks seems to help find a 16 bit int solution... At least that's my
-        excuse.
-
-        N.B. Reassign perturbations that were bounded by the hard constraint
-        => raw_delta samples values can be much larger than the final_delta
-        sample values.
-
-        :param sess: a tensorflow session object
-        :return: None
-        """
-        def rounding_func(delta):
-            signs = np.sign(delta)
-            abs_floor = np.floor(np.abs(delta))
-            return signs * abs_floor
-
-        deltas = sess.run(self.final_deltas)
-        assign_op = self.deltas_apply(deltas, rounding_func)
-        sess.run(assign_op)
-
-    def apply_perturbation_randomisation(self, sess, bit_depth_percent=0.5):
-
-        """
-        Randomise each perturbation sample (delta_n) using a random uniform
-        distribution, with max and min values based on a percentage of the
-        perturbation bit depth.
-
-        :param sess: a tensorflow session object
-        :param bit_depth_percent: base the random uniform dist. on our bit depth
-        :return: None
-        """
-        def random_uniform_func(delta):
-
-            rand_uni = np.random.uniform(
-                -bit_depth_percent * self.__bit_depth,
-                bit_depth_percent * self.__bit_depth,
-                delta.shape
-            )
-            return delta + rand_uni
-
-        deltas = sess.run(self.final_deltas)
-        assign_op = self.deltas_apply(deltas, random_uniform_func)
-        sess.run(assign_op)
 
 
 class Independent(AbstractPerturbationSubGraph):
@@ -203,9 +149,10 @@ class Independent(AbstractPerturbationSubGraph):
 
         return tf.stack(self.raw_deltas, axis=0)
 
-    def deltas_apply(self, deltas, func):
+    def deltas_apply(self, sess, func):
 
         assign_ops = []
+        deltas = sess.run(self.final_deltas)
 
         for idx, delta in enumerate(deltas):
 
@@ -215,7 +162,7 @@ class Independent(AbstractPerturbationSubGraph):
                 self.raw_deltas[idx].assign(new_delta)
             )
 
-        return assign_ops
+        sess.run(assign_ops)
 
 
 class Batch(AbstractPerturbationSubGraph):
@@ -252,9 +199,10 @@ class Batch(AbstractPerturbationSubGraph):
         self.opt_vars = [self.raw_deltas]
         return self.raw_deltas
 
-    def deltas_apply(self, deltas, func):
+    def deltas_apply(self, sess, func):
 
         new_deltas = []
+        deltas = sess.run(self.final_deltas)
 
         for idx, delta in enumerate(deltas):
 
@@ -264,7 +212,7 @@ class Batch(AbstractPerturbationSubGraph):
         new_deltas = np.asarray(new_deltas)
         assign_op = [self.raw_deltas.assign(new_deltas)]
 
-        return assign_op
+        sess.run(assign_op)
 
 
 class Synthesis:
