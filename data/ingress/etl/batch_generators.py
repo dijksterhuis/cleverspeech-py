@@ -41,7 +41,7 @@ def standard(settings):
         settings["audio_indir"],
         settings["max_examples"],
         filter_term=".wav",
-        max_file_size=settings["max_audio_length"]
+        max_file_size=settings["max_audio_file_bytes"]
     )
 
     targets_pool = etls.get_target_phrase_pool(
