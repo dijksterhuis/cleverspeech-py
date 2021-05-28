@@ -20,17 +20,16 @@ def args(attack_run, additional_args: dict = None):
         "decode_step": [int, 100, False, None],
         "constraint_update": [str, "geom", False, ["geom", "lin", "log"]],
         "rescale": [float, 0.9, False, None],
-        "max_spawns": [int, 1, False, None],
         "audio_indir": [str, "./samples/all/", False, None],
         "outdir": [str, "./adv/", False, None],
         "targets_path": [str, "./samples/cv-valid-test.csv", False, None],
-        "spawn_delay": [int, 15, False, None],
         "max_examples": [int, 100, False, None],
         "max_targets": [int, 1000, False, None],
         "max_audio_file_bytes": [int, 120000, False, None],
         "beam_width": [int, 500, False, None],
         "random_seed": [int, 420, False, None],
-        "decoder": [str, "batch", False, ["batch", "ds", "greedy", "tf"]]
+        "decoder": [str, "batch", False, ["batch", "ds", "greedy", "tf"]],
+        "writer": [str, "local", False, ["local", "s3"]],
     }
 
     if additional_args is not None:
