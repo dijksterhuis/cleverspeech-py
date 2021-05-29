@@ -180,8 +180,6 @@ class Unbounded(AbstractProcedure):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
-        self.finished = False
-
     def check_for_successful_examples(self):
         """
         Check whether current adversarial decodings match the target phrase,
@@ -196,7 +194,6 @@ class Unbounded(AbstractProcedure):
         decodings, _ = self.attack.victim.inference(
             self.attack.batch,
             feed=self.attack.feeds.attack,
-            decoder="batch",
             top_five=False,
         )
 
@@ -211,22 +208,50 @@ class Unbounded(AbstractProcedure):
             else:
                 yield False
 
-        self.finished = all(
-            [left == right for left, right in z2]
-        )
+    def post_results_hook(self):
+        """
+        do nothing
+        """
+        pass
+
+
+class UnboundedWithEarlyStopping(Unbounded):
+    """
+    Never update the constraint or loss weightings.
+
+    Useful to validate that an attack works correctly as all unbounded
+    attacks should eventually find successful adversarial examples.
+    """
+
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
+
+        self.early_stop_bools = l_map(lambda _: False, range(attack.batch.size))
+
+    def check_for_successful_examples(self):
+        """
+        Check whether current adversarial decodings match the target phrase,
+        yielding True if so, False if not.
+
+        Additionally, if all the decodings match all the target phrases then set
+        `self.finished = True` to stop the attack.
+
+        :return: bool
+        """
+        for idx, res in enumerate(super().check_for_successful_examples()):
+            if self.early_stop_bools[idx] is True:
+                pass
+            else:
+                if res is True:
+                    self.early_stop_bools[idx] = True
 
     def steps_rule(self):
         """
         Stop optimising once everything in a batch is successful, or we've hit a
         maximum number of iteration steps.
         """
-        return self.finished is not True and self.current_step < self.steps
-
-    def post_results_hook(self):
-        """
-        do nothing
-        """
-        pass
+        return not all(self.early_stop_bools) and self.current_step < self.steps
 
 
 class HardcoreMode(Unbounded):
@@ -236,11 +261,10 @@ class HardcoreMode(Unbounded):
     Useful for development: leave it running overnight to see how long an
     extreme optimisation case takes to finish.
     """
-    def __init__(self, attack, *args, loss_lower_bound=1.0, **kwargs):
+    def __init__(self, attack, *args, **kwargs):
         super().__init__(
             attack,
             *args,
-            loss_lower_bound=loss_lower_bound,
             **kwargs
         )
 
@@ -252,7 +276,6 @@ class HardcoreMode(Unbounded):
         decodings, _ = self.attack.victim.inference(
             self.attack.batch,
             feed=self.attack.feeds.attack,
-            decoder="batch",
             top_five=False,
         )
 
@@ -335,7 +358,6 @@ class UpdateOnDecoding(UpdateOnSuccess):
         decodings, _ = self.attack.victim.inference(
             self.attack.batch,
             feed=self.attack.feeds.attack,
-            decoder="batch",
             top_five=False,
         )
 
@@ -401,7 +423,6 @@ class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
         _, probs = self.attack.victim.inference(
             self.attack.batch,
             feed=self.attack.feeds.attack,
-            decoder="batch",
             top_five=False,
         )
 
