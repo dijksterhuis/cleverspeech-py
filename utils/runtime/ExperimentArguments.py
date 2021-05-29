@@ -28,7 +28,11 @@ def args(attack_run, additional_args: dict = None):
         "max_audio_file_bytes": [int, 120000, False, None],
         "beam_width": [int, 500, False, None],
         "random_seed": [int, 420, False, None],
-        "decoder": [str, "batch", False, ["batch", "ds", "greedy", "tf"]],
+        "decoder": [
+            str, "batch", False, [
+                "batch", "ds", "greedy", "tf", "batch_no_lm", "ds_greedy_no_lm"
+            ]
+        ],
         "writer": [str, "local", False, ["local", "s3"]],
     }
 
