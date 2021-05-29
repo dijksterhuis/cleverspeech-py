@@ -245,6 +245,9 @@ class BaseLogitDiffLoss(BaseLoss):
             on_value=1.0,
             off_value=0.0
         )
+
+        # TODO: check this is correct, not the same as the cw cleverhans
+        #  implementation, but cleverhans seems to differ from the paper.
         others_onehot = tf.one_hot(
             self.target_argmax,
             self.current.shape.as_list()[2],
