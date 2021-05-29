@@ -7,40 +7,43 @@ def convert_to_batch_from_one(x, size):
     return l_map(lambda _: x, range(size))
 
 
-def get_decoding_from_one_decoder(attack, decoder_type="batch"):
+def get_decodings(attack):
 
-    top_5_decodings, top_5_probs = attack.victim.inference(
-        attack.batch,
-        feed=attack.feeds.attack,
-        decoder=decoder_type,
-        top_five=True,
-    )
+    if attack.victim.decoder in ["batch", "ds", "batch_no_lm"] and attack.victim.beam_width >= 5:
 
-    best_decodings = [
-        top_5_decodings[idx][0] for idx in range(attack.batch.size)
-    ]
-    best_probs = [
-        top_5_probs[idx][0] for idx in range(attack.batch.size)
-    ]
+        top_5_decodings, top_5_probs = attack.victim.inference(
+            attack.batch,
+            feed=attack.feeds.attack,
+            top_five=True,
+        )
 
-    result = {
-        "decodings": best_decodings,
-        "probs": best_probs,
-        "top_five_decodings": top_5_decodings,
-        "top_five_probs": top_5_probs,
-    }
+        best_decodings = [
+            top_5_decodings[idx][0] for idx in range(attack.batch.size)
+        ]
+        best_probs = [
+            top_5_probs[idx][0] for idx in range(attack.batch.size)
+        ]
+
+        result = {
+            "decodings": best_decodings,
+            "probs": best_probs,
+            "top_five_decodings": top_5_decodings,
+            "top_five_probs": top_5_probs,
+        }
+
+    else:
+
+        decodings, probs = attack.victim.inference(
+            attack.batch,
+            feed=attack.feeds.attack,
+        )
+
+        result = {
+            "decodings": decodings,
+            "probs": probs,
+        }
 
     return result
-
-
-def get_decodings_from_all_decoders(attack):
-    decoders = ["greedy", "batch"]
-
-    results = [
-        get_decoding_from_one_decoder(attack, decoder_type=decoder) for decoder in decoders
-    ]
-
-    return results
 
 
 def get_batched_losses(attack):
@@ -105,7 +108,7 @@ def get_unbounded_attack_state(attack):
         attack.batch.size
     )
 
-    decodings = get_decoding_from_one_decoder(attack, decoder_type="batch")
+    decodings = get_decodings(attack)
 
     each_graph_loss_transposed = get_batched_losses(attack)
 
