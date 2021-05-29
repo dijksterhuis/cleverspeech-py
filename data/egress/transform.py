@@ -187,7 +187,7 @@ def unbounded_logging(example_data, additional_logging_keys=None):
     )
     log_updates = [
         *all_losses,
-        ("grads", sum(example_data["gradients"])),
+        ("grads", sum(np.abs(example_data["gradients"]))),
         ("cer", cer),
         ("wer", wer),
         ("targ", example_data["phrases"]),
