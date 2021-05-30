@@ -280,3 +280,18 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
         "lengths": lengths,
     }
 
+
+def create_ctcalign_target_batch_from_standard(data, actual_feats, max_feats):
+    # TODO: Load a tf graph in a subprocess and get back the alignment data
+    pass
+
+
+def create_midpoint_target_batch_from_standard(data, actual_feats, max_feats):
+    # TODO: Create a midpoint alignment
+    pass
+
+
+def create_shuffled_target_batch_from_standard(data, actual_feats, max_feats):
+    # TODO: Create a randomly shuffled sparse (and/or midpoint/dense)
+    pass
+
