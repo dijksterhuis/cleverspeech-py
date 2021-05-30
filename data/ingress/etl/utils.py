@@ -108,10 +108,10 @@ class DenseTargets(object):
         """
 
         spacing = n_feats // new_target.size
-
-        for t in new_target:
+        z = zip(new_target, repeats)
+        for t, r in z:
             for i in range(spacing):
-                if i > repeats:
+                if i > r:
                     yield 28
                 else:
                     yield t
@@ -191,7 +191,7 @@ class BatchGen(object):
         matches_true_test = candidate_target[0] in true_targets
 
         if length_test or matches_true_test:
-            BatchGen.pop_target_phrase(
+            return BatchGen.pop_target_phrase(
                 all_targets, true_targets, min_feats, idx=idx + 1
             )
         else:
