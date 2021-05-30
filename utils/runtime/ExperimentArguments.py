@@ -39,7 +39,7 @@ def args(attack_run, additional_args: dict = None):
                 "tf_greedy",
             ]
         ],
-        "writer": [str, "local", False, [
+        "writer": [str, "local_latest", False, [
             "local_latest", "local_all", "s3_latest", "s3_all"
         ]],
     }
