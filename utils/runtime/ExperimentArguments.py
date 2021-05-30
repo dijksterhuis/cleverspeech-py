@@ -30,7 +30,13 @@ def args(attack_run, additional_args: dict = None):
         "random_seed": [int, 420, False, None],
         "decoder": [
             str, "batch", False, [
-                "batch", "ds", "greedy", "tf", "batch_no_lm", "ds_greedy_no_lm"
+                "batch",
+                "greedy",
+                "ds",
+                "batch_no_lm",
+                "greedy_no_lm",
+                "tf",
+                "tf_greedy",
             ]
         ],
         "writer": [str, "local", False, ["local", "s3"]],
