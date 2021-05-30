@@ -5,11 +5,7 @@ import numpy as np
 
 from bz2 import compress as bz2_compress
 from os import path, makedirs
-from abc import ABC, abstractmethod
-
-from cleverspeech.data.egress import transform
 from cleverspeech.utils import WavFile
-from cleverspeech.utils.Utils import log
 
 
 def convert_types_for_json(results):
@@ -46,7 +42,6 @@ def add_json_prefix_and_postfix(data, prefix="[\n", postfix="\n]"):
 
 
 def prepare_json_data(data, indent=2):
-    assert type(data) is dict
 
     data = convert_types_for_json(data)
     json_data = json.dumps(
