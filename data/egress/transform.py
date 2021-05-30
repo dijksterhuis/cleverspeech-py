@@ -5,6 +5,7 @@ from collections import OrderedDict
 from cleverspeech.data.egress.metrics.ErrorRates import character_error_rate
 from cleverspeech.data.egress.metrics.ErrorRates import word_error_rate
 from cleverspeech.data.egress.metrics.DetectionMetrics import lnorm
+from cleverspeech.utils.Utils import log
 
 
 def fix_nesting(y):
@@ -206,5 +207,25 @@ def unbounded_logging(example_data, additional_logging_keys=None):
     return step_logs
 
 
+def evasion_gen(results, settings):
+    for example_data in evasion_transforms(results):
+        log(
+            evasion_logging(example_data),
+            wrap=False,
+            outdir=settings["outdir"],
+            stdout=False,
+            timings=True,
+        )
+        yield example_data
 
 
+def unbounded_gen(results, settings):
+    for example_data in unbounded_transforms(results):
+        log(
+            unbounded_logging(example_data),
+            wrap=False,
+            outdir=settings["outdir"],
+            stdout=False,
+            timings=True,
+        )
+        yield example_data

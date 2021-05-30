@@ -1,13 +1,15 @@
-import bz2
 import json
 import boto3
 
 import numpy as np
 
+from bz2 import compress as bz2_compress
 from os import path, makedirs
 from abc import ABC, abstractmethod
 
+from cleverspeech.data.egress import transform
 from cleverspeech.utils import WavFile
+from cleverspeech.utils.Utils import log
 
 
 def convert_types_for_json(results):
@@ -39,102 +41,154 @@ def convert_types_for_json(results):
     return data
 
 
-class Database(ABC):
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def open(self, table):
-        pass
-
-    @abstractmethod
-    def put(self, data):
-        pass
+def add_json_prefix_and_postfix(data, prefix="[\n", postfix="\n]"):
+    return prefix + data + postfix
 
 
-class LocalWavFiles(Database):
-    def __init__(self, db_location, bit_depth=2**15):
-        self.db_location = db_location
-        self.__table = None
-        self.__bit_depth = bit_depth
-        super().__init__()
+def prepare_json_data(data, indent=2):
+    assert type(data) is dict
 
-    def open(self, table_name):
+    data = convert_types_for_json(data)
+    json_data = json.dumps(
+        data,
+        indent=indent,
+        sort_keys=True,
+        ensure_ascii=True
+    )
 
-        if not path.exists(self.db_location):
-            makedirs(self.db_location, exist_ok=True)
+    return add_json_prefix_and_postfix(json_data)
 
-        self.__table = path.join(self.db_location, table_name + ".wav")
 
-    def put(self, data):
+def make_per_bound_path(outdir, bound_eps):
+    bound_dir = "eps_{}".format(bound_eps)
+    return path.join(outdir, bound_dir)
+
+
+def safe_make_dirs(outdir):
+    if not path.exists(outdir):
+        makedirs(outdir, exist_ok=True)
+
+
+def s3_pseudo_make_dirs(bucket, file_path):
+
+    s3 = boto3.resource('s3')
+    s3_bucket = s3.Bucket(bucket)
+    return s3_bucket.Object(file_path)
+
+
+def write_latest_audio_to_local_wav_file(outdir, data, bit_depth=16, sample_rate=16000):
+
+    for wav_file in ["audio", "deltas", "advs"]:
+
+        file_name = data['basenames'].rstrip(".wav")
+        file_name = file_name + "_{}".format(wav_file)
+
+        file_path = path.join(outdir, file_name)
+
         WavFile.write(
-            self.__table,
+            file_path,
             data,
-            sample_rate=16000,
-            bit_depth=16
+            sample_rate=sample_rate,
+            bit_depth=bit_depth
         )
 
 
-class LocalJsonMetadataFile(Database):
-    def __init__(self, db_location, prefix="[\n", postfix="\n]"):
-        self.db_location = db_location
-        self.__prefix = prefix
-        self.__postfix = postfix
-        self.__table = None
-        super().__init__()
+def write_settings_to_local_json_file(outdir, data):
+    file_name = "settings.json"
+    file_path = path.join(outdir, file_name)
 
-    def open(self, table_name):
+    json_data = prepare_json_data(data)
+    safe_make_dirs(outdir)
 
-        if not path.exists(self.db_location):
-            makedirs(self.db_location, exist_ok=True)
-
-        file_path = path.join(self.db_location, table_name + ".json")
-        self.__table = open(file_path, mode='w+', encoding='utf-8')
-
-    def put(self, data):
-
-        data = convert_types_for_json(data)
-
-        with self.__table as f:
-            f.write(self.__prefix)
-            json.dump(data, f, indent=2)
-            f.write(self.__postfix)
+    with open(file_path, mode='w+', encoding='utf-8') as f:
+        f.write(json_data)
 
 
-class S3JsonMetadataFile(Database):
-    def __init__(self, db_location, prefix="[\n", postfix="\n]"):
-        self.db_location = db_location  # the s3 bucket
-        self.__prefix = prefix
-        self.__postfix = postfix
-        self.__table = None
-        super().__init__()
+def write_settings_to_s3(outdir, data):
 
-    def open(self, table_name):
+    bucket = "cleverspeech-results"
 
-        file_path = table_name + ".json.bz2"
-        file_path = file_path.lstrip("./")
+    file_path = "settings.json"
+    file_path = file_path.lstrip("./")
+    file_path = path.join(outdir, file_path)
 
-        s3 = boto3.resource('s3')
-        s3_bucket = s3.Bucket(self.db_location)
-        self.__table = s3_bucket.Object(file_path)
+    json_data = prepare_json_data(data, indent=0)
 
-    def put(self, data):
+    s3_object = s3_pseudo_make_dirs(bucket, file_path)
+    s3_object.put(
+        Body=json_data,
+        Tagging="costing:cleverSpeech"
+    )
 
-        data = convert_types_for_json(data)
 
-        data = json.dumps(
-            data,
-            sort_keys=True,
-            ensure_ascii=True,
-        ).encode("ascii")
+def write_latest_metadata_to_local_json_file(outdir, data):
 
-        # bz2 compression can reduce file size up to 4x, helpful when charged
-        # for put requests... to decompress: bz2.decompress(compressed_data)
+    file_name = data['basenames'].rstrip(".wav") + ".json"
+    file_path = path.join(outdir, file_name)
 
-        compressed = bz2.compress(data)
+    json_data = prepare_json_data(data)
+    safe_make_dirs(outdir)
 
-        self.__table.put(
-            Body=compressed,
-            Tagging="costing:cleverSpeech"
-        )
+    with open(file_path, mode='w+', encoding='utf-8') as f:
+        f.write(json_data)
 
+
+def write_per_bound_metadata_to_local_json_files(outdir, data):
+
+    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+    file_name = data['basenames'].rstrip(".wav") + ".json"
+    file_path = path.join(outdir, file_name)
+
+    json_data = prepare_json_data(data)
+    safe_make_dirs(outdir)
+
+    with open(file_path, mode='w+', encoding='utf-8') as f:
+        f.write(json_data)
+
+
+def write_latest_metadata_to_s3(outdir, data):
+
+    bucket = "cleverspeech-results"
+
+    file_path = data['basenames'].rstrip(".wav")
+    file_path = file_path + ".json.bz2"
+    file_path = file_path.lstrip("./")
+    file_path = path.join(outdir, file_path)
+
+    json_data = prepare_json_data(data, indent=0)
+
+    # bz2 compression can reduce file size up to 4x, helpful when charged
+    # for put requests... to decompress: bz2.decompress(compressed_data)
+
+    compressed_json_data = bz2_compress(json_data.encode("ascii"))
+
+    s3_object = s3_pseudo_make_dirs(bucket, file_path)
+    s3_object.put(
+        Body=compressed_json_data,
+        Tagging="costing:cleverSpeech"
+    )
+
+
+def write_all_metadata_to_s3(outdir, data):
+
+    bucket = "cleverspeech-results"
+
+    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+
+    file_path = data['basenames'].rstrip(".wav")
+    file_path = file_path + ".json.bz2"
+    file_path = file_path.lstrip("./")
+    file_path = path.join(outdir, file_path)
+
+    json_data = prepare_json_data(data, indent=0)
+
+    # bz2 compression can reduce file size up to 4x, helpful when charged
+    # for put requests... to decompress: bz2.decompress(compressed_data)
+
+    compressed_json_data = bz2_compress(json_data.encode("ascii"))
+
+    s3_object = s3_pseudo_make_dirs(bucket, file_path)
+    s3_object.put(
+        Body=compressed_json_data,
+        Tagging="costing:cleverSpeech"
+    )

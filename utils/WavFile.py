@@ -54,7 +54,8 @@ def write(path, data, sample_rate=16000, bit_depth=16):
 
     # Make sure we write out files correctly for float32.
     try:
-        assert -2**15 <= min(data) and max(data) <= 2**15 - 1
+        assert min(data) >= -2**(bit_depth - 1)
+        assert max(data) <= 2**(bit_depth - 1) - 1
 
     except AssertionError as e:
         err = "Conversion to float32 wav output failed for {}\n".format(
@@ -63,13 +64,13 @@ def write(path, data, sample_rate=16000, bit_depth=16):
         err += "max(data)={}\n".format(max(data))
         err += "Output data must respect assertion: -2^15 <= x <= 2^15 - 1 \n"
         print(err)
-        raise AssertionError
+        raise
 
     # normalise
     normalised = np.where(
         np.less(data, np_zero(data.size, np.float32)),
-        data / (2 ** 15),
-        data / (2 ** 15 - 1)
+        data / (2 ** (bit_depth - 1)),
+        data / (2 ** (bit_depth - 1) - 1)
     )
 
     soundfile.write(
