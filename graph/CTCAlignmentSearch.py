@@ -148,13 +148,19 @@ class Procedure:
             decodings, probs = victim.inference(
                 b,
                 logits=softmax,
-                decoder="batch",
                 top_five=False
             )
 
             target_phrases = b.targets["phrases"]
 
-            if all([d == target_phrases[0] for d in decodings]) and all(c < 0.1 for c in ctc_limit):
+            decoding_check = all(
+                [d == t for d, t in zip(decodings, target_phrases)]
+            )
+            ctc_check = all(
+                c < 0.1 for c in ctc_limit
+            )
+
+            if decoding_check and ctc_check:
                 s = "Found an alignment for each example:"
                 for d, p, t in zip(decodings, probs, target_phrases):
                     s += "\nTarget: {t} | Decoding: {d} | Probs: {p:.3f}".format(
