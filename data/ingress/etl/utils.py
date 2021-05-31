@@ -66,14 +66,18 @@ class Targets(object):
         return indices
 
 
-class DenseTargets(object):
+class AlignmentTargets(object):
 
     @staticmethod
-    def calculate_possible_repeats(actual_n_feats, target_phrase_length):
+    def calculate_densest_repeats(actual_n_feats, target_phrase_length):
         return actual_n_feats // target_phrase_length
 
     @staticmethod
-    def insert_target_blanks(target_indices):
+    def calculate_midpoint_repeats(actual_n_feats, target_phrase_length):
+        return (actual_n_feats / 3) // target_phrase_length
+
+    @staticmethod
+    def insert_target_blanks(target_indices, length):
         # get a shifted list so we can compare back one step in the phrase
 
         previous_indices = target_indices.tolist()
@@ -83,7 +87,12 @@ class DenseTargets(object):
         # also insert a blank at the start to gives time for the RNN hidden
         # states to "warm up"
         with_repeats = [28]
-        for current, previous in zip(target_indices, previous_indices):
+
+        z = zip(target_indices, previous_indices)
+
+        for idx, (current, previous) in enumerate(z):
+            if idx >= length:
+                break
             if not previous:
                 with_repeats.append(current)
             elif current == previous:
@@ -94,7 +103,7 @@ class DenseTargets(object):
         return with_repeats
 
     @staticmethod
-    def create_new_target_indices(new_target, n_feats, repeats):
+    def create_new_dense_indices(new_target, n_feats, length, repeats):
 
         """
         Taking into account the space we have available, find out the new argmax
@@ -102,52 +111,23 @@ class DenseTargets(object):
 
         :param new_target: the new target phrase included additional blank tokens
         :param n_feats: the number of features in the logits (time steps)
+        :param length: the actual length of the transcription with blanks inserted
         :param repeats: the number of repeats for each token
 
         :return: the index for each frame in turn
         """
 
-        spacing = n_feats // new_target.size
-        z = zip(new_target, repeats)
-        for t, r in z:
+        spacing = n_feats // length
+
+        for t in new_target:
             for i in range(spacing):
-                if i > r:
+                if i > repeats:
                     yield 28
                 else:
                     yield t
 
     @staticmethod
-    def pad_indices(indices, act_len):
-        n_paddings = act_len - len(indices)
-        padded = np.concatenate([indices, np.ones(n_paddings) * 28])
-        return padded
-
-
-class SparseTargets(object):
-
-    @staticmethod
-    def insert_target_blanks(target_indices):
-        # get a shifted list so we can compare back one step in the phrase
-
-        previous_indices = target_indices.tolist()
-        previous_indices.insert(0, None)
-
-        # insert blank tokens where ctc would expect them - i.e. `do-or`
-        # also insert a blank at the start to gives time for the RNN hidden
-        # states to "warm up"
-        with_repeats = [28]
-        for current, previous in zip(target_indices, previous_indices):
-            if not previous:
-                with_repeats.append(current)
-            elif current == previous:
-                with_repeats.append(28)
-                with_repeats.append(current)
-            else:
-                with_repeats.append(current)
-        return with_repeats
-
-    @staticmethod
-    def create_new_target_indices(new_target, n_feats):
+    def create_new_sparse_indices(new_target, n_feats):
 
         """
         Taking into account the space we have available, find out the new argmax
@@ -159,7 +139,7 @@ class SparseTargets(object):
         :return: the index for each frame in turn
         """
 
-        spacing = n_feats // new_target.size
+        spacing = n_feats // len(new_target)
 
         for t in new_target:
             for i in range(spacing):

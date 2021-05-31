@@ -24,7 +24,7 @@ def args(attack_run, additional_args: dict = None):
         "outdir": [str, "./adv/", False, None],
         "targets_path": [str, "./samples/cv-valid-test.csv", False, None],
         "max_examples": [int, 100, False, None],
-        "max_targets": [int, 1000, False, None],
+        "max_targets": [int, 2000, False, None],
         "max_audio_file_bytes": [int, 120000, False, None],
         "beam_width": [int, 500, False, None],
         "random_seed": [int, 420, False, None],

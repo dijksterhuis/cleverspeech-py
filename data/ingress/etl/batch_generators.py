@@ -74,25 +74,12 @@ def standard(settings):
         # load the correct transcription for the audio files
         trues_batch = etls.create_true_batch(audios_batch)
 
-        #  we need to make sure target phrase length < n audio feats.
-        # also, the first batch should also have the longest target phrase
-        # and longest audio examples so we can easily manage GPU Memory
-        # resources with the AttackSpawner context manager.
-
-        target_phrase = BatchGen.pop_target_phrase(
+        targets_batch = etls.create_standard_target_batch(
             targets_pool,
-            trues_batch["true_targets"],
-            min(audios_batch["real_feats"]) - 4
+            batch_size,
+            trues_batch,
+            audios_batch,
         )
-
-        # each target must be the same length else numpy throws a hissyfit
-        # because it can't understand skewed matrices
-        target_batch_data = l_map(
-            lambda _: target_phrase, range(batch_size)
-        )
-
-        # actually load the n phrases as a batch of target data
-        targets_batch = etls.create_standard_target_batch(target_batch_data)
 
         batch = Batch(
             batch_size,

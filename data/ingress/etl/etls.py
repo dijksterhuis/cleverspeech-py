@@ -144,25 +144,48 @@ def create_true_batch(audio_batch, tokens=TOKENS):
     }
 
 
-def create_standard_target_batch(data, tokens=TOKENS):
-    target_phrases = list(map(lambda x: x[0], data))
-    target_ids = list(map(lambda x: x[1], data))
+def create_standard_target_batch(targets_pool, batch_size, trues_batch, audios_batch, tokens=TOKENS):
 
-    indices = np_arr(
-        l_map(lambda x: utils.Targets.get_indices(x, tokens), target_phrases),
-        np.int32
-    )
+    target_data = []
+    for i in range(batch_size):
+        p = utils.BatchGen.pop_target_phrase(
+            targets_pool,
+            trues_batch["true_targets"],
+            min(audios_batch["real_feats"]) - 4
+        )
+        target_data.append(p)
+
+    target_phrases = l_map(lambda x: x[0], target_data)
+
     lengths = np_arr(
         l_map(lambda x: len(x), target_phrases),
+        np.int32
+    )
+
+    row_ids = list(map(lambda x: x[1], target_data))
+    maxlen = max(l_map(lambda x: len(x[0]), target_data))
+
+    original_indices = l_map(
+        lambda x: utils.Targets.get_indices(x, tokens),
+        target_phrases
+    )
+
+    padded_indices = np_arr(
+        l_map(
+            lambda x: np.concatenate(
+                [x, np.zeros(maxlen - len(x))]
+            ),
+            original_indices
+        ),
         np.int32
     )
 
     return {
         "tokens": tokens,
         "phrases": target_phrases,
-        "row_ids": target_ids,
-        "indices": indices,
-        "original_indices": indices,  # we may modify for alignments
+        "row_ids": row_ids,
+        "indices": padded_indices,
+        "original_indices": original_indices ,  # we may modify for alignments
         "lengths": lengths,
     }
 
@@ -174,30 +197,34 @@ def create_dense_target_batch_from_standard(data, actual_feats, max_feats):
     lengths = data["lengths"]
     tokens = data["tokens"]
 
-    new_transcription_indices = np_arr(
-        l_map(
-            lambda x: utils.DenseTargets.insert_target_blanks(x),
-            orig_indices
-        ),
-        np.int32
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
     )
 
     # calculate the actual number of repeats
     z = zip(actual_feats, lengths)
 
     n_repeats = [
-        utils.DenseTargets.calculate_possible_repeats(x, y) for x, y in z
+        utils.AlignmentTargets.calculate_densest_repeats(x, y) for x, y in z
     ]
 
     # do linear expansion only on the existing indices (target phrases
     # are still valid as they are).
-    z = zip(new_transcription_indices, actual_feats)
+    z = zip(
+        new_transcription_indices,
+        actual_feats,
+        l_map(len, new_transcription_indices),
+        n_repeats
+    )
 
     new_alignment_indices = [
         l_map(
             lambda x: x,
-            utils.DenseTargets.create_new_target_indices(x, y, n_repeats)
-        ) for x, y in z
+            utils.AlignmentTargets.create_new_dense_indices(x, y, l, n)
+        ) for x, y, l, n in z
     ]
 
     # do padding for non-ctc loss functions
@@ -206,7 +233,7 @@ def create_dense_target_batch_from_standard(data, actual_feats, max_feats):
         [
             l_map(
                 lambda x: x,
-                utils.DenseTargets.pad_indices(x, y)
+                utils.AlignmentTargets.pad_indices(x, y)
             ) for x, y in z
         ],
         np.int32
@@ -231,15 +258,15 @@ def create_dense_target_batch_from_standard(data, actual_feats, max_feats):
 def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
     target_phrases = data["phrases"]
     target_ids = data["row_ids"]
+    lengths = data["lengths"]
     orig_indices = data["indices"]
     tokens = data["tokens"]
 
-    new_transcription_indices = np_arr(
-        l_map(
-            lambda x: utils.SparseTargets.insert_target_blanks(x),
-            orig_indices
-        ),
-        np.int32
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
     )
 
     # do linear expansion only on the existing indices (target phrases
@@ -249,7 +276,7 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
     new_alignment_indices = [
         l_map(
             lambda x: x,
-            utils.SparseTargets.create_new_target_indices(x, y)
+            utils.AlignmentTargets.create_new_sparse_indices(x, y)
         ) for x, y in z
     ]
 
@@ -259,7 +286,71 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
         [
             l_map(
                 lambda x: x,
-                utils.SparseTargets.pad_indices(x, y)
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        len,
+        padded_alignment_indices
+    )
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
+
+
+def create_midish_target_batch_from_standard(data, actual_feats, max_feats):
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    orig_indices = data["indices"]
+    lengths = data["lengths"]
+    tokens = data["tokens"]
+
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    # calculate the actual number of repeats
+    z = zip(actual_feats, lengths)
+
+    n_repeats = [
+        utils.AlignmentTargets.calculate_midpoint_repeats(x, y) for x, y in z
+    ]
+
+    # do linear expansion only on the existing indices (target phrases
+    # are still valid as they are).
+    z = zip(
+        new_transcription_indices,
+        actual_feats,
+        l_map(len, new_transcription_indices),
+        n_repeats
+    )
+
+    new_alignment_indices = [
+        l_map(
+            lambda x: x,
+            utils.AlignmentTargets.create_new_dense_indices(x, y, l, n)
+        ) for x, y, l, n in z
+    ]
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
             ) for x, y in z
         ],
         np.int32
@@ -283,11 +374,6 @@ def create_sparse_target_batch_from_standard(data, actual_feats, max_feats):
 
 def create_ctcalign_target_batch_from_standard(data, actual_feats, max_feats):
     # TODO: Load a tf graph in a subprocess and get back the alignment data
-    pass
-
-
-def create_midpoint_target_batch_from_standard(data, actual_feats, max_feats):
-    # TODO: Create a midpoint alignment
     pass
 
 
