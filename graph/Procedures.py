@@ -466,6 +466,7 @@ class CTCAlignMixIn(AbstractProcedure, ABC):
         super().__init__(attack, *args, **kwargs)
 
         self.alignment_graph = alignment_graph
+        self.init_optimiser_variables()
 
     def init_optimiser_variables(self):
 
