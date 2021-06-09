@@ -377,6 +377,11 @@ def create_ctcalign_target_batch_from_standard(data, actual_feats, max_feats):
     pass
 
 
+def create_tightly_packed_target_batch_from_standard(data, actual_feats, max_feats):
+    # TODO: Place chars next to each other in an otherwise blank path
+    pass
+
+
 def create_shuffled_target_batch_from_standard(data, actual_feats, max_feats):
     # TODO: Create a randomly shuffled sparse (and/or midpoint/dense)
     pass
