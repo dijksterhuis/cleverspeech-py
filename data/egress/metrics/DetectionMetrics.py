@@ -10,6 +10,16 @@ def lnorm(x, norm=2):
         return np.power(np.sum(np.power(np.abs(x), norm)), 1 / norm)
 
 
+def peak_to_peak(x):
+    """
+    p2p = max(x) - min(x)
+
+    :param x: audio signal vector of amplitudes over time
+    :return: maximal peak-to-peak value of the signal
+    """
+    return max(x) - min(x)
+
+
 def energy(x):
     """
     E = sum(x^2)

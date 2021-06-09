@@ -5,6 +5,7 @@ from collections import OrderedDict
 from cleverspeech.data.egress.metrics.ErrorRates import character_error_rate
 from cleverspeech.data.egress.metrics.ErrorRates import word_error_rate
 from cleverspeech.data.egress.metrics.DetectionMetrics import lnorm
+from cleverspeech.data.egress.metrics.DetectionMetrics import peak_to_peak
 from cleverspeech.utils.Utils import log
 
 
@@ -100,6 +101,7 @@ def unbounded_transforms(batched_results):
             example_data["tokens"], example_data["raw_logits"]
         )
 
+        example_data["p2p"] = peak_to_peak(example_data["deltas"])
         example_data["linfs"] = lnorm(example_data["deltas"], norm=np.inf)
         example_data["l2s"] = lnorm(example_data["deltas"], norm=2)
 
@@ -162,6 +164,7 @@ def unbounded_logging(example_data, additional_logging_keys=None):
         "total_loss",
         "linfs",
         "l2s",
+        "p2p",
         "probs",
     ]
 
