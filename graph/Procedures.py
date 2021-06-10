@@ -136,20 +136,14 @@ class AbstractProcedure(ABC):
         """
         a = self.attack
 
+        self.do_warm_up()
+
         while self.steps_rule():
-
-            # Do startup stuff.
-
-            if self.current_step == 0:
-                self.do_warm_up()
 
             is_update_step = self.current_step % self.update_step == 0
             is_results_step = self.current_step % self.results_step == 0
             is_zeroth_step = self.current_step == 0
             is_round_step = is_update_step and not is_zeroth_step
-
-            if is_round_step:
-                self.post_optimisation_hook()
 
             if is_results_step:
 
@@ -160,12 +154,15 @@ class AbstractProcedure(ABC):
                 yield self.results_hook()
 
             if is_update_step or is_zeroth_step:
-
+                # TODO: rename pre_optimisation_hook()
                 self.post_results_hook()
 
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
+
+            if is_round_step:
+                self.post_optimisation_hook()
 
 
 class Unbounded(AbstractProcedure):
