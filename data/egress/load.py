@@ -109,6 +109,9 @@ def write_settings_to_s3(outdir, data):
 
     json_data = prepare_json_data(data, indent=0)
 
+    # we need to create the local directory for log files
+    safe_make_dirs(outdir)
+
     s3_object = s3_pseudo_make_dirs(bucket, file_path)
     s3_object.put(
         Body=json_data,
