@@ -210,11 +210,14 @@ class BaseLogitDiffLoss(BaseLoss):
     Base class that can be used for logits difference losses, like CW f_6
     and the adaptive kappa variant.
 
-    :param: attack_graph:
-    :param: target_argmax:
-    :param: softmax:
-    :param: weight_settings:
+    :param: attack: an attack class.
+    :param: target_argmax: frame length vector of desired target class indices
+    :param: softmax: bool type. whether to use softmax or activations
+    :param: weight_settings: how to update this loss function on success
     """
+    # TODO: attack should only be the attack.victim member (or potentially only
+    #  the actual softmax or logits attribute that we want). Although we'd also
+    #  need to pass in the tf.Sess and batch objects separately too.
     def __init__(self, attack, target_argmax, softmax=False, weight_settings=(None, None)):
 
         super().__init__(
@@ -223,22 +226,24 @@ class BaseLogitDiffLoss(BaseLoss):
             weight_settings=weight_settings
         )
 
-        # We only use the argmax of the generated alignments so we don't have
-        # to worry about finding "exact" alignments
-        # target_logits should be [b, feats, chars]
+        # Indices of the specified alignment per frame
         self.target_argmax = target_argmax  # [b x feats]
 
-        # Current logits is [b, feats, chars]
-        # current_argmax is for debugging purposes only
+        # we want to be able to choose either softmax or activations depending
+        # on the attack
 
         if softmax is False:
+
+            # logits are time major so transpose them
             self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
+
         else:
+
+            # softmax is batch major so all is well
             self.current = attack.victim.logits
 
-        # Create one hot matrices to multiply by current logits.
-        # These essentially act as a filter to keep only the target logit or
-        # the rest of the logits (non-target).
+        # Use one hot matrix as a filter on current network outputs
+
         targ_onehot = tf.one_hot(
             self.target_argmax,
             self.current.shape.as_list()[2],
@@ -246,8 +251,15 @@ class BaseLogitDiffLoss(BaseLoss):
             off_value=0.0
         )
 
-        # TODO: check this is correct, not the same as the cw cleverhans
-        #  implementation, but cleverhans seems to differ from the paper.
+        # targ will only be non-zero for the target class in each frame
+        # so we can just do a sum after filtering to get the current value
+
+        self.targ = self.current * targ_onehot
+        self.target_logit = tf.reduce_sum(self.targ, axis=2)
+
+        # the max other class per frame is slightly more tricky if we're using
+        # activations
+
         others_onehot = tf.one_hot(
             self.target_argmax,
             self.current.shape.as_list()[2],
@@ -255,14 +267,36 @@ class BaseLogitDiffLoss(BaseLoss):
             off_value=1.0
         )
 
-        self.others = self.current * others_onehot
-        self.targ = self.current * targ_onehot
+        if softmax is False:
 
-        # Get the maximums of:
-        # - target logit (should just be the target logit value)
-        # - all other logits (should be next most likely class)
+            # if the most likely other activation for a frame is negative we
+            # need to make sure we don't accidentally select the 0.0 one hot
+            # filter value
 
-        self.target_logit = tf.reduce_sum(self.targ, axis=2)
+            # get the current maximal value over the entire activations matix
+
+            maximal = tf.reduce_max(self.current, axis=[1, 2])
+
+            # set the onehot zero values to the negative of 2 * the biggest
+            # current activation entry to guarantee we *never* choose it
+            # ==> we could minus by a constant, but this could lead to weird
+            # edge case behaviour if an attack were to do *really* well
+
+            self.others = tf.where(
+                tf.equal(others_onehot, tf.zeros_like(others_onehot)),
+                tf.zeros_like(others_onehot) - (2 * maximal),
+                self.current * others_onehot
+            )
+
+        else:
+
+            # softmax is guaranteed to be in the 0 -> 1 range, so we don't need
+            # to worry about doing this
+
+            self.others = self.current * others_onehot
+
+        # finally, we can do the max_{k' \neq k} op.
+
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
