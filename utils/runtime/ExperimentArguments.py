@@ -27,7 +27,8 @@ def args(attack_run, additional_args: dict = None):
         "max_targets": [int, 2000, False, None],
         "max_audio_file_bytes": [int, 120000, False, None],
         "beam_width": [int, 500, False, None],
-        "random_seed": [int, 420, False, None],
+        # 4568 is the random seed used by DeepSpeech v0.4.1 in utils/flags.py
+        "random_seed": [int, 4568, False, None],
         "decoder": [
             str, "batch", False, [
                 "batch",
