@@ -133,7 +133,7 @@ def write_latest_metadata_to_local_json_file(outdir, data):
 
 def write_per_bound_metadata_to_local_json_files(outdir, data):
 
-    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+    outdir = make_per_bound_path(outdir, data['step'])
     file_name = data['basenames'].rstrip(".wav") + ".json"
     file_path = path.join(outdir, file_name)
 
@@ -171,7 +171,7 @@ def write_all_metadata_to_s3(outdir, data):
 
     bucket = "cleverspeech-results"
 
-    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+    outdir = make_per_bound_path(outdir, data['step'])
 
     file_path = data['basenames'].rstrip(".wav")
     file_path = file_path + ".json.bz2"
