@@ -74,7 +74,7 @@ class AlignmentTargets(object):
 
     @staticmethod
     def calculate_midpoint_repeats(actual_n_feats, target_phrase_length):
-        return (actual_n_feats / 3) // target_phrase_length
+        return ((actual_n_feats / 2) // target_phrase_length) - 1
 
     @staticmethod
     def insert_target_blanks(target_indices, length):
