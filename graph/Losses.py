@@ -275,7 +275,7 @@ class BaseLogitDiffLoss(BaseLoss):
 
             # get the current maximal value over the entire activations matix
 
-            maximal = tf.reduce_max(self.current, axis=[1, 2])
+            maximal = tf.reduce_max(self.current, axis=0)
 
             # set the onehot zero values to the negative of 2 * the biggest
             # current activation entry to guarantee we *never* choose it
