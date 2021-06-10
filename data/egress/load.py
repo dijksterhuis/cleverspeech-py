@@ -131,7 +131,7 @@ def write_latest_metadata_to_local_json_file(outdir, data):
         f.write(json_data)
 
 
-def write_per_bound_metadata_to_local_json_files(outdir, data):
+def write_all_metadata_to_local_json_files(outdir, data):
 
     outdir = make_per_bound_path(outdir, data['step'])
     file_name = data['basenames'].rstrip(".wav") + ".json"
