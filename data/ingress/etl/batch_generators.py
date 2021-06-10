@@ -10,6 +10,7 @@ subprocesses for each attack.
 
 from cleverspeech.data.ingress.etl import etls
 from cleverspeech.data.ingress.etl.utils import BatchGen
+from cleverspeech.data.ingress.etl.utils import subprocess_ctcalign_search
 from cleverspeech.utils.Utils import log, l_map
 
 
@@ -151,3 +152,23 @@ def midish(settings):
         yield idx, batch
 
 
+def ctcalign(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+        target_alignments = subprocess_ctcalign_search(batch)
+
+        targets_batch = batch.targets
+
+        targets_batch["original_indices"] = targets_batch["indices"]
+        targets_batch["padded_indices"] = target_alignments
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch

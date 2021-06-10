@@ -1,7 +1,12 @@
 import os
 import random
 import numpy as np
-from cleverspeech.utils.Utils import np_arr, np_zero, l_map
+import tensorflow as tf
+
+from cleverspeech.utils.Utils import np_arr, np_zero, l_map, log, lcomp
+
+
+TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
 
 
 class Files(object):
@@ -176,3 +181,174 @@ class BatchGen(object):
             )
         else:
             return candidate_target
+
+
+def subprocess_ctcalign_search(batch):
+    import multiprocessing as mp
+    q = mp.Queue()
+
+    p = mp.Process(
+        target=create_tf_ctc_alignment_search_graph,
+        args=(batch, q)
+    )
+    p.start()
+    p.join()
+    p.terminate()
+
+    target_aligns = q.get()
+
+    return target_aligns
+
+
+def create_tf_ctc_alignment_search_graph(batch, q):
+    with tf.Session() as sess:
+
+        targets = tf.placeholder(
+            tf.int32, [batch.size, None], name='qq_alignment_targets'
+        )
+        target_lengths = tf.placeholder(
+            tf.int32, [batch.size], name='qq_alignment_targets_lengths'
+        )
+
+        shape = [
+            batch.size, batch.audios["max_feats"], len(batch.targets["tokens"])
+        ]
+
+        initial_alignments = tf.Variable(
+            tf.zeros(shape),
+            dtype=tf.float32,
+            trainable=True,
+            name='qq_alignment'
+        )
+
+        # mask is *added* to force decoder to see the logits for those frames as
+        # repeat characters. CTC-Loss outputs zero valued vectors for those
+        # character classes (as they're beyond the actual alignment length)
+        # This messes with decoder output.
+
+        # --> N.B. This is legacy problem with tensorflow/numpy not being able
+        # to handle ragged inputs for tf.Variables etc.
+
+        mask = tf.Variable(
+            tf.ones(shape),
+            dtype=tf.float32,
+            trainable=False,
+            name='qq_alignment_mask'
+        )
+
+        logits_alignments = initial_alignments + mask
+        raw_alignments = tf.transpose(logits_alignments, [1, 0, 2])
+        softmax_alignments = tf.nn.softmax(logits_alignments)
+        target_alignments = tf.argmax(softmax_alignments, axis=2)
+
+        per_logit_lengths = batch.audios["real_feats"]
+        maxlen = shape[1]
+
+        def gen_mask(per_logit_len, maxlen):
+            # per actual frame
+            for l in per_logit_len:
+                # per possible frame
+                masks = []
+                for f in range(maxlen):
+                    if l > f:
+                        # if should be optimised
+                        mask = np.zeros([29])
+                    else:
+                        # shouldn't be optimised
+                        mask = np.zeros([29])
+                        mask[28] = 30.0
+                    masks.append(mask)
+                yield np.asarray(masks)
+
+        initial_masks = np.asarray(
+            [m for m in gen_mask(per_logit_lengths, maxlen)],
+            dtype=np.float32
+        )
+
+        sess.run(mask.assign(initial_masks))
+
+        seq_lens = batch.audios["real_feats"]
+
+        ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            targets,
+            target_lengths
+        )
+
+        loss_fn = tf.nn.ctc_loss(
+            labels=ctc_target,
+            inputs=raw_alignments,
+            sequence_length=seq_lens,
+        )
+
+        optimizer = tf.train.AdamOptimizer(1)
+
+        grad_var = optimizer.compute_gradients(
+            loss_fn,
+            initial_alignments
+        )
+        assert None not in lcomp(grad_var, i=0)
+
+        train_alignment = optimizer.apply_gradients(grad_var)
+        variables = optimizer.variables()
+
+        def tf_beam_decode(sess, logits, features_lengths, tokens):
+
+            tf_decode, log_probs = tf.nn.ctc_beam_search_decoder(
+                logits,
+                features_lengths,
+                merge_repeated=False,
+                beam_width=500
+            )
+            dense = tf.sparse.to_dense(tf_decode[0])
+            tf_dense = sess.run([dense])
+            tf_outputs = [''.join([
+                tokens[int(x)] for x in tf_dense[0][i]
+            ]).rstrip() for i in range(tf_dense[0].shape[0])]
+
+            return tf_outputs
+
+        while True:
+
+            train_ops = [
+                loss_fn,
+                softmax_alignments,
+                logits_alignments,
+                mask,
+                train_alignment
+            ]
+
+            feed = {
+                targets: batch.targets["indices"],
+                target_lengths: batch.targets["lengths"],
+            }
+
+            ctc_limit, softmax, raw, m, _ = sess.run(
+                train_ops,
+                feed_dict=feed
+            )
+
+            decodings, probs = tf_beam_decode(
+                sess, softmax, batch.audios["n_feats"], TOKENS
+            )
+
+            target_phrases = batch.targets["phrases"]
+
+            decoding_check = all(
+                [d == t for d, t in zip(decodings, target_phrases)]
+            )
+            ctc_check = all(
+                c < 0.1 for c in ctc_limit
+            )
+
+            if decoding_check and ctc_check:
+                s = "Found an alignment for each example:"
+                for d, p, t in zip(decodings, probs, target_phrases):
+                    s += "\nTarget: {t} | Decoding: {d} | Probs: {p:.3f}".format(
+                        t=t,
+                        d=d,
+                        p=p,
+                    )
+                log(s, wrap=True)
+                break
+
+        q.put(sess.run(target_alignments).tolist())
