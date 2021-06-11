@@ -36,7 +36,7 @@ def args(attack_run, additional_args: dict = None):
                 "ds",
                 "batch_no_lm",
                 "greedy_no_lm",
-                "tf",
+                "tf_beam",
                 "tf_greedy",
             ]
         ],
