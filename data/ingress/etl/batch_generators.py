@@ -7,11 +7,9 @@ subprocesses for each attack.
 --------------------------------------------------------------------------------
 """
 
-
 from cleverspeech.data.ingress.etl import etls
 from cleverspeech.data.ingress.etl.utils import BatchGen
-from cleverspeech.data.ingress.etl.utils import subprocess_ctcalign_search
-from cleverspeech.utils.Utils import log, l_map
+from cleverspeech.utils.Utils import log
 
 
 class Batch:
@@ -157,12 +155,10 @@ def ctcalign(settings):
     batch_size = settings["batch_size"]
 
     for idx, batch in standard(settings):
-        target_alignments = subprocess_ctcalign_search(batch)
 
-        targets_batch = batch.targets
-
-        targets_batch["original_indices"] = targets_batch["indices"]
-        targets_batch["padded_indices"] = target_alignments
+        targets_batch = etls.create_ctcalign_target_batch_from_standard(
+            batch
+        )
 
         batch = Batch(
             batch_size,
@@ -172,3 +168,19 @@ def ctcalign(settings):
         )
 
         yield idx, batch
+
+
+ALL_GENERATORS = {
+    "standard": standard,
+    "mid": midish,
+    "dense": dense,
+    "sparse": sparse,
+    "ctc": ctcalign,
+}
+
+PATH_GENERATORS = {
+    "mid": midish,
+    "dense": dense,
+    "sparse": sparse,
+    "ctc": ctcalign,
+}

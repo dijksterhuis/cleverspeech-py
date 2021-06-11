@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import numpy as np
 import tensorflow as tf
@@ -200,7 +201,7 @@ def subprocess_ctcalign_search(batch):
     return target_aligns
 
 
-def create_tf_ctc_alignment_search_graph(batch, q):
+def create_tf_ctc_alignment_search_graph(batch, q, use_beam_search_decoder=False):
     with tf.Session() as sess:
 
         targets = tf.placeholder(
@@ -221,14 +222,6 @@ def create_tf_ctc_alignment_search_graph(batch, q):
             name='qq_alignment'
         )
 
-        # mask is *added* to force decoder to see the logits for those frames as
-        # repeat characters. CTC-Loss outputs zero valued vectors for those
-        # character classes (as they're beyond the actual alignment length)
-        # This messes with decoder output.
-
-        # --> N.B. This is legacy problem with tensorflow/numpy not being able
-        # to handle ragged inputs for tf.Variables etc.
-
         mask = tf.Variable(
             tf.ones(shape),
             dtype=tf.float32,
@@ -236,9 +229,9 @@ def create_tf_ctc_alignment_search_graph(batch, q):
             name='qq_alignment_mask'
         )
 
-        logits_alignments = initial_alignments + mask
+        logits_alignments = initial_alignments * mask
         raw_alignments = tf.transpose(logits_alignments, [1, 0, 2])
-        softmax_alignments = tf.nn.softmax(logits_alignments)
+        softmax_alignments = tf.nn.softmax(logits_alignments, axis=-1)
         target_alignments = tf.argmax(softmax_alignments, axis=2)
 
         per_logit_lengths = batch.audios["real_feats"]
@@ -252,11 +245,11 @@ def create_tf_ctc_alignment_search_graph(batch, q):
                 for f in range(maxlen):
                     if l > f:
                         # if should be optimised
-                        mask = np.zeros([29])
+                        mask = np.ones([29])
                     else:
                         # shouldn't be optimised
                         mask = np.zeros([29])
-                        mask[28] = 30.0
+                        #mask[28] = 30.0
                     masks.append(mask)
                 yield np.asarray(masks)
 
@@ -303,11 +296,42 @@ def create_tf_ctc_alignment_search_graph(batch, q):
             tf_dense = sess.run([dense])
             tf_outputs = [''.join([
                 tokens[int(x)] for x in tf_dense[0][i]
-            ]).rstrip() for i in range(tf_dense[0].shape[0])]
+            ]) for i in range(tf_dense[0].shape[0])]
 
-            return tf_outputs
+            tf_outputs = [o.rstrip(" ") for o in tf_outputs]
 
-        while True:
+            probs = sess.run(log_probs)
+            probs = [prob[0] for prob in probs]
+            return tf_outputs, probs
+
+        def tf_greedy_decode(sess, logits, features_lengths, tokens, merge_repeated=True):
+
+            tf_decode, log_probs = tf.nn.ctc_greedy_decoder(
+                logits,
+                features_lengths,
+                merge_repeated=merge_repeated,
+            )
+            dense = tf.sparse.to_dense(tf_decode[0])
+            tf_dense = sess.run([dense])
+            tf_outputs = [''.join([
+                tokens[int(x)] for x in tf_dense[0][i]
+            ]) for i in range(tf_dense[0].shape[0])]
+
+            tf_outputs = [o.rstrip(" ") for o in tf_outputs]
+
+            neg_sum_logits = sess.run(log_probs)
+            neg_sum_logits = [prob[0] for prob in neg_sum_logits]
+            return tf_outputs, neg_sum_logits
+
+        variables.append(initial_alignments)
+
+        sess.run(tf.variables_initializer(variables))
+
+        still_have_work = True
+        max_iters = 1000
+        c = 0
+
+        while still_have_work:
 
             train_ops = [
                 loss_fn,
@@ -327,9 +351,14 @@ def create_tf_ctc_alignment_search_graph(batch, q):
                 feed_dict=feed
             )
 
-            decodings, probs = tf_beam_decode(
-                sess, softmax, batch.audios["n_feats"], TOKENS
-            )
+            if use_beam_search_decoder is True:
+                decodings, probs = tf_beam_decode(
+                    sess, raw_alignments, batch.audios["real_feats"], TOKENS
+                )
+            else:
+                decodings, probs = tf_greedy_decode(
+                    sess, raw_alignments, batch.audios["real_feats"], TOKENS
+                )
 
             target_phrases = batch.targets["phrases"]
 
@@ -349,6 +378,13 @@ def create_tf_ctc_alignment_search_graph(batch, q):
                         p=p,
                     )
                 log(s, wrap=True)
-                break
+                still_have_work = False
+
+            elif c >= max_iters:
+                log("Could not find any CTC optimal alignments for you...")
+                q.put("dead")
+                sys.exit(5)
+            else:
+                c += 1
 
         q.put(sess.run(target_alignments).tolist())

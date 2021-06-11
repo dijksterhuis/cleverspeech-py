@@ -9,6 +9,7 @@ from cleverspeech.utils.Utils import log
 
 
 def args(attack_run, additional_args: dict = None):
+    from cleverspeech.data.ingress.etl.batch_generators import PATH_GENERATORS
 
     # choices = list(experiments.keys())
 
@@ -29,6 +30,10 @@ def args(attack_run, additional_args: dict = None):
         "beam_width": [int, 500, False, None],
         # 4568 is the random seed used by DeepSpeech v0.4.1 in utils/flags.py
         "random_seed": [int, 4568, False, None],
+        "align": [
+            str, list(PATH_GENERATORS.keys())[0], False, PATH_GENERATORS.keys()
+        ],
+        "align_repeat_factor": [float, None, False, None],
         "decoder": [
             str, "batch", False, [
                 "batch",
@@ -85,6 +90,12 @@ def args(attack_run, additional_args: dict = None):
             )
 
     arguments = parser.parse_args()
+
+    if arguments.align_repeat_factor[0] is not None:
+        assert arguments.align[0] == "custom"
+
+    if arguments.align[0] == "custom":
+        assert arguments.align_repeat_factor[0] is not None
 
     # Disable tensorflow looking at tf.app.flags.FLAGS but we get to keep
     # the args in the args variable. Otherwise we get the following exception
