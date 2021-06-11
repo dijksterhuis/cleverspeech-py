@@ -109,6 +109,9 @@ def write_settings_to_s3(outdir, data):
 
     json_data = prepare_json_data(data, indent=0)
 
+    # we need to create the local directory for log files
+    safe_make_dirs(outdir)
+
     s3_object = s3_pseudo_make_dirs(bucket, file_path)
     s3_object.put(
         Body=json_data,
@@ -128,9 +131,9 @@ def write_latest_metadata_to_local_json_file(outdir, data):
         f.write(json_data)
 
 
-def write_per_bound_metadata_to_local_json_files(outdir, data):
+def write_all_metadata_to_local_json_files(outdir, data):
 
-    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+    outdir = make_per_bound_path(outdir, data['step'])
     file_name = data['basenames'].rstrip(".wav") + ".json"
     file_path = path.join(outdir, file_name)
 
@@ -168,7 +171,7 @@ def write_all_metadata_to_s3(outdir, data):
 
     bucket = "cleverspeech-results"
 
-    outdir = make_per_bound_path(outdir, data['bounds_raw'])
+    outdir = make_per_bound_path(outdir, data['step'])
 
     file_path = data['basenames'].rstrip(".wav")
     file_path = file_path + ".json.bz2"

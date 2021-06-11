@@ -8,9 +8,9 @@ from cleverspeech.utils.Utils import log
 
 RESULTS_WRITER_FUNCS = {
     "local_latest": load.write_latest_metadata_to_local_json_file,
-    "local_all": load.write_per_bound_metadata_to_local_json_files,
+    "local_all": load.write_all_metadata_to_local_json_files,
     "s3_latest": load.write_latest_metadata_to_s3,
-    "s3_all": load.write_per_bound_metadata_to_local_json_files,
+    "s3_all": load.write_all_metadata_to_s3
 }
 
 SETTINGS_WRITER_FUNCS = {
