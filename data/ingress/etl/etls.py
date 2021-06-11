@@ -373,6 +373,72 @@ def create_midish_target_batch_from_standard(data, actual_feats, max_feats):
     }
 
 
+def create_custom_repeats_target_batch_from_standard(data, actual_feats, max_feats, path_repeat_factor):
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    orig_indices = data["indices"]
+    lengths = data["lengths"]
+    tokens = data["tokens"]
+
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    # calculate the actual number of repeats
+    z = zip(actual_feats, lengths)
+
+    n_repeats = [
+        utils.AlignmentTargets.calculate_custom_repeats(x, y, r=path_repeat_factor) for x, y in z
+    ]
+    print(actual_feats, lengths, n_repeats)
+
+    # do linear expansion only on the existing indices (target phrases
+    # are still valid as they are).
+    z = zip(
+        new_transcription_indices,
+        actual_feats,
+        l_map(len, new_transcription_indices),
+        n_repeats
+    )
+
+    new_alignment_indices = [
+        l_map(
+            lambda x: x,
+            utils.AlignmentTargets.create_new_dense_indices(x, y, l, n)
+        ) for x, y, l, n in z
+    ]
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        lambda x: x.size,
+        padded_alignment_indices
+    )
+
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
+
+
 class NoValidCTCAlignmentException(Exception):
     pass
 

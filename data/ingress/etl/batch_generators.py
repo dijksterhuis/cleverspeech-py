@@ -130,6 +130,29 @@ def sparse(settings):
         yield idx, batch
 
 
+def custom_repeats(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+
+        targets_batch = etls.create_custom_repeats_target_batch_from_standard(
+            batch.targets,
+            batch.audios["real_feats"],
+            batch.audios["ds_feats"],
+            settings["align_repeat_factor"]
+        )
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch
+
+
 def midish(settings):
 
     batch_size = settings["batch_size"]

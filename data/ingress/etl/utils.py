@@ -83,6 +83,10 @@ class AlignmentTargets(object):
         return ((actual_n_feats / 2) // target_phrase_length) - 1
 
     @staticmethod
+    def calculate_custom_repeats(actual_n_feats, target_phrase_length, r=0.5):
+        return (actual_n_feats * r) // target_phrase_length
+
+    @staticmethod
     def insert_target_blanks(target_indices, length):
         # get a shifted list so we can compare back one step in the phrase
 
