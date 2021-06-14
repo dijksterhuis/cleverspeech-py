@@ -23,12 +23,12 @@ class AbstractAttackConstructor(ABC):
 
     For example, adding an L2 hard constraint would look like this:
 
-    >>> graph = EvasionAttackConstructor()
-    >>> graph.add_hard_constraint(
-    >>>    cleverspeech.graph.Constraints.L2, # the raw, uninitialised class ref
-    >>>    some_arg_for_l2_class,
-    >>>    some_other_arg_for_l2_class,
-    >>>    some_optional=arg_for_l2_class,
+    >>> from cleverspeech import graph
+    >>> attack = EvasionAttackConstructor()
+    >>> attack.add_hard_constraint(
+    >>>    graph.Constraints.L2, # the raw, uninitialised class ref
+    >>>    r_constant=0.9,
+    >>>    update_method="geom"
     >>> )
 
     This `Constructor` class will handle the initialisation of those classes,
@@ -38,7 +38,7 @@ class AbstractAttackConstructor(ABC):
 
     For example, this line calls the L2 hard constraint's `analyse()` method:
 
-    >>> graph.hard_constraint.analyse(graph.perturbations)
+    >>> attack.hard_constraint.analyse(attack.perturbations)
 
     This helps keep everything as standardised as possible and means we can use
     an instance of this `Constructor` class as a common interface for all other
