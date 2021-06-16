@@ -145,6 +145,9 @@ class AbstractProcedure(ABC):
             is_zeroth_step = self.current_step == 0
             is_round_step = is_update_step and not is_zeroth_step
 
+            if is_round_step:
+                self.post_optimisation_hook()
+
             if is_results_step:
 
                 # signal that we've finished optimisation for now **BEFORE**
@@ -160,9 +163,6 @@ class AbstractProcedure(ABC):
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
-
-            if is_round_step:
-                self.post_optimisation_hook()
 
 
 class Unbounded(AbstractProcedure):
