@@ -102,6 +102,25 @@ class CarliniL2Loss(BaseLoss):
         self.loss_fn = l2delta / self.weights
 
 
+class LinfLoss(BaseLoss):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+
+        super().__init__(
+            attack.sess,
+            attack.batch.size,
+            weight_settings=weight_settings
+        )
+
+        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
+        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
+
+        l2delta = tf.reduce_max(attack.perturbations, axis=1)
+        self.loss_fn = l2delta * self.weights
+
+
 class CTCLoss(BaseLoss):
     """
     Simple adversarial CTC Loss from https://arxiv.org/abs/1801.01944
