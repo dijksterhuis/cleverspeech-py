@@ -76,13 +76,13 @@ def write_latest_audio_to_local_wav_file(outdir, data, bit_depth=16, sample_rate
     for wav_file in ["audio", "deltas", "advs"]:
 
         file_name = data['basenames'].rstrip(".wav")
-        file_name = file_name + "_{}".format(wav_file)
+        file_name = file_name + "_{}.wav".format(wav_file)
 
         file_path = path.join(outdir, file_name)
 
         WavFile.write(
             file_path,
-            data,
+            data[wav_file],
             sample_rate=sample_rate,
             bit_depth=bit_depth
         )
@@ -130,6 +130,8 @@ def write_latest_metadata_to_local_json_file(outdir, data):
     with open(file_path, mode='w+', encoding='utf-8') as f:
         f.write(json_data)
 
+    write_latest_audio_to_local_wav_file(outdir, data)
+
 
 def write_all_metadata_to_local_json_files(outdir, data):
 
@@ -142,6 +144,8 @@ def write_all_metadata_to_local_json_files(outdir, data):
 
     with open(file_path, mode='w+', encoding='utf-8') as f:
         f.write(json_data)
+
+    write_latest_audio_to_local_wav_file(outdir, data)
 
 
 def write_latest_metadata_to_s3(outdir, data):
