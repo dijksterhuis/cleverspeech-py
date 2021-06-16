@@ -138,6 +138,9 @@ class AbstractProcedure(ABC):
 
         self.do_warm_up()
 
+        # TODO: This whole procedure needs some heavy "why" comments to explain
+        #  what's what and what's where.
+
         while self.steps_rule():
 
             is_update_step = self.current_step % self.update_step == 0
