@@ -27,7 +27,7 @@ class AbstractProcedure(ABC):
     :param: decode_step: when to stop and check a current decoding
 
     """
-    def __init__(self, attack, steps: int = 5000, update_step: int = 10):
+    def __init__(self, attack, steps: int = 10000, update_step: int = 100, results_step: int = 100):
 
         assert type(steps) in [float, int]
         assert type(update_step) in [float, int]
@@ -35,7 +35,7 @@ class AbstractProcedure(ABC):
         assert attack.optimiser is not None
 
         self.attack = attack
-        self.steps, self.update_step, self.results_step = steps + 1, update_step, update_step
+        self.steps, self.update_step, self.results_step = steps + 1, update_step, results_step
         self.current_step = 0
 
     def init_optimiser_variables(self):
@@ -298,7 +298,7 @@ class HardcoreMode(Unbounded):
         return True
 
 
-class UpdateOnSuccess(AbstractProcedure):
+class HardConstraintUpdater(AbstractProcedure):
     """
     MixIn to update bounds and loss weightings.
 
@@ -343,7 +343,7 @@ class UpdateOnSuccess(AbstractProcedure):
             self.__update_losses(successes)
 
 
-class UpdateOnDecoding(UpdateOnSuccess):
+class UpdateOnDecoding(HardConstraintUpdater):
     """
     Perform updates when decoding matches a target transcription.
     """
@@ -374,7 +374,7 @@ class UpdateOnDecoding(UpdateOnSuccess):
                 yield False
 
 
-class UpdateOnLoss(UpdateOnSuccess):
+class UpdateOnLoss(HardConstraintUpdater):
     """
     Perform updates when loss reaches a specified threshold.
     """
@@ -403,7 +403,7 @@ class UpdateOnLoss(UpdateOnSuccess):
                 yield False
 
 
-class UpdateOnDeepSpeechProbs(UpdateOnSuccess):
+class UpdateOnDeepSpeechProbs(HardConstraintUpdater):
     """
     Perform updates when deepspeech decoder log probs reach a specified
     threshold.
