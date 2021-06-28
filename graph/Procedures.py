@@ -123,7 +123,7 @@ class AbstractProcedure(ABC):
         return True
 
     @abstractmethod
-    def post_results_hook(self):
+    def pre_optimisation_updates_hook(self):
         """
         How should we update the attack for whatever we consider a success?
         This should be defined in **EVERY** child implementation of this class.
@@ -161,7 +161,7 @@ class AbstractProcedure(ABC):
 
             if is_update_step or is_zeroth_step:
                 # TODO: rename pre_optimisation_hook()
-                self.post_results_hook()
+                self.pre_optimisation_updates_hook()
 
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
@@ -208,7 +208,7 @@ class Unbounded(AbstractProcedure):
             else:
                 yield False
 
-    def post_results_hook(self):
+    def pre_optimisation_updates_hook(self):
         """
         do nothing
         """
@@ -306,7 +306,7 @@ class LossWeightingsUpdater(AbstractProcedure):
     This class should never be initialised by itself, it should always be
     extended.
     """
-    def post_results_hook(self):
+    def pre_optimisation_updates_hook(self):
 
         successes = l_map(
             lambda x: x, self.check_for_successful_examples()
@@ -325,7 +325,7 @@ class ProjectedGradientDescentUpdater(AbstractProcedure):
     extended.
     """
 
-    def post_results_hook(self):
+    def pre_optimisation_updates_hook(self):
         """
         Update both hard constraint bound and any loss weightings.
         """
