@@ -298,6 +298,25 @@ class HardcoreMode(Unbounded):
         return True
 
 
+class LossWeightingsUpdater(AbstractProcedure):
+    """
+    MixIn to check which loss object should be updated and then applies
+    those updates.
+
+    This class should never be initialised by itself, it should always be
+    extended.
+    """
+    def post_results_hook(self):
+
+        successes = l_map(
+            lambda x: x, self.check_for_successful_examples()
+        )
+
+        for loss in self.attack.loss:
+            if loss.updateable is True:
+                loss.update_many(successes)
+
+
 class HardConstraintUpdater(AbstractProcedure):
     """
     MixIn to only update hard constraint bounds.
