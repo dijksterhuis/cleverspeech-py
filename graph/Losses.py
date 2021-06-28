@@ -33,15 +33,17 @@ class BaseLoss:
         second entry is how much to add to the current weighting after an
         update.
     """
-    def __init__(self, sess, batch_size: int, weight_settings: tuple = (None, None)):
+    def __init__(self, sess, batch_size: int, weight_settings: tuple = (None, None), updateable: bool =False):
 
         assert type(weight_settings) in [list, tuple]
+        assert type(updateable) is bool
         assert all(type(t) in [float, int] for t in weight_settings)
         assert len(weight_settings) == 2
 
         initial = weight_settings[0]
         increment = weight_settings[1]
 
+        self.updateable = updateable
         self.__sess = sess
 
         self.weights = tf.Variable(
