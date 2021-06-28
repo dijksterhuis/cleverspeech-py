@@ -442,10 +442,6 @@ class EvasionPGD(DecodingPGD):
         self.init_optimiser_variables()
 
 
-class StandardPGD(EvasionPGD):
-    pass
-
-
 class HighConfidenceEvasionPGD(LossPGD):
     def __init__(self, attack, *args, **kwargs):
         super().__init__(attack, *args, **kwargs)
@@ -554,10 +550,6 @@ class EvasionLWU(DecodingLWU):
     def __init__(self, attack, *args, **kwargs):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
-
-
-class StandardLWU(EvasionLWU):
-    pass
 
 
 class HighConfidenceEvasionLWU(LossLWU):
