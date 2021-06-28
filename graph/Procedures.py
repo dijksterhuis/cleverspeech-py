@@ -300,32 +300,11 @@ class HardcoreMode(Unbounded):
 
 class HardConstraintUpdater(AbstractProcedure):
     """
-    MixIn to update bounds and loss weightings.
+    MixIn to only update hard constraint bounds.
 
     This class should never be initialised by itself, it should always be
     extended.
     """
-    def __init__(self, attack, *args, loss_update_idx = None, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-        if loss_update_idx is not None:
-            assert type(loss_update_idx) in [tuple, list]
-            for idx in loss_update_idx:
-                assert type(idx) is int
-
-        self.update_loss = loss_update_idx
-
-    def __update_hard_constraint(self, deltas , successes):
-
-        self.attack.hard_constraint.update_many(
-            deltas, successes
-        )
-
-    def __update_losses(self, successes):
-        for loss_idx in self.update_loss:
-            loss_to_update = self.attack.loss[loss_idx]
-            loss_to_update.update_many(successes)
 
     def post_results_hook(self):
         """
@@ -337,10 +316,9 @@ class HardConstraintUpdater(AbstractProcedure):
             lambda x: x, self.check_for_successful_examples()
         )
 
-        self.__update_hard_constraint(deltas, successes)
-
-        if self.update_loss is not None:
-            self.__update_losses(successes)
+        self.attack.hard_constraint.update_many(
+            deltas, successes
+        )
 
 
 class UpdateOnDecoding(HardConstraintUpdater):
