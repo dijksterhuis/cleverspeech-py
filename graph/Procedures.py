@@ -450,3 +450,117 @@ class HighConfidenceEvasionPGD(LossPGD):
     def __init__(self, attack, *args, **kwargs):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
+
+
+class DecodingLWU(LossWeightingsUpdater):
+    """
+    Perform updates when decoding matches a target transcription.
+    """
+
+    def __init__(self, attack, *args, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+    def check_for_successful_examples(self):
+        """
+        Success is when the decoding matches the target phrase.
+        """
+        decodings, _ = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            top_five=False,
+        )
+
+        phrases = self.attack.batch.targets["phrases"]
+
+        z = zip(decodings, phrases)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left == right:
+                yield True
+
+            else:
+                yield False
+
+
+class LossLWU(LossWeightingsUpdater):
+    """
+    Perform updates when loss reaches a specified threshold.
+    """
+
+    def __init__(self, attack, *args, loss_lower_bound=0.1, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+        self.loss_bound = loss_lower_bound
+
+    def check_for_successful_examples(self):
+        """
+        Success is when the loss reaches a specified threshold.
+        """
+        loss = self.tf_run(self.attack.loss_fn)
+        threshold = [self.loss_bound for _ in range(self.attack.batch.size)]
+
+        z = zip(loss, threshold)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left <= right:
+                yield True
+
+            else:
+                yield False
+
+
+class DeepSpeechLogProbsLWU(LossWeightingsUpdater):
+    """
+    Perform updates when deepspeech decoder log probs reach a specified
+    threshold.
+    """
+
+    def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+        self.probs_diff = probs_diff
+
+    def check_for_successful_examples(self):
+        """
+        Success is when log likelihood (decoder probabilities) have reached a
+        certain threshold.
+        """
+
+        _, probs = self.attack.victim.inference(
+            self.attack.batch,
+            feed=self.attack.feeds.attack,
+            top_five=False,
+        )
+
+        threshold = [self.probs_diff for _ in range(self.attack.batch.size)]
+
+        z = zip(probs, threshold)
+
+        for idx, (left, right) in enumerate(z):
+
+            if left <= right:
+                yield True
+
+            else:
+                yield False
+
+
+class EvasionLWU(DecodingLWU):
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
+
+
+class StandardLWU(EvasionLWU):
+    pass
+
+
+class HighConfidenceEvasionLWU(LossLWU):
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+        self.init_optimiser_variables()
