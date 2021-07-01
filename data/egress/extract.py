@@ -119,7 +119,7 @@ def get_unbounded_attack_state(attack):
         attack.delta_graph.opt_vars,
         attack.victim.logits,
         tf.transpose(attack.victim.raw_logits, [1, 0, 2]),
-        attack.optimiser.gradients,
+        # attack.optimiser.gradients,
     ]
 
     [
@@ -129,7 +129,7 @@ def get_unbounded_attack_state(attack):
         delta_vars,
         softmax_logits,
         raw_logits,
-        gradients,
+        # gradients,
     ] = get_tf_graph_variables(tf_graph_variables, attack.procedure.tf_run)
 
     batched_results = {
@@ -139,7 +139,7 @@ def get_unbounded_attack_state(attack):
         "total_loss": total_losses,
         "deltas": deltas,
         "advs": adv_audio,
-        "gradients": gradients,
+        # "gradients": gradients,
         "delta_vars": [d for d in delta_vars[0]],
         "softmax_logits": softmax_logits,
         "raw_logits": raw_logits,
