@@ -35,7 +35,7 @@ class AbstractProcedure(ABC):
         assert attack.optimiser is not None
 
         self.attack = attack
-        self.steps, self.update_step, self.results_step = steps + 1, update_step, results_step
+        self.steps, self.update_step, self.results_step = steps + 1, update_step, update_step
         self.current_step = 0
 
     def init_optimiser_variables(self):
