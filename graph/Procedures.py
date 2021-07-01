@@ -160,7 +160,7 @@ class AbstractProcedure(ABC):
 
                 yield self.results_hook()
 
-            if is_update_step or is_zeroth_step:
+            if is_update_step and not is_zeroth_step:
                 # TODO: rename pre_optimisation_hook()
                 self.pre_optimisation_updates_hook()
 
