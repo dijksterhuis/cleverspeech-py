@@ -66,6 +66,13 @@ def create_audio_batch_from_wav_files(batched_file_path_data, dtype="int16"):
 
     audios = lcomp([WavFile.load(f, dtype) for f in audio_fps])
 
+    # N.B. ==> If audios is 0 at any point then the perturbation will always be
+    # zero for that sample due to a zero gradient. so add 1 to zero samples make
+    # backpropogation work for all samples (1/2**15 is small so side-effects
+    # should be minimal).
+    for audio in audios:
+        audio[audio == 0] = 1.0
+
     maxlen = max(map(len, audios))
     maximum_length = maxlen + utils.Audios.padding(maxlen)
 
