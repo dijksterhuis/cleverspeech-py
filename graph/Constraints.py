@@ -208,15 +208,11 @@ class AbstractLNorm(ABC):
         """
 
         current_bounds = self.tf_run(self.bounds)
+        current_distances = self.analyse(deltas)
 
-        for index, (delta, success) in enumerate(zip(deltas, successes)):
-
-            current_bound = current_bounds[index][0]
-
+        for b, dist, success in zip(current_bounds, current_distances, successes):
             if success is True:
-                current_distance = self.analyse(delta)
-                new_bound = self.get_new_bound(current_bound, current_distance)
-                current_bounds[index][0] = new_bound
+                b[0] = self.get_new_bound(b[0], dist[0])
 
         self.tf_run(self.bounds.assign(current_bounds))
 
@@ -261,7 +257,7 @@ class L2(AbstractLNorm):
         :param x: some input array, must be passable to numpy functions
         :return: the current l2 norm of the given array
         """
-        res = np.power(np.sum(np.power(np.abs(x), 2)), 1 / 2)
+        res = np.power(np.sum(np.power(np.abs(x), 2), axis=-1), 1 / 2)
         if type(res) != list:
             res = [res]
         return res
@@ -306,7 +302,7 @@ class Linf(AbstractLNorm):
         :param x: some input array, must be passable to numpy functions
         :return: the current Linf norm of the given array
         """
-        res = np.max(np.abs(x))
+        res = np.max(np.abs(x), axis=-1)
         if type(res) != list:
             res = [res]
         return res

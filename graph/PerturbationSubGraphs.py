@@ -151,16 +151,11 @@ class Independent(AbstractPerturbationSubGraph):
 
     def deltas_apply(self, sess, func):
 
-        assign_ops = []
         deltas = sess.run(self.final_deltas)
 
-        for idx, delta in enumerate(deltas):
-
-            new_delta = func(delta)
-
-            assign_ops.append(
-                self.raw_deltas[idx].assign(new_delta)
-            )
+        assign_ops = [
+            self.raw_deltas[i].assign(func(d)) for i, d in enumerate(deltas)
+        ]
 
         sess.run(assign_ops)
 
