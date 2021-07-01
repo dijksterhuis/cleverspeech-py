@@ -104,8 +104,9 @@ class AbstractProcedure(ABC):
 
         def rounding_func(delta):
             signs = np.sign(delta)
-            abs_floor = np.floor(np.abs(delta))
-            return signs * abs_floor
+            abs_floor = np.floor(np.abs(delta)).astype(np.int32)
+            new_delta = np.round((signs * abs_floor).astype(np.float32))
+            return new_delta
 
         self.attack.delta_graph.deltas_apply(
             self.attack.sess, rounding_func
