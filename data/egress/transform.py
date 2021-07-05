@@ -80,23 +80,23 @@ def metadata_transforms(batched_results):
     if "initial_taus" in batched_results.keys():
         batched_results = fix_evasion_nestings(batched_results)
 
-    unbounded_examples = transpose(batched_results)
+    examples = transpose(batched_results)
 
-    for example_idx, example_data in unbounded_examples.items():
+    for idx, example in examples.items():
 
-        example_data["argmax"] = get_argmax_alignment(
-            example_data["tokens"], example_data["raw_logits"]
+        example["argmax"] = get_argmax_alignment(
+            example["tokens"], example["raw_logits"]
         )
 
-        example_data["p2p"] = peak_to_peak(example_data["deltas"])
-        example_data["linfs"] = lnorm(example_data["deltas"], norm=np.inf)
-        example_data["l2s"] = lnorm(example_data["deltas"], norm=2)
+        example["p2p"] = peak_to_peak(example["deltas"])
+        example["linfs"] = lnorm(example["deltas"], norm=np.inf)
+        example["l2s"] = lnorm(example["deltas"], norm=2)
 
         # convert spaces to "=" so we can tell what's what in logs
-        example_data["decodings"] = example_data["decodings"].replace(" ", "=")
-        example_data["phrases"] = example_data["phrases"].replace(" ", "=")
+        example["decodings"] = example["decodings"].replace(" ", "=")
+        example["phrases"] = example["phrases"].replace(" ", "=")
 
-        yield OrderedDict(example_data)
+        yield OrderedDict(example)
 
 
 def logging_transforms(example_data, additional_logging_keys=None):
