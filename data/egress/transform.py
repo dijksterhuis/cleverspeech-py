@@ -75,23 +75,10 @@ def transpose(batched_results):
     return d
 
 
-def evasion_transforms(batch_results):
+def metadata_transforms(batched_results):
 
-    evasion_examples = transpose(fix_evasion_nestings(batch_results))
-
-    for example_idx, example_data in evasion_examples.items():
-
-        example_data["argmax"] = get_argmax_alignment(
-            example_data["tokens"], example_data["raw_logits"]
-        )
-        # convert spaces to "=" so we can tell what's what in logs
-        example_data["decodings"] = example_data["decodings"].replace(" ", "=")
-        example_data["phrases"] = example_data["phrases"].replace(" ", "=")
-
-        yield OrderedDict(example_data)
-
-
-def unbounded_transforms(batched_results):
+    if "initial_taus" in batched_results.keys():
+        batched_results = fix_evasion_nestings(batched_results)
 
     unbounded_examples = transpose(batched_results)
 
@@ -112,50 +99,7 @@ def unbounded_transforms(batched_results):
         yield OrderedDict(example_data)
 
 
-def evasion_logging(example_data, additional_logging_keys=None):
-
-    logging_keys = [
-        "step",
-        "basenames",
-        "success",
-        "total_loss",
-        "bounds_eps",
-        "distances_eps",
-        "probs",
-    ]
-
-    if additional_logging_keys is not None:
-        logging_keys.append(additional_logging_keys)
-
-    logging_data = [(k, example_data[k]) for k in logging_keys]
-    log_result = OrderedDict(logging_data)
-
-    all_losses = [
-        ("loss{}".format(i), l) for i, l in enumerate(example_data["losses"])
-    ]
-    cer = character_error_rate(example_data["decodings"], example_data["phrases"])
-    wer = word_error_rate(example_data["decodings"], example_data["phrases"])
-
-    log_updates = [
-        *all_losses,
-        # ("grads", sum(example_data["gradients"])),
-        ("cer", cer),
-        ("wer", wer),
-        ("targ", example_data["phrases"]),
-        ("decode", example_data["decodings"]),
-    ]
-
-    log_result.update(log_updates)
-
-    # -- Log how we're doing to file on disk
-    # if you want to monitor progress live then you'll have to do:
-    # `tail -f ./path/to/outdir/log.txt`.
-    step_logs = step_logging(log_result)
-
-    return step_logs
-
-
-def unbounded_logging(example_data, additional_logging_keys=None):
+def logging_transforms(example_data, additional_logging_keys=None):
 
     logging_keys = [
         "step",
@@ -210,22 +154,10 @@ def unbounded_logging(example_data, additional_logging_keys=None):
     return step_logs
 
 
-def evasion_gen(results, settings):
-    for example_data in evasion_transforms(results):
+def transforms_gen(results, settings):
+    for example_data in metadata_transforms(results):
         log(
-            evasion_logging(example_data),
-            wrap=False,
-            outdir=settings["outdir"],
-            stdout=False,
-            timings=True,
-        )
-        yield example_data
-
-
-def unbounded_gen(results, settings):
-    for example_data in unbounded_transforms(results):
-        log(
-            unbounded_logging(example_data),
+            logging_transforms(example_data),
             wrap=False,
             outdir=settings["outdir"],
             stdout=False,

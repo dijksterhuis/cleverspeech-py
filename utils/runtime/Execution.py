@@ -1,7 +1,7 @@
 import traceback
 import multiprocessing as mp
 
-from cleverspeech.data.egress import extract, load
+from cleverspeech.data.egress import load
 from cleverspeech.utils.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.Utils import log
 
@@ -83,7 +83,15 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
                 results_queue.put(res)
 
 
-def manager(settings, attack_fn, batch_gen, results_extract_fn, results_transform_fn):
+def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_transform_fn=None):
+
+    if not results_extract_fn:
+        from cleverspeech.data.egress.extract import get_attack_state
+        results_extract_fn = get_attack_state
+
+    if not results_transform_fn:
+        from cleverspeech.data.egress.transform import transforms_gen
+        results_transform_fn = transforms_gen
 
     results_queue = mp.JoinableQueue()
 
@@ -143,28 +151,11 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn, results_transfor
     log("Writer subprocess closed.", wrap=True)
 
 
-def default_unbounded_manager(settings, attack_fn, batch_gen):
-
-    from cleverspeech.data.egress import extract, transform
+def default_manager(settings, attack_fn, batch_gen):
 
     return manager(
         settings,
         attack_fn,
         batch_gen,
-        extract.get_unbounded_attack_state,
-        transform.unbounded_gen
-    )
-
-
-def default_evasion_manager(settings, attack_fn, batch_gen):
-
-    from cleverspeech.data.egress import extract, transform
-
-    return manager(
-        settings,
-        attack_fn,
-        batch_gen,
-        extract.get_evasion_attack_state,
-        transform.evasion_gen
     )
 

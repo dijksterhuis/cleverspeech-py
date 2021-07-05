@@ -93,7 +93,7 @@ def convert_to_epsilon(value, reference):
     )
 
 
-def get_unbounded_attack_state(attack):
+def get_attack_state(attack):
     """
     Get the current values of a bunch of attack graph variables -- for unbounded
     attacks only.
@@ -122,69 +122,86 @@ def get_unbounded_attack_state(attack):
         # attack.optimiser.gradients,
     ]
 
-    [
-        total_losses,
-        deltas,
-        adv_audio,
-        delta_vars,
-        softmax_logits,
-        raw_logits,
-        # gradients,
-    ] = get_tf_graph_variables(tf_graph_variables, attack.procedure.tf_run)
+    if attack.hard_constraint is not None:
+        tf_graph_variables.append(attack.hard_constraint.bounds)
 
-    batched_results = {
-        "step": batched_steps,
-        "tokens": batched_tokens,
-        "losses": each_graph_loss_transposed,
-        "total_loss": total_losses,
-        "deltas": deltas,
-        "advs": adv_audio,
-        # "gradients": gradients,
-        "delta_vars": [d for d in delta_vars[0]],
-        "softmax_logits": softmax_logits,
-        "raw_logits": raw_logits,
-        "success": get_success_bools(attack)
-    }
-    batched_results.update(get_audio_batch(attack.batch))
-    batched_results.update(get_target_batch(attack.batch))
-    batched_results.update(decodings)
+        np_vars = get_tf_graph_variables(
+            tf_graph_variables, attack.procedure.tf_run
+        )
 
-    return batched_results
+        [
+            total_losses,
+            deltas,
+            adv_audio,
+            delta_vars,
+            softmax_logits,
+            raw_logits,
+            # gradients,
+            bounds_raw
+        ] = np_vars
 
+        initial_tau = attack.hard_constraint.initial_taus
+        distance_raw = get_constraint_raw_distances(attack, deltas)
+        bound_eps = convert_to_epsilon(bounds_raw, initial_tau)
+        distance_eps = convert_to_epsilon(distance_raw, initial_tau)
 
-def get_evasion_attack_state(attack):
-    """
-    Get the current values of a bunch of attack graph variables.
+        batched_results = {
+            "step": batched_steps,
+            "tokens": batched_tokens,
+            "losses": each_graph_loss_transposed,
+            "total_loss": total_losses,
+            "deltas": deltas,
+            "advs": adv_audio,
+            # "gradients": gradients,
+            "delta_vars": [d for d in delta_vars[0]],
+            "softmax_logits": softmax_logits,
+            "raw_logits": raw_logits,
+            "success": get_success_bools(attack)
+        }
+        batched_results.update(get_audio_batch(attack.batch))
+        batched_results.update(get_target_batch(attack.batch))
+        batched_results.update(decodings)
 
-    """
+        additional_results = {
+            "initial_taus": initial_tau,
+            "bounds_raw": bounds_raw,
+            "distances_raw": distance_raw,
+            "bounds_eps": bound_eps,
+            "distances_eps": distance_eps,
+        }
+        batched_results.update(additional_results)
 
-    batched_results = get_unbounded_attack_state(attack)
+    else:
+        np_vars = get_tf_graph_variables(
+            tf_graph_variables, attack.procedure.tf_run
+        )
 
-    tf_graph_variables = [
-        attack.hard_constraint.bounds,
-        attack.perturbations,
-    ]
+        [
+            total_losses,
+            deltas,
+            adv_audio,
+            delta_vars,
+            softmax_logits,
+            raw_logits,
+            # gradients,
+        ] = np_vars
 
-    [
-        bounds_raw,
-        deltas,
-    ] = get_tf_graph_variables(tf_graph_variables, attack.procedure.tf_run)
-
-    # TODO: Fix nesting here or over in file write subprocess (as is now)?
-    initial_tau = attack.hard_constraint.initial_taus
-    distance_raw = get_constraint_raw_distances(attack, deltas)
-    bound_eps = convert_to_epsilon(bounds_raw, initial_tau)
-    distance_eps = convert_to_epsilon(distance_raw, initial_tau)
-
-    additional_results = {
-        "initial_taus": initial_tau,
-        "bounds_raw": bounds_raw,
-        "distances_raw": distance_raw,
-        "bounds_eps": bound_eps,
-        "distances_eps": distance_eps,
-    }
-
-    batched_results.update(additional_results)
+        batched_results = {
+            "step": batched_steps,
+            "tokens": batched_tokens,
+            "losses": each_graph_loss_transposed,
+            "total_loss": total_losses,
+            "deltas": deltas,
+            "advs": adv_audio,
+            # "gradients": gradients,
+            "delta_vars": [d for d in delta_vars[0]],
+            "softmax_logits": softmax_logits,
+            "raw_logits": raw_logits,
+            "success": get_success_bools(attack)
+        }
+        batched_results.update(get_audio_batch(attack.batch))
+        batched_results.update(get_target_batch(attack.batch))
+        batched_results.update(decodings)
 
     return batched_results
 
