@@ -21,15 +21,6 @@ def fix_evasion_nestings(batched_results):
     batched_results["bounds_raw"] = fix_nesting(
         batched_results["bounds_raw"]
     )
-    batched_results["distances_raw"] = fix_nesting(
-        batched_results["distances_raw"]
-    )
-    batched_results["bounds_eps"] = fix_nesting(
-        batched_results["bounds_eps"]
-    )
-    batched_results["distances_eps"] = fix_nesting(
-        batched_results["distances_eps"]
-    )
 
     return batched_results
 
@@ -88,9 +79,11 @@ def metadata_transforms(batched_results):
             example["tokens"], example["raw_logits"]
         )
 
+        example["l0"] = lnorm(example["deltas"], norm=0)
+        example["l1"] = lnorm(example["deltas"], norm=1)
+        example["l2"] = lnorm(example["deltas"], norm=2)
+        example["linf"] = lnorm(example["deltas"], norm=np.inf)
         example["p2p"] = peak_to_peak(example["deltas"])
-        example["linfs"] = lnorm(example["deltas"], norm=np.inf)
-        example["l2s"] = lnorm(example["deltas"], norm=2)
 
         # convert spaces to "=" so we can tell what's what in logs
         example["decodings"] = example["decodings"].replace(" ", "=")
@@ -106,8 +99,9 @@ def logging_transforms(example_data, additional_logging_keys=None):
         "basenames",
         "success",
         "total_loss",
-        "linfs",
-        "l2s",
+        "l0",
+        "l2",
+        "linf",
         "p2p",
         "probs",
     ]
