@@ -6,6 +6,8 @@ from math import sqrt
 def lnorm(x, norm=2):
     if norm == float('inf') or norm == np.inf:
         return np.max(np.abs(x))
+    elif norm == 0.0:
+        return np.count_nonzero(x != 0)
     else:
         return np.power(np.sum(np.power(np.abs(x), norm)), 1 / norm)
 
