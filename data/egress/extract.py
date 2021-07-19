@@ -145,8 +145,8 @@ def get_attack_state(attack):
 
     else:
 
-        initial_taus = None
-        bounds_raw = None
+        initial_taus = [[None] for _ in range(attack.batch.size)]
+        bounds_raw = [[None] for _ in range(attack.batch.size)]
 
         np_vars = get_tf_graph_variables(
             tf_graph_variables, attack.procedure.tf_run
