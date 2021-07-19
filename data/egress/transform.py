@@ -68,10 +68,7 @@ def transpose(batched_results):
 
 def metadata_transforms(batched_results):
 
-    if "initial_taus" in batched_results.keys():
-        batched_results = fix_evasion_nestings(batched_results)
-
-    examples = transpose(batched_results)
+    examples = transpose(fix_evasion_nestings(batched_results))
 
     for idx, example in examples.items():
 
