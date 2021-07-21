@@ -33,7 +33,7 @@ class BaseLoss:
         second entry is how much to add to the current weighting after an
         update.
     """
-    def __init__(self, sess, batch_size: int, weight_settings: tuple = (None, None), updateable: bool =False):
+    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
 
         assert type(weight_settings) in [list, tuple]
         assert type(updateable) is bool
@@ -44,16 +44,16 @@ class BaseLoss:
         increment = weight_settings[1]
 
         self.updateable = updateable
-        self.__sess = sess
+        self.__sess = attack.sess
 
         self.weights = tf.Variable(
-            tf.ones(batch_size, dtype=tf.float32),
+            tf.ones(attack.batch_size, dtype=tf.float32),
             trainable=False,
             validate_shape=True,
             name="qq_loss_weight"
         )
 
-        initial_vals = initial * np.ones([batch_size], dtype=np.float32)
+        initial_vals = initial * np.ones([attack.batch_size], dtype=np.float32)
         self.__sess.run(self.weights.assign(initial_vals))
 
         self.increment = float(increment)
@@ -89,12 +89,12 @@ class CarliniL2Loss(BaseLoss):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
@@ -108,12 +108,12 @@ class LinfLoss(BaseLoss):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
@@ -129,12 +129,12 @@ class CTCLoss(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -155,12 +155,12 @@ class CTCLossV2(BaseLoss):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -182,14 +182,14 @@ class EntropyLoss(BaseLoss):
     Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
     to try to detect adversarial examples.
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert type(weight_settings) in list, tuple
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         x = attack.victim.logits
@@ -206,14 +206,14 @@ class SampleL2Loss(BaseLoss):
 
     Use the original example's L2 norm for normalisation.
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert type(weight_settings) in list, tuple
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         original = attack.placeholders.audios
@@ -239,12 +239,12 @@ class BaseLogitDiffLoss(BaseLoss):
     # TODO: attack should only be the attack.victim member (or potentially only
     #  the actual softmax or logits attribute that we want). Although we'd also
     #  need to pass in the tf.Sess and batch objects separately too.
-    def __init__(self, attack, target_argmax, softmax=False, weight_settings=(None, None)):
+    def __init__(self, attack, target_argmax, softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         # Indices of the specified alignment per frame
@@ -322,13 +322,14 @@ class BaseLogitDiffLoss(BaseLoss):
 
 
 class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             softmax=True,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
         n_frames = self.target_logit.shape.as_list()[1]
         self.loss_fn = tf.reduce_sum(-self.target_logit, axis=1) + n_frames
@@ -337,24 +338,26 @@ class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
 
 
 class MaximiseTargetFramewiseActivations(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             softmax=False,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
         self.loss_fn = tf.reduce_sum(-self.target_logit, axis=1) * self.weights
 
 
 class BiggioMaxMin(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
@@ -364,12 +367,13 @@ class BiggioMaxMin(BaseLogitDiffLoss):
 
 
 class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
@@ -379,13 +383,14 @@ class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
 
 
 class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             softmax=True,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
@@ -395,13 +400,14 @@ class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
 
 
 class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_logits,
             softmax=True,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
@@ -444,12 +450,12 @@ class CWImproved(BaseLoss):
     :param k:
     :param weight_settings:
     """
-    def __init__(self, attack, target_logits, k=0.0, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.target = target_logits
@@ -496,7 +502,7 @@ class CWMaxDiff(BaseLogitDiffLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert k >= 0
 
@@ -504,6 +510,7 @@ class CWMaxDiff(BaseLogitDiffLoss):
             attack,
             target_logits,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_diff_abs = - self.target_logit + self.max_other_logit
@@ -520,7 +527,7 @@ class CWMaxDiffSoftmax(BaseLogitDiffLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert 0 <= k <= 1.0
 
@@ -529,6 +536,7 @@ class CWMaxDiffSoftmax(BaseLogitDiffLoss):
             target_logits,
             softmax=True,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         self.max_diff_abs = - self.target_logit + self.max_other_logit
@@ -565,12 +573,13 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
     :param: weight_settings
 
     """
-    def __init__(self, attack, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             target_argmax,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         # We have to set k > 0 for this loss function because k = 0 will only
@@ -614,12 +623,12 @@ class AlignmentsCTCLoss(BaseLoss):
     :param: alignment
     :param: weight_settings
     """
-    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
+            attack,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         seq_lengths = attack.batch.audios["ds_feats"]
@@ -668,12 +677,12 @@ class GreedyOtherAlignmentsCTCLoss(BaseLoss):
     :param: weight_settings
 
     """
-    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0)):
+    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
-            attack.sess,
-            attack.batch.size,
-            weight_settings=weight_settings
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
         seq_lengths = attack.batch.audios["ds_feats"]
