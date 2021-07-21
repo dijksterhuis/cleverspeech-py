@@ -318,7 +318,7 @@ class LossWeightingsUpdater(AbstractProcedure):
                 loss.update_many(successes)
 
 
-class ProjectedGradientDescentUpdater(AbstractProcedure):
+class ClippedGradientDescentUpdater(AbstractProcedure):
     """
     MixIn to only update hard constraint bounds.
 
@@ -341,7 +341,7 @@ class ProjectedGradientDescentUpdater(AbstractProcedure):
         )
 
 
-class DecodingPGD(ProjectedGradientDescentUpdater):
+class DecodingCGD(ClippedGradientDescentUpdater):
     """
     Perform updates when decoding matches a target transcription.
     """
@@ -372,7 +372,7 @@ class DecodingPGD(ProjectedGradientDescentUpdater):
                 yield False
 
 
-class LossPGD(ProjectedGradientDescentUpdater):
+class LossCGD(ClippedGradientDescentUpdater):
     """
     Perform updates when loss reaches a specified threshold.
     """
@@ -401,7 +401,7 @@ class LossPGD(ProjectedGradientDescentUpdater):
                 yield False
 
 
-class DeepSpeechLogProbsPGD(ProjectedGradientDescentUpdater):
+class DeepSpeechLogProbsCGD(ClippedGradientDescentUpdater):
     """
     Perform updates when deepspeech decoder log probs reach a specified
     threshold.
@@ -437,13 +437,13 @@ class DeepSpeechLogProbsPGD(ProjectedGradientDescentUpdater):
                 yield False
 
 
-class EvasionPGD(DecodingPGD):
+class EvasionCGD(DecodingCGD):
     def __init__(self, attack, *args, **kwargs):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
 
 
-class HighConfidenceEvasionPGD(LossPGD):
+class HighConfidenceEvasionCGD(LossCGD):
     def __init__(self, attack, *args, **kwargs):
         super().__init__(attack, *args, **kwargs)
         self.init_optimiser_variables()
