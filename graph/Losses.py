@@ -47,13 +47,13 @@ class BaseLoss:
         self.__sess = attack.sess
 
         self.weights = tf.Variable(
-            tf.ones(attack.batch_size, dtype=tf.float32),
+            tf.ones(attack.batch.size, dtype=tf.float32),
             trainable=False,
             validate_shape=True,
             name="qq_loss_weight"
         )
 
-        initial_vals = initial * np.ones([attack.batch_size], dtype=np.float32)
+        initial_vals = initial * np.ones([attack.batch.size], dtype=np.float32)
         self.__sess.run(self.weights.assign(initial_vals))
 
         self.increment = float(increment)
