@@ -193,12 +193,96 @@ def ctcalign(settings):
         yield idx, batch
 
 
+def monotonic_random_sparse(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+
+        targets_batch = etls.create_monotonic_random_sparse_from_standard(
+            batch.targets, batch.audios["real_feats"], batch.audios["ds_feats"],
+        )
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch
+
+
+def transcription_patch_start(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+
+        targets_batch = etls.create_transcription_path_at_beginning_from_standard(
+            batch.targets, batch.audios["real_feats"], batch.audios["ds_feats"],
+        )
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch
+
+
+def transcription_patch_mid(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+
+        targets_batch = etls.create_transcription_path_at_midpoint_from_standard(
+            batch.targets, batch.audios["real_feats"], batch.audios["ds_feats"],
+        )
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch
+
+
+def transcription_patch_end(settings):
+
+    batch_size = settings["batch_size"]
+
+    for idx, batch in standard(settings):
+
+        targets_batch = etls.create_transcription_path_at_end_from_standard(
+            batch.targets, batch.audios["real_feats"], batch.audios["ds_feats"],
+        )
+
+        batch = Batch(
+            batch_size,
+            batch.audios,
+            targets_batch,
+            batch.trues
+        )
+
+        yield idx, batch
+
+
 ALL_GENERATORS = {
     "standard": standard,
     "mid": midish,
     "dense": dense,
     "sparse": sparse,
     "ctc": ctcalign,
+    "mono-sparse": monotonic_random_sparse,
+    "patch-start": transcription_patch_start,
+    "patch-mid": transcription_patch_mid,
+    "patch-end": transcription_patch_end,
 }
 
 PATH_GENERATORS = {
@@ -206,4 +290,8 @@ PATH_GENERATORS = {
     "dense": dense,
     "sparse": sparse,
     "ctc": ctcalign,
+    "mono-sparse": monotonic_random_sparse,
+    "patch-start": transcription_patch_start,
+    "patch-mid": transcription_patch_mid,
+    "patch-end": transcription_patch_end,
 }

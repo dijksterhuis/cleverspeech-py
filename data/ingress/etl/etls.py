@@ -492,12 +492,240 @@ def create_ctcalign_target_batch_from_standard(data):
     }
 
 
-def create_tightly_packed_target_batch_from_standard(data, actual_feats, max_feats):
-    # TODO: Place chars next to each other in an otherwise blank path
-    pass
+def create_monotonic_random_sparse_from_standard(data, actual_feats, max_feats):
+
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    lengths = data["lengths"]
+    orig_indices = data["indices"]
+    tokens = data["tokens"]
+
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    def monotonic_random_sparse_path(t_mod, af):
+
+        total_available_positions = af - len(t_mod)
+
+        path = np.ones(af, dtype=np.int32) * 28
+
+        positions = np.random.choice(
+            lcomp(range(total_available_positions)),
+            size=len(t_mod),
+            replace=False
+        )
+        positions = sorted(positions)
+
+        for t, p in zip(t_mod, positions):
+            path[p] = t
+
+        return path
+
+    new_alignment_indices = l_map(
+        lambda x: monotonic_random_sparse_path(*x),
+        zip(new_transcription_indices, actual_feats)
+    )
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        len,
+        padded_alignment_indices
+    )
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
 
 
-def create_shuffled_target_batch_from_standard(data, actual_feats, max_feats):
-    # TODO: Create a randomly shuffled sparse (and/or midpoint/dense)
-    pass
+def create_transcription_path_at_beginning_from_standard(data, actual_feats, max_feats):
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    orig_indices = data["indices"]
+    lengths = data["lengths"]
+    tokens = data["tokens"]
 
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    def generate_path(t, f):
+        path = np.ones(f, dtype=np.int32) * 28
+        path[:len(t)] = t
+        return path
+
+    new_alignment_indices = l_map(
+        lambda x: generate_path(x[0], x[1]),
+        zip(new_transcription_indices, max_feats)
+    )
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        lambda x: x.size,
+        padded_alignment_indices
+    )
+
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
+
+
+def create_transcription_path_at_midpoint_from_standard(data, actual_feats, max_feats):
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    orig_indices = data["indices"]
+    lengths = data["lengths"]
+    tokens = data["tokens"]
+
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    def find_midpoints(new_t, act_feat):
+        feats_mid = act_feat // 2
+
+        trans_start = feats_mid - (len(new_t) // 2)
+        trans_end = feats_mid + (len(new_t) // 2)
+
+        # padding if odd t* length
+        if trans_end - trans_start < len(new_t):
+            trans_end = trans_end + len(new_t) - trans_end - trans_start
+
+        return trans_start, trans_end
+
+    midpoints = l_map(
+        lambda x: find_midpoints(*x),
+        zip(new_transcription_indices, actual_feats)
+    )
+
+    def generate_path(t, mid, mf):
+        start, end = mid
+        path = np.ones(mf, dtype=np.int32) * 28
+        path[start:end] = t
+        return path
+
+    new_alignment_indices = l_map(
+        lambda x: generate_path(*x),
+        zip(new_transcription_indices, midpoints, max_feats)
+    )
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        lambda x: x.size,
+        padded_alignment_indices
+    )
+
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
+
+
+def create_transcription_path_at_end_from_standard(data, actual_feats, max_feats):
+    target_phrases = data["phrases"]
+    target_ids = data["row_ids"]
+    orig_indices = data["indices"]
+    lengths = data["lengths"]
+    tokens = data["tokens"]
+
+    z = zip(orig_indices, lengths)
+
+    new_transcription_indices = l_map(
+        lambda x: utils.AlignmentTargets.insert_target_blanks(*x),
+        z
+    )
+
+    def generate_path(t, a, f):
+        path = np.ones(f, dtype=np.int32) * 28
+        path[a-len(t)+1:a+1] = t
+        return path
+
+    new_alignment_indices = l_map(
+        lambda x: generate_path(*x),
+        zip(new_transcription_indices, actual_feats, max_feats)
+    )
+
+    # do padding for non-ctc loss functions
+    z = zip(new_alignment_indices, max_feats)
+    padded_alignment_indices = np_arr(
+        [
+            l_map(
+                lambda x: x,
+                utils.AlignmentTargets.pad_indices(x, y)
+            ) for x, y in z
+        ],
+        np.int32
+    )
+
+    # update the target sequence lengths
+    lengths = l_map(
+        lambda x: x.size,
+        padded_alignment_indices
+    )
+
+    return {
+        "tokens": tokens,
+        "phrases": target_phrases,
+        "row_ids": target_ids,
+        "indices": padded_alignment_indices,
+        "original_indices": orig_indices,
+        "lengths": lengths,
+    }
