@@ -13,71 +13,20 @@ from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import log
 
 
+class Feeds:
+    examples = None
+    attack = None
+
+
 class AbstractAttackConstructor(ABC):
-    """
-    Allows a modular yet standardised definition of attacks.
-
-    Individual classes are **always** the first arguments of their respective
-    `adder` methods and are passed **without being initialised**. i.e. only pass
-    in the raw class, not an instance of a class!
-
-    For example, adding an L2 hard constraint would look like this:
-
-    >>> from cleverspeech import graph
-    >>> attack = EvasionAttackConstructor()
-    >>> attack.add_hard_constraint(
-    >>>    graph.Constraints.L2, # the raw, uninitialised class ref
-    >>>    r_constant=0.9,
-    >>>    update_method="geom"
-    >>> )
-
-    This `Constructor` class will handle the initialisation of those classes,
-    given the args and kwargs that are also passed to the
-    `graph.add_hard_constraint` method. Each instance of the added classes can
-    then be accessed as attributes of this `Constructor` class instance.
-
-    For example, this line calls the L2 hard constraint's `analyse()` method:
-
-    >>> attack.hard_constraint.analyse(attack.perturbations)
-
-    This helps keep everything as standardised as possible and means we can use
-    an instance of this `Constructor` class as a common interface for all other
-    classes that make up an attack.
-
-    Furthermore, if you take a look at the code you'll see that common patterns
-    like passing the adversarial examples to a victim model are **always**
-    handled by this `Constructor` class, reducing some of the need to remember
-    which arguments need to be passed to which classes.
-
-    Generally speaking, these are the rules for all `adder` methods:
-
-    - anything 100% standard for a type of class is handled by the `Constructor`
-    - **args** are required for a specific class, but non-standard for all classes of that type
-    - **kwargs** are always optional
-
-    TODO: Add logic to check matching VariableGraph and Optimiser types.
-
-    TODO: Add/update additional methods to control an attack e.g. update_bounds
-
-    TODO: Can we set up defaults and add classes only when required?
-
-    ----------------------------------------------------------------------------
-
-    :param sess: a tensorflow session object
-    :param batch: the current batch of input data to run the attack with,
-        a cleverspeech.data.ingress.batch_generators.batch object
-
-    :param feeds: the input feeds for the tensorflow graph (references between
-        the tensorflow graph placeholders and batch data), a
-        cleverspeech.data.ingress.Feeds object
-    """
-    def __init__(self, sess, batch, feeds, bit_depth=2**15):
+    def __init__(self, sess, batch, bit_depth=2**15):
 
         self.batch = batch
-        self.feeds = feeds
         self.sess = sess
         self.bit_depth = bit_depth
 
+        self.path_search = None
+        self.feeds = Feeds()
         self.placeholders = None
         self.hard_constraint = None
         self.delta_graph = None
@@ -92,9 +41,23 @@ class AbstractAttackConstructor(ABC):
         self.procedure = None
         self.outputs = None
 
+    def add_path_search(self, path_search_cls, *args, **kwargs):
+
+        if self.placeholders is not None:
+            raise AttributeError(
+                "Path search *must* be declared at the start of the graph"
+            )
+
+        self.path_search = path_search_cls(self.batch, *args, **kwargs)
+        self.path_search.create()
+
     def add_placeholders(self, placeholders):
+
         self.placeholders = placeholders(self.batch)
-        self.feeds.create_feeds(self.placeholders)
+
+        # TODO: hackity-hack-hacky
+        self.feeds.examples = self.placeholders.examples_feed
+        self.feeds.attack = self.placeholders.attacks_feed
 
     def add_hard_constraint(self, constraint, *args, **kwargs):
         """
@@ -255,9 +218,9 @@ class EvasionAttackConstructor(AbstractAttackConstructor):
         the tensorflow graph placeholders and batch data), a
         cleverspeech.data.ingress.Feeds object
     """
-    def __init__(self, sess, batch, feeds, bit_depth=2**15):
+    def __init__(self, sess, batch, bit_depth=2**15):
 
-        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+        super().__init__(sess, batch, bit_depth=bit_depth)
 
     def add_hard_constraint(self, constraint, *args, **kwargs):
         """
@@ -321,9 +284,9 @@ class UnboundedAttackConstructor(AbstractAttackConstructor):
         cleverspeech.data.ingress.Feeds object
     """
 
-    def __init__(self, sess, batch, feeds, bit_depth=2 ** 15):
+    def __init__(self, sess, batch, bit_depth=2 ** 15):
 
-        super().__init__(sess, batch, feeds, bit_depth=bit_depth)
+        super().__init__(sess, batch, bit_depth=bit_depth)
 
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
         """
@@ -352,35 +315,3 @@ class UnboundedAttackConstructor(AbstractAttackConstructor):
         )
 
 
-class CTCPathSearchConstructor(AbstractAttackConstructor):
-    """
-    Construct an unbounded attack with no constraints.
-    ----------------------------------------------------------------------------
-
-    :param sess: a tensorflow session object
-    :param batch: the current batch of input data to run the attack with,
-        a cleverspeech.data.ingress.batch_generators.batch object
-    :param feeds: not used, only included due to AbstractConstructor
-    """
-
-    def __init__(self, sess, batch, feeds, bit_depth=2 ** 15):
-
-        super().__init__(sess, batch, None, bit_depth=bit_depth)
-        self.graph = None
-
-    def add_perturbation_subgraph(self, graph, *args, **kwargs):
-        """
-        Add a perturbation variables to the attack graph.
-
-        :param graph: an uninitialised reference to a
-            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-        self.graph = graph(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-        )

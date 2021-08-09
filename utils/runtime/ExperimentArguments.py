@@ -9,7 +9,7 @@ from cleverspeech.utils.Utils import log
 
 
 def args(attack_run, additional_args: dict = None):
-    from cleverspeech.data.ingress.etl.batch_generators import PATH_GENERATORS
+    from cleverspeech.graph.Paths import ALL_PATHS
 
     # choices = list(experiments.keys())
 
@@ -31,7 +31,7 @@ def args(attack_run, additional_args: dict = None):
         # 4568 is the random seed used by DeepSpeech v0.4.1 in utils/flags.py
         "random_seed": [int, 4568, False, None],
         "align": [
-            str, list(PATH_GENERATORS.keys())[0], False, PATH_GENERATORS.keys()
+            str, list(ALL_PATHS.keys())[0], False, ALL_PATHS.keys()
         ],
         "align_repeat_factor": [float, None, False, None],
         "decoder": [

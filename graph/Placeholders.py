@@ -24,7 +24,27 @@ class Placeholders(object):
 
         batch_size, maxlen = batch.size, batch.audios["max_samples"]
 
-        self.audios = tf.placeholder(tf.float32, [batch_size, maxlen], name="new_input")
-        self.audio_lengths = tf.placeholder(tf.int32, [batch_size], name='qq_featlens')
-        self.targets = tf.placeholder(tf.int32, [batch_size, None], name='qq_targets')
-        self.target_lengths = tf.placeholder(tf.int32, [batch_size], name='qq_target_lengths')
+        self.audios = tf.placeholder(
+            tf.float32, [batch_size, maxlen], name="new_input"
+        )
+        self.audio_lengths = tf.placeholder(
+            tf.int32, [batch_size], name='qq_featlens'
+        )
+        self.targets = tf.placeholder(
+            tf.int32, [batch_size, None], name='qq_targets'
+        )
+        self.target_lengths = tf.placeholder(
+            tf.int32, [batch_size], name='qq_target_lengths'
+        )
+
+        self.examples_feed = {
+            self.audios: batch.audios["padded_audio"],
+            self.audio_lengths: batch.audios["ds_feats"],
+        }
+
+        self.attacks_feed = {
+            self.audios: batch.audios["padded_audio"],
+            self.audio_lengths: batch.audios["ds_feats"],
+            self.targets: batch.targets["indices"],
+            self.target_lengths: batch.targets["lengths"],
+        }

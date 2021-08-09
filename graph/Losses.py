@@ -239,7 +239,7 @@ class BaseLogitDiffLoss(BaseLoss):
     # TODO: attack should only be the attack.victim member (or potentially only
     #  the actual softmax or logits attribute that we want). Although we'd also
     #  need to pass in the tf.Sess and batch objects separately too.
-    def __init__(self, attack, target_argmax, softmax=False, weight_settings=(None, None), updateable: bool = False):
+    def __init__(self, attack, softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         super().__init__(
             attack,
@@ -248,7 +248,7 @@ class BaseLogitDiffLoss(BaseLoss):
         )
 
         # Indices of the specified alignment per frame
-        self.target_argmax = target_argmax  # [b x feats]
+        self.target_argmax = attack.placeholders.targets
 
         # we want to be able to choose either softmax or activations depending
         # on the attack
@@ -322,11 +322,10 @@ class BaseLogitDiffLoss(BaseLoss):
 
 
 class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             softmax=True,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -338,11 +337,10 @@ class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
 
 
 class MaximiseTargetFramewiseActivations(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             softmax=False,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -351,11 +349,10 @@ class MaximiseTargetFramewiseActivations(BaseLogitDiffLoss):
 
 
 class BiggioMaxMin(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -367,11 +364,10 @@ class BiggioMaxMin(BaseLogitDiffLoss):
 
 
 class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -383,11 +379,10 @@ class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
 
 
 class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             softmax=True,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -400,11 +395,10 @@ class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
 
 
 class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, target_logits, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
-            target_logits,
             softmax=True,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -416,62 +410,6 @@ class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
         n_frames = self.max_min.shape.as_list()[1]
 
         self.loss_fn = (self.loss_fn + n_frames) * self.weights
-
-
-class CWImproved(BaseLoss):
-    """
-    Improved Loss as per the original work in https://arxiv.org/abs/1801.01944
-
-    It should be noted that this was developed to create `more efficient`
-    adversarial examples -- ctc loss makes already certain logits more
-    adversarial without needing to.
-
-    **This formulation optimises until the target tokens are the most likely
-    class.**
-
-    We use the argmax of the raw logits (target alignment and current)
-    to figure out if the target character is currently the most likely.
-
-    If the target character isn't most likely, calculate the max difference
-    between the target and current logits. If the most likely character is:
-
-    - far more likely than the target then we get a big difference.
-    - only just more likely than the target then we get a small difference.
-
-    Otherwise, set the difference to -k (we set k=0). Using a negative k
-    means that the difference between already optimised characters (e.g. -1)
-    and yet to be optimised (e.g. 40) can be made much larger.
-
-    N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
-    The loss can be >>> 0 for a successful decoding (e.g. 400)
-
-    :param attack:
-    :param target_logits:
-    :param k:
-    :param weight_settings:
-    """
-    def __init__(self, attack, target_logits, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        super().__init__(
-            attack,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        self.target = target_logits
-        self.target_max = tf.reduce_max(self.target, axis=2)
-        self.argmax_target = tf.argmax(self.target, dimension=2)
-
-        self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
-        self.current_max = tf.reduce_max(self.current, axis=2)
-        self.argmax_current = tf.argmax(self.current, dimension=2)
-
-        self.argmax_diff = tf.where(
-            tf.equal(self.argmax_target, self.argmax_current),
-            -k * tf.ones(self.argmax_target.shape, dtype=tf.float32),
-            tf.reduce_max(self.target - self.current, axis=2)
-        )
-        self.loss_fn = tf.reduce_sum(self.argmax_diff, axis=1) * self.weights
 
 
 class CWMaxDiff(BaseLogitDiffLoss):
@@ -502,13 +440,12 @@ class CWMaxDiff(BaseLogitDiffLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert k >= 0
 
         super().__init__(
             attack,
-            target_logits,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -527,13 +464,12 @@ class CWMaxDiffSoftmax(BaseLogitDiffLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, target_logits, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         assert 0 <= k <= 1.0
 
         super().__init__(
             attack,
-            target_logits,
             softmax=True,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -751,3 +687,36 @@ class GreedyOtherAlignmentsCTCLoss(BaseLoss):
             ctc_merge_repeated=False,
         ) * self.weights
 
+
+ADV_LOSS_TERMS = {
+    "ctc": CTCLoss,
+    "ctcv2": CTCLossV2,
+    "cw-softmax": CWMaxDiffSoftmax,
+    "cw-logits": CWMaxDiff,
+    "biggio-softmax": BiggioMaxMinSoftmax,
+    "biggio-logits": BiggioMaxMin,
+    "maxofmaxmin-softmax": MaxOfBiggioMaxMinSoftmax,
+    "maxofmaxmin-logits": MaxOfBiggioMaxMinLogits,
+    "ctc-fixed-path": AlignmentsCTCLoss,
+    "adaptive-kappa": AdaptiveKappaMaxDiff,
+    "sumlogprobs-fwd": None,
+    "sumlogprobs-back": None,
+    "cumulativelogprobs-fwd": None,
+    "cumulativelogprobs-back": None,
+    "logprobsgreedydiff": None,
+    "maxmin-ctc": None,
+    "maxtargetonly-softmax": MaximiseTargetFramewiseSoftmax,
+    "maxtargetonly-logits": MaximiseTargetFramewiseActivations,
+    "weightedmaxmin-softmax": None,
+    "weightedmaxmin-logits": None,
+
+}
+
+DISTANCE_LOSS_TERMS = {
+    "l2-carlini": CarliniL2Loss,
+    "l2-sample": SampleL2Loss,
+    "linf": LinfLoss,
+    "rms-energy": None,
+    "energy": None,
+    "peak-to-peak": None,
+}
