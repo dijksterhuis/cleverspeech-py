@@ -14,7 +14,7 @@ TODO: self.attack.delta_graph.opt_vars -> tf.Graph.TRAINABLE_VARIABLES ???
 
 
 import tensorflow as tf
-from cleverspeech.utils.Utils import lcomp
+from cleverspeech.utils.Utils import lcomp, log
 from abc import ABC, abstractmethod
 
 
@@ -80,10 +80,11 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
             assert None not in lcomp(grad_var, i=0)
             training_op = opt.apply_gradients(grad_var)
             train_ops.append(training_op)
-            print(idx, training_op)
             gradients.append(grad_var[0][0])
 
             self.variables[idx] = opt.variables()
+
+        log("{n} Optimisers Loaded ...".format(n=len(train_ops)), wrap=True)
 
         self.train = tf.group(train_ops)
         self.gradients = tf.stack(gradients, axis=0)
