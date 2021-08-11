@@ -4,5 +4,5 @@
         branch = adversarial-v0.9.3
 [submodule "models/DeepSpeech_v0_4_1/src"]
 	path = models/DeepSpeech_v0_4_1/src
-	url = git@github.com:dijksterhuis/DeepSpeechAdversary.git
+	url = ../DeepSpeechAdversary.git
 	branch = adversarial-v0.4.1
