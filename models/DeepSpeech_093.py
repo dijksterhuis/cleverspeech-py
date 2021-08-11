@@ -92,12 +92,12 @@ class Model(ABC):
 
         self.checkpoint_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "../../data/deepspeech-0.9.3-checkpoint/"
+                model_data_path, "./DeepSpeech_v0_9_3/data/deepspeech-0.9.3-checkpoint/"
             )
         )
         self.model_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "../../data/models/"
+                model_data_path, "./DeepSpeech_v0_9_3/data/models/"
             )
         )
 
