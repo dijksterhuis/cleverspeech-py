@@ -101,7 +101,33 @@ class CarliniL2Loss(BaseLoss):
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
         l2delta = tf.reduce_mean(attack.perturbations ** 2, axis=1)
-        self.loss_fn = l2delta / self.weights
+        self.loss_fn = l2delta * self.weights
+
+
+class SampleL2Loss(BaseLoss):
+    """
+    Normalised L2 loss component from https://arxiv.org/abs/1801.01944
+
+    Use the original example's L2 norm for normalisation.
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        assert type(weight_settings) in list, tuple
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        original = attack.placeholders.audios
+        delta = attack.perturbations
+
+        self.l2original = tf.reduce_sum(tf.abs(original ** 2), axis=1)
+        self.l2delta = tf.abs(delta) ** 2
+        self.l2_loss = tf.reduce_sum(self.l2delta, axis=1) / self.l2original
+
+        self.loss_fn = self.l2_loss * self.weights
 
 
 class LinfLoss(BaseLoss):
@@ -121,6 +147,29 @@ class LinfLoss(BaseLoss):
 
         l2delta = tf.reduce_max(attack.perturbations, axis=1)
         self.loss_fn = l2delta * self.weights
+
+
+class EntropyLoss(BaseLoss):
+    """
+    Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
+    to try to detect adversarial examples.
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        assert type(weight_settings) in list, tuple
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        x = attack.victim.logits
+
+        log_mult_sum = tf.reduce_sum(x * tf.log(x), axis=2)
+        neg_max = tf.reduce_max(-log_mult_sum, axis=1)
+
+        self.loss_fn = neg_max * self.weights
 
 
 class CTCLoss(BaseLoss):
@@ -177,56 +226,7 @@ class CTCLossV2(BaseLoss):
         ) * self.weights
 
 
-class EntropyLoss(BaseLoss):
-    """
-    Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
-    to try to detect adversarial examples.
-    """
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        assert type(weight_settings) in list, tuple
-
-        super().__init__(
-            attack,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        x = attack.victim.logits
-
-        log_mult_sum = tf.reduce_sum(x * tf.log(x), axis=2)
-        neg_max = tf.reduce_max(-log_mult_sum, axis=1)
-
-        self.loss_fn = neg_max * self.weights
-
-
-class SampleL2Loss(BaseLoss):
-    """
-    Normalised L2 loss component from https://arxiv.org/abs/1801.01944
-
-    Use the original example's L2 norm for normalisation.
-    """
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        assert type(weight_settings) in list, tuple
-
-        super().__init__(
-            attack,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        original = attack.placeholders.audios
-        delta = attack.perturbations
-
-        self.l2original = tf.reduce_sum(tf.abs(original ** 2), axis=1)
-        self.l2delta = tf.abs(delta) ** 2
-        self.l2_loss = tf.reduce_sum(self.l2delta, axis=1) / self.l2original
-
-        self.loss_fn = self.l2_loss * self.weights
-
-
-class BaseLogitDiffLoss(BaseLoss):
+class BasePathsLoss(BaseLoss):
     """
     Base class that can be used for logits difference losses, like CW f_6
     and the adaptive kappa variant.
@@ -239,7 +239,7 @@ class BaseLogitDiffLoss(BaseLoss):
     # TODO: attack should only be the attack.victim member (or potentially only
     #  the actual softmax or logits attribute that we want). Although we'd also
     #  need to pass in the tf.Sess and batch objects separately too.
-    def __init__(self, attack, softmax=False, weight_settings=(None, None), updateable: bool = False):
+    def __init__(self, attack, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         super().__init__(
             attack,
@@ -253,7 +253,7 @@ class BaseLogitDiffLoss(BaseLoss):
         # we want to be able to choose either softmax or activations depending
         # on the attack
 
-        if softmax is False:
+        if use_softmax is False:
 
             # logits are time major so transpose them
             self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
@@ -288,7 +288,7 @@ class BaseLogitDiffLoss(BaseLoss):
             off_value=1.0
         )
 
-        if softmax is False:
+        if use_softmax is False:
 
             # if the most likely other activation for a frame is negative we
             # need to make sure we don't accidentally select the 0.0 one hot
@@ -321,12 +321,12 @@ class BaseLogitDiffLoss(BaseLoss):
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
-class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+class TargetClassesFramewise(BasePathsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
             attack,
-            softmax=True,
+            use_softmax=use_softmax,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -336,23 +336,12 @@ class MaximiseTargetFramewiseSoftmax(BaseLogitDiffLoss):
         self.loss_fn *= self.weights
 
 
-class MaximiseTargetFramewiseActivations(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+class BiggioMaxMin(BasePathsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
             attack,
-            softmax=False,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-        self.loss_fn = tf.reduce_sum(-self.target_logit, axis=1) * self.weights
-
-
-class BiggioMaxMin(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        super().__init__(
-            attack,
+            use_softmax=use_softmax,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -363,11 +352,12 @@ class BiggioMaxMin(BaseLogitDiffLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+class MaxOfMaxMin(BasePathsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
             attack,
+            use_softmax=use_softmax,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -378,41 +368,7 @@ class MaxOfBiggioMaxMinLogits(BaseLogitDiffLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class BiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        super().__init__(
-            attack,
-            softmax=True,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        self.max_min = - self.target_logit + self.max_other_logit
-        self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
-
-        self.loss_fn = self.loss_fn * self.weights
-
-
-class MaxOfBiggioMaxMinSoftmax(BaseLogitDiffLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        super().__init__(
-            attack,
-            softmax=True,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        self.max_min = - self.target_logit + self.max_other_logit
-        self.loss_fn = tf.reduce_max(self.max_min, axis=1)
-
-        n_frames = self.max_min.shape.as_list()[1]
-
-        self.loss_fn = (self.loss_fn + n_frames) * self.weights
-
-
-class CWMaxDiff(BaseLogitDiffLoss):
+class CWMaxMin(BasePathsLoss):
     """
     This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
     clipping update method.
@@ -440,12 +396,13 @@ class CWMaxDiff(BaseLogitDiffLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
 
         super().__init__(
             attack,
+            use_softmax=use_softmax,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -457,32 +414,7 @@ class CWMaxDiff(BaseLogitDiffLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class CWMaxDiffSoftmax(BaseLogitDiffLoss):
-    """
-    :param: attack:
-    :param: target_logits:
-    :param: k:
-    :param: weight_settings:
-    """
-    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        assert 0 <= k <= 1.0
-
-        super().__init__(
-            attack,
-            softmax=True,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        self.max_diff_abs = - self.target_logit + self.max_other_logit
-        self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
-        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
-
-        self.loss_fn = self.loss_fn * self.weights
-
-
-class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
+class AdaptiveKappaMaxMin(BasePathsLoss):
     """
     This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
     using the gradient clipping update method.
@@ -509,11 +441,11 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
     :param: weight_settings
 
     """
-    def __init__(self, attack, target_argmax, k=0.5, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, k=0.0, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
             attack,
-            target_argmax,
+            use_softmax=use_softmax,
             weight_settings=weight_settings,
             updateable=updateable,
         )
@@ -540,7 +472,7 @@ class AdaptiveKappaMaxDiff(BaseLogitDiffLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class AlignmentsCTCLoss(BaseLoss):
+class SinglePathCTCLoss(BaseLoss):
     """
     Adversarial CTC Loss that uses an alignment as a target instead of a
     transcription.
@@ -553,13 +485,16 @@ class AlignmentsCTCLoss(BaseLoss):
     Does not work for target transcriptions on their own as they end up like
     `----o--o-oo-o----p- ...` which merges down to `ooop ...` instead of `open`.
 
-    N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+    Notes:
+        - This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+        - This loss is pretty much the same as SumofLogProbs Losses, except it's
+        more computationally expensive.
 
     :param: attack_graph:
     :param: alignment
     :param: weight_settings
     """
-    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
@@ -569,18 +504,10 @@ class AlignmentsCTCLoss(BaseLoss):
 
         seq_lengths = attack.batch.audios["ds_feats"]
 
-        if alignment is not None:
-            log("Using CTC alignment search.", wrap=True)
-            self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                alignment,
-                attack.batch.audios["ds_feats"],
-            )
-        else:
-            log("Using repeated alignment.", wrap=True)
-            self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                attack.placeholders.targets,
-                attack.placeholders.target_lengths,
-            )
+        self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths,
+        )
 
         logits_shape = attack.victim.raw_logits.get_shape().as_list()
 
@@ -603,112 +530,166 @@ class AlignmentsCTCLoss(BaseLoss):
         ) * self.weights
 
 
-class GreedyOtherAlignmentsCTCLoss(BaseLoss):
-    """
-    Goal: Make all other logits values *less likely* by optimising with CTC
-    loss for all valid alignments *except* our target alignment.
+class WeightedMaxMin(BasePathsLoss):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0)):
 
-    :param: attack_graph
-    :param: alignment
-    :param: weight_settings
+        super().__init__(
+            attack,
+            use_softmax=True,
+            weight_settings=weight_settings,
+        )
 
-    """
-    def __init__(self, attack, alignment=None, weight_settings=(1.0, 1.0), updateable: bool = False):
+        self.c = c = 1 - self.target_logit
+        self.weighted_diff = c * (tf.maximum(- self.target_logit + self.max_other_logit, -k) + k)
+
+        self.loss_fn = tf.reduce_sum(self.weighted_diff, axis=1)
+        self.loss_fn *= self.weights
+
+
+class BaseSumOfLogProbsLoss(BasePathsLoss):
+    def __init__(self, attack, weight_settings=(None, None)):
 
         super().__init__(
             attack,
             weight_settings=weight_settings,
-            updateable=updateable,
+            use_softmax=True
         )
 
-        seq_lengths = attack.batch.audios["ds_feats"]
+        self.log_smax = tf.log(self.target_logit)
 
-        self.target_argmax = alignment  # [b x feats]
-
-        # Current logits is [b, feats, chars]
-        # current_argmax is for debugging purposes only
-        self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
-
-        # Create one hot matrices to multiply by current logits.
-        # These essentially act as a filter to keep only the target logit or
-        # the rest of the logits (non-target).
-
-        targs_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=1.0,
-            off_value=0.0
+        self.fwd_target_log_probs = tf.reduce_sum(
+            self.log_smax, axis=-1
+        )
+        self.back_target_log_probs = tf.reduce_sum(
+            tf.reverse(self.log_smax, axis=[-1]), axis=-1
         )
 
-        others_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=0.0,
-            off_value=1.0
+
+class BaseCumulativeLogProbsLoss(BasePathsLoss):
+    def __init__(self, attack_graph, weight_settings=(None, None)):
+
+        super().__init__(
+            attack_graph,
+            weight_settings=weight_settings,
+            use_softmax=True
         )
 
-        # AntiCTC sjould make all valid alignments that are *not* the target
-        # alignment *less* likely, so we modify the logits to include the
-        # classes per frame that are not in our target alignment.
+        self.log_smax = tf.log(self.target_logit)
 
-        logits_mod = others_onehot * self.current
-        self.targs = tf.reduce_sum(targs_onehot * self.current, axis=2)
+        self.fwd_target = self.target_probs(self.log_smax)
+        self.back_target = self.target_probs(self.log_smax, backward_pass=True)
 
-        if alignment is not None:
-            log("Using CTC alignment search.", wrap=True)
-            self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                alignment,
-                attack.batch.audios["ds_feats"],
-            )
-        else:
-            log("Using repeated alignment.", wrap=True)
-            self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                attack.placeholders.targets,
-                attack.placeholders.target_lengths,
-            )
+        self.fwd_target_log_probs = self.fwd_target[:, -1]
+        self.back_target_log_probs = self.back_target[:, -1]
 
-        logits_shape = attack.victim.raw_logits.get_shape().as_list()
+    @staticmethod
+    def target_probs(x_t, backward_pass=False):
+        probability_vector = tf.cumsum(
+            x_t,
+            exclusive=False,
+            reverse=backward_pass,
+            axis=1
+        )
+        if backward_pass:
+            probability_vector = tf.reverse(probability_vector, axis=[1])
 
-        blank_token_pad = tf.zeros(
-            [logits_shape[0], logits_shape[1], 1],
-            tf.float32
+        return probability_vector
+
+
+class FwdOnlyLogProbsLoss(BaseSumOfLogProbsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
         )
 
-        self.logits_mod = tf.concat(
-            [tf.transpose(logits_mod, [1, 0, 2]), blank_token_pad],
-            axis=2
+        self.loss_fn = self.fwd_target_log_probs
+        self.loss_fn *= -self.weights
+
+
+class BackOnlyLogProbsLoss(BaseSumOfLogProbsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
         )
 
-        self.loss_fn = -tf.nn.ctc_loss(
-            labels=tf.cast(self.ctc_target, tf.int32),
-            inputs=self.logits_mod,
-            sequence_length=seq_lengths,
-            preprocess_collapse_repeated=False,
-            ctc_merge_repeated=False,
-        ) * self.weights
+        self.loss_fn = self.back_target_log_probs
+        self.loss_fn *= -self.weights
 
 
-ADV_LOSS_TERMS = {
+class FwdPlusBackLogProbsLoss(BaseSumOfLogProbsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+        )
+
+        self.loss_fn = self.fwd_target_log_probs + self.back_target_log_probs
+        self.loss_fn *= -self.weights
+
+
+class FwdMultBackLogProbsLoss(BaseSumOfLogProbsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+        )
+
+        self.loss_fn = self.fwd_target_log_probs * self.back_target_log_probs
+        self.loss_fn *= -self.weights
+
+
+CONFIDENCE_MEASURES = {
+    "max-entropy": EntropyLoss,
+}
+
+GREEDY_SEARCH_ADV_LOSSES = {
     "ctc": CTCLoss,
     "ctcv2": CTCLossV2,
-    "cw-softmax": CWMaxDiffSoftmax,
-    "cw-logits": CWMaxDiff,
-    "biggio-softmax": BiggioMaxMinSoftmax,
-    "biggio-logits": BiggioMaxMin,
-    "maxofmaxmin-softmax": MaxOfBiggioMaxMinSoftmax,
-    "maxofmaxmin-logits": MaxOfBiggioMaxMinLogits,
-    "ctc-fixed-path": AlignmentsCTCLoss,
-    "adaptive-kappa": AdaptiveKappaMaxDiff,
-    "sumlogprobs-fwd": None,
-    "sumlogprobs-back": None,
-    "cumulativelogprobs-fwd": None,
-    "cumulativelogprobs-back": None,
-    "logprobsgreedydiff": None,
-    "maxmin-ctc": None,
-    "maxtargetonly-softmax": MaximiseTargetFramewiseSoftmax,
-    "maxtargetonly-logits": MaximiseTargetFramewiseActivations,
-    "weightedmaxmin-softmax": None,
-    "weightedmaxmin-logits": None,
+    "cw": CWMaxMin,
+    "biggio": BiggioMaxMin,
+    "maxofmaxmin": MaxOfMaxMin,
+    "adaptive-kappa": AdaptiveKappaMaxMin,
+    "maxtargetonly": TargetClassesFramewise,
+    "weightedmaxmin": WeightedMaxMin,
+}
+
+BEAM_SEARCH_ADV_LOSSES = {
+    "ctc": CTCLoss,
+    "ctcv2": CTCLossV2,
+    "ctc-fixed-path": SinglePathCTCLoss,
+    "sumlogprobs-fwd": FwdOnlyLogProbsLoss,
+    "sumlogprobs-back": BackOnlyLogProbsLoss,
+    # "cumulativelogprobs-fwd": None,
+    # "cumulativelogprobs-back": None,
+    # "logprobsgreedydiff": None,
+    # "maxconfctc": None,
+}
+
+ALL_ADV_LOSS_TERMS = {
+    "ctc": CTCLoss,
+    "ctcv2": CTCLossV2,
+    "cw": CWMaxMin,
+    "biggio": BiggioMaxMin,
+    "maxofmaxmin": MaxOfMaxMin,
+    "ctc-fixed-path": SinglePathCTCLoss,
+    "adaptive-kappa": AdaptiveKappaMaxMin,
+    "maxtargetonly": TargetClassesFramewise,
+    "single-path-ctc": SinglePathCTCLoss,
+    "weightedmaxmin": WeightedMaxMin,
 
 }
 
