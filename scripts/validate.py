@@ -110,6 +110,10 @@ def attack_run(master_settings):
 
     batch_gen = data.ingress.mcv_v1.BatchIterator(master_settings)
 
+    master_settings["outdir"] = os.path.join(
+        master_settings["outdir"], master_settings["decoder"]
+    )
+
     custom_manager(
         master_settings,
         create_validation_graph,
