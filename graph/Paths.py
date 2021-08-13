@@ -48,6 +48,10 @@ class Path(ABC):
                 with_repeats.append(current)
             else:
                 with_repeats.append(current)
+
+        # add a blank on the end for symmetry
+        with_repeats.append(28)
+
         return with_repeats
 
     def pad(self, new_indices):
