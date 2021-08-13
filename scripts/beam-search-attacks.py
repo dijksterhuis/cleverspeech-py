@@ -136,8 +136,6 @@ def attack_run(master_settings):
     :return: None
     """
 
-    from datetime import datetime
-
     attack_type = master_settings["attack_graph"]
     align = master_settings["align"]
     loss = master_settings["loss"]
@@ -148,7 +146,6 @@ def attack_run(master_settings):
     outdir = os.path.join(outdir, "{}/".format(loss))
     outdir = os.path.join(outdir, "{}/".format(align))
     outdir = os.path.join(outdir, "{}/".format(decoder))
-    # outdir = os.path.join(outdir, datetime.now().strftime("%Y-%M-%d-%H-%m-%S") + "/")
 
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type

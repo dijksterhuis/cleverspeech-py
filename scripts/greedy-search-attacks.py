@@ -7,12 +7,6 @@ from cleverspeech.utils.Utils import log
 from cleverspeech.utils.runtime.Execution import default_manager
 from cleverspeech.utils.runtime.ExperimentArguments import args
 
-# attack def imports
-
-
-# victim model
-from SecEval import VictimAPI as DeepSpeech
-
 
 def create_unbounded_graph(sess, batch, settings):
 
@@ -166,8 +160,6 @@ def attack_run(master_settings):
     :return: None
     """
 
-    from datetime import datetime
-
     master_settings["use_softmax"] = bool(master_settings["use_softmax"])
 
     if master_settings["loss"] in KAPPA_LOSSES:
@@ -189,7 +181,6 @@ def attack_run(master_settings):
     outdir = os.path.join(outdir, "{}/".format(align))
     outdir = os.path.join(outdir, "{}/".format(decoder))
     outdir = os.path.join(outdir, "k{}/".format(kappa))
-    # outdir = os.path.join(outdir, datetime.now().strftime("%Y-%M-%d-%H-%m-%S"))
 
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type
