@@ -656,6 +656,18 @@ CONFIDENCE_MEASURES = {
     "max-entropy": EntropyLoss,
 }
 
+PATH_BASED_LOSSES = {
+    "ctc-fixed-path": SinglePathCTCLoss,
+    "sumlogprobs-fwd": FwdOnlyLogProbsLoss,
+    "sumlogprobs-back": BackOnlyLogProbsLoss,
+    "cw": CWMaxMin,
+    "biggio": BiggioMaxMin,
+    "maxofmaxmin": MaxOfMaxMin,
+    "adaptive-kappa": AdaptiveKappaMaxMin,
+    "maxtargetonly": TargetClassesFramewise,
+    "weightedmaxmin": WeightedMaxMin,
+}
+
 GREEDY_SEARCH_ADV_LOSSES = {
     "ctc": CTCLoss,
     "ctcv2": CTCLossV2,
