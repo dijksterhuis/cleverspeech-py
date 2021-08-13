@@ -318,3 +318,97 @@ class Linf(AbstractLNorm):
         # operation on the last tensor dimension by default.
         return tf.clip_by_value(x, -self.bounds, self.bounds)
 
+
+class Energy(AbstractLNorm):
+    """
+    An Linf Norm hard constraint.
+
+    :param sess: a tensorflow Session object
+    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
+    :param maxval: the maximum possible value for the initial bound
+    :param r_constant: how much to reduce the constraint by if updated
+    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
+    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
+    """
+    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            lowest_bound=lowest_bound,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        """
+        What is the current size of x according to an Linf norm.
+
+        :param x: some input array, must be passable to numpy functions
+        :return: the current Linf norm of the given array
+        """
+        res = np.sum(np.abs(x) ** 2, axis=-1)
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        """
+        Apply the hard constraint to some tensorflow tensor.
+
+        :param x: the tensorflow tensor to apply the L2 hard constraint to.
+        :return: the Linf clipped tensorflow tensor
+        """
+        # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the
+        # operation on the last tensor dimension by default.
+
+        energy = tf.reduce_sum(tf.abs(x ** 2), axis=-1)
+        return x * (self.bounds / tf.maximum(self.bounds, energy))
+
+
+class RMS(AbstractLNorm):
+    """
+    An Linf Norm hard constraint.
+
+    :param sess: a tensorflow Session object
+    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
+    :param maxval: the maximum possible value for the initial bound
+    :param r_constant: how much to reduce the constraint by if updated
+    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
+    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
+    """
+    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            lowest_bound=lowest_bound,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        """
+        What is the current size of x according to an Linf norm.
+
+        :param x: some input array, must be passable to numpy functions
+        :return: the current Linf norm of the given array
+        """
+        res = np.sqrt(np.mean(np.abs(x) ** 2, axis=-1))
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        """
+        Apply the hard constraint to some tensorflow tensor.
+
+        :param x: the tensorflow tensor to apply the L2 hard constraint to.
+        :return: the Linf clipped tensorflow tensor
+        """
+        # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the
+        # operation on the last tensor dimension by default.
+
+        rms = tf.sqrt(tf.reduce_mean(tf.abs(x ** 2), axis=-1))
+        return x * (self.bounds / tf.maximum(self.bounds, rms))
+
