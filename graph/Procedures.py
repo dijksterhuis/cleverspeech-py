@@ -12,7 +12,7 @@ import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from cleverspeech.utils.Utils import l_map
+from cleverspeech.utils.Utils import l_map, log
 
 
 class AbstractProcedure(ABC):
@@ -27,15 +27,29 @@ class AbstractProcedure(ABC):
     :param: decode_step: when to stop and check a current decoding
 
     """
-    def __init__(self, attack, steps: int = 10000, update_step: int = 100, results_step: int = 100):
 
-        assert type(steps) in [float, int]
-        assert type(update_step) in [float, int]
-        assert steps > update_step
+    def __init__(
+            self,
+            attack,
+            *args,
+            steps: int = 1000,
+            update_step: int = 100,
+            results_step: int = 100,
+            pgd_step: int = 100,
+            apply_pgd_rounding: bool = True,
+            apply_warm_up: bool = True,
+    ):
+
+        self.steps = steps + 1
+        self.update_step = update_step
+        self.results_step = update_step
+        self.pgd_step = update_step
+        self.apply_pgd_rounding = apply_pgd_rounding
+        self.apply_warm_up = apply_warm_up
+
         assert attack.optimiser is not None
 
         self.attack = attack
-        self.steps, self.update_step, self.results_step = steps + 1, update_step, update_step
         self.current_step = 0
 
     def init_optimiser_variables(self):
@@ -140,19 +154,28 @@ class AbstractProcedure(ABC):
         """
         a = self.attack
 
-        self.do_warm_up()
+        self.do_warm_up() if self.apply_warm_up else None
 
         # TODO: This whole procedure needs some heavy "why" comments to explain
         #  what's what and what's where.
 
         while self.steps_rule():
 
-            is_update_step = self.current_step % self.update_step == 0
-            is_results_step = self.current_step % self.results_step == 0
-            is_zeroth_step = self.current_step == 0
-            is_round_step = is_update_step and not is_zeroth_step
+            is_pgd_step = self.current_step % self.pgd_step == 0
+            is_pgd_step = is_pgd_step and self.apply_pgd_rounding
 
-            if is_round_step:
+            is_results_step = self.current_step % self.results_step == 0
+
+            is_update_step = self.current_step % self.update_step == 0
+            is_update_step = is_update_step and not self.current_step == 0
+
+            if is_pgd_step:
+
+                # perform some rounding regardless of success or not.
+                # currently uses PGD to round/floor perturbations to integers
+                # prior to the results call (otherwise we might tag examples
+                # as successful when rounding would make them unsuccessesful)
+
                 self.post_optimisation_hook()
 
             if is_results_step:
@@ -163,8 +186,12 @@ class AbstractProcedure(ABC):
 
                 yield self.results_hook()
 
-            if is_update_step and not is_zeroth_step:
-                # TODO: rename pre_optimisation_hook()
+            if is_update_step:
+
+                # perform updates that will affect the success of perturbations.
+                # e.g. CGD clipping etc. These ops must be run *after* results
+                # call else we'll never show anything as successful in the logs
+
                 self.pre_optimisation_updates_hook()
 
             # Do the actual optimisation
