@@ -401,6 +401,53 @@ class BasePathsLoss(SimpleWeightings):
         self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
+class GreedyPathTokenWeightingBinarySearch(BasePathsLoss):
+
+    def init_weights(self, attack, weight_settings):
+
+        self.initial, self.increment = weight_settings
+
+        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
+
+        self.weights = tf.Variable(
+            tf.ones(shape, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = self.initial * np.ones(shape, dtype=np.float32)
+        attack.sess.run(self.weights.assign(initial_vals))
+
+    def update_one(self, idx: int):
+        raise Exception
+
+    def update_many(self, batch_successes: list):
+        """
+        Apply the loss weighting updates to only one example in a batch.
+
+        :param batch_successes: a list of True/False false indicating whether
+            the loss weighting should be updated for each example in a batch
+        """
+
+        current_argmax = tf.cast(
+            tf.argmax(self.current, axis=-1), dtype=tf.int32
+        )
+
+        argmax_test = tf.where(
+            tf.equal(self.target_argmax, current_argmax),
+            tf.multiply(self.increment, self.weights),
+            self.weights,
+        )
+
+        new_weights = self.attack.procedure.tf_run(argmax_test)
+        for idx, reset, in enumerate(batch_successes):
+            if reset:
+                new_weights[idx] = self.initial * np.ones(new_weights[idx].shape, dtype=np.float32)
+
+        self.attack.procedure.tf_run(self.weights.assign(new_weights))
+
+
 class TargetClassesFramewise(BasePathsLoss):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
@@ -492,6 +539,28 @@ class CWMaxMin(BasePathsLoss):
         self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
 
         self.loss_fn = self.loss_fn * self.weights
+
+
+class CWMaxMinWithPerTokenWeights(GreedyPathTokenWeightingBinarySearch):
+    """
+    As above but with the binary search step for the c parameter
+    """
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+
+        assert k >= 0
+
+        super().__init__(
+            attack,
+            use_softmax=use_softmax,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
+        self.loss_fn = tf.reduce_sum(
+            tf.multiply(self.max_diff, self.weights), axis=1
+        )
 
 
 class AdaptiveKappaMaxMin(BasePathsLoss):
@@ -741,6 +810,7 @@ PATH_BASED_LOSSES = {
     "sumlogprobs-fwd": FwdOnlyLogProbsLoss,
     "sumlogprobs-back": BackOnlyLogProbsLoss,
     "cw": CWMaxMin,
+    "cw-toks": CWMaxMinWithPerTokenWeights,
     "biggio": BiggioMaxMin,
     "maxofmaxmin": MaxOfMaxMin,
     "adaptive-kappa": AdaptiveKappaMaxMin,
@@ -752,6 +822,7 @@ GREEDY_SEARCH_ADV_LOSSES = {
     "ctc": CTCLoss,
     "ctcv2": CTCLossV2,
     "cw": CWMaxMin,
+    "cw-toks": CWMaxMinWithPerTokenWeights,
     "biggio": BiggioMaxMin,
     "maxofmaxmin": MaxOfMaxMin,
     "adaptive-kappa": AdaptiveKappaMaxMin,
