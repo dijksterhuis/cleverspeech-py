@@ -40,7 +40,7 @@ def create_unbounded_graph(sess, batch, settings):
     return attack
 
 
-def create_l2_cgd_evasion_graph(sess, batch, settings):
+def create_cgd_evasion_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
@@ -77,42 +77,6 @@ def create_l2_cgd_evasion_graph(sess, batch, settings):
     return attack
 
 
-def create_l2_regularised_evasion_graph(sess, batch, settings):
-
-    attack = graph.AttackConstructors.UnboundedAttackConstructor(
-        sess, batch
-    )
-    attack.add_placeholders(
-        graph.Placeholders.Placeholders
-    )
-    attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
-    )
-    attack.add_victim(
-        models.DeepSpeech_093.Model,
-        decoder=settings["decoder"],
-        beam_width=settings["beam_width"],
-    )
-    attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
-    )
-    attack.add_loss(
-        graph.Losses.CarliniL2Loss,
-        weight_settings=(0.0, 0.1),
-    )
-    attack.add_optimiser(
-        graph.Optimisers.AdamIndependentOptimiser,
-        learning_rate=settings["learning_rate"]
-    )
-    attack.add_procedure(
-        graph.Procedures.Unbounded,
-        steps=settings["nsteps"],
-        update_step=settings["decode_step"]
-    )
-
-    return attack
-
-
 def attack_run(master_settings):
     """
     Use Carlini & Wagner's improved loss function form the original audio paper,
@@ -127,8 +91,6 @@ def attack_run(master_settings):
     :return: None
     """
 
-    from datetime import datetime
-
     attack_type = master_settings["attack_graph"]
     loss = master_settings["loss"]
     decoder = master_settings["decoder"]
@@ -137,7 +99,6 @@ def attack_run(master_settings):
     outdir = os.path.join(outdir, attack_type)
     outdir = os.path.join(outdir, "{}/".format(loss))
     outdir = os.path.join(outdir, "{}/".format(decoder))
-    # outdir = os.path.join(outdir, datetime.now().strftime("%Y-%M-%d-%H-%m-%S") + "/")
 
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type
@@ -154,8 +115,7 @@ def attack_run(master_settings):
 
 ATTACK_GRAPHS = {
     "unbounded": create_unbounded_graph,
-    "cgd_evasion": create_l2_cgd_evasion_graph,
-    "regularised_evasion": create_l2_regularised_evasion_graph,
+    "cgd_evasion": create_cgd_evasion_graph,
 }
 
 LOSSES = {
