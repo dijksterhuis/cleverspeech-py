@@ -133,15 +133,10 @@ class AbstractConstraint(ABC):
         :param distance: the current size of the perturbation
         :return: a new bound value (tau)
         """
+        rc = self.r_constant
+        new = distance * rc if bound > distance else bound * rc
 
-        if bound > distance:
-            # Sample is way over, rest bound to current distance and rescale
-            rc = (distance / bound) * self.r_constant
-        else:
-            # else reduce bound by constant
-            rc = self.r_constant
-
-        return bound * rc
+        return np.ceil(new)
 
     def get_new_linear(self, bound):
         """
