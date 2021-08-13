@@ -33,7 +33,7 @@ from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import lcomp, np_arr
 
 
-class AbstractLNorm(ABC):
+class AbstractConstraint(ABC):
     """
     Abstract class for LNorm constraints, funnily enough.
 
@@ -141,7 +141,7 @@ class AbstractLNorm(ABC):
             # else reduce bound by constant
             rc = self.r_constant
 
-        return np.ceil(bound * rc)
+        return bound * rc
 
     def get_new_linear(self, bound):
         """
@@ -227,7 +227,7 @@ class AbstractLNorm(ABC):
         self.tf_run(self.bounds.assign(new_bounds))
 
 
-class L2(AbstractLNorm):
+class L2(AbstractConstraint):
     """
     An L2 Norm hard constraint.
 
@@ -274,7 +274,7 @@ class L2(AbstractLNorm):
         return tf.clip_by_norm(x, self.bounds, axes=[1])
 
 
-class Linf(AbstractLNorm):
+class Linf(AbstractConstraint):
     """
     An Linf Norm hard constraint.
 
@@ -319,7 +319,7 @@ class Linf(AbstractLNorm):
         return tf.clip_by_value(x, -self.bounds, self.bounds)
 
 
-class Energy(AbstractLNorm):
+class Energy(AbstractConstraint):
     """
     An Linf Norm hard constraint.
 
@@ -366,7 +366,7 @@ class Energy(AbstractLNorm):
         return x * (self.bounds / tf.maximum(self.bounds, energy))
 
 
-class RMS(AbstractLNorm):
+class RMS(AbstractConstraint):
     """
     An Linf Norm hard constraint.
 
