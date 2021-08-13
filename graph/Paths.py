@@ -91,7 +91,7 @@ class Path(ABC):
         s = "Modified targets batch to use the following paths:\n"
         s += "\n".join(logging_alignments)
 
-        log(s, wrap=True)
+        # log(s, wrap=True)
 
         self.batch.targets = {
             "tokens": self.tokens,
