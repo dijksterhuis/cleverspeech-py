@@ -228,11 +228,7 @@ class MidPatch(_TranscriptionPatch):
         feats_mid = act_feat // 2
 
         trans_start = feats_mid - (len(new_t) // 2)
-        trans_end = feats_mid + (len(new_t) // 2)
-
-        # padding if odd t* length
-        if trans_end - trans_start < len(new_t):
-            trans_end = trans_end + len(new_t) - trans_end - trans_start
+        trans_end = trans_start + len(new_t)
 
         path = np.ones(act_feat, dtype=np.int32) * 28
         path[trans_start:trans_end] = new_t
