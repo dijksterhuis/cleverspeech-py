@@ -396,7 +396,7 @@ class CWMaxMin(BasePathsLoss):
     :param: k:
     :param: weight_settings:
     """
-    def __init__(self, attack, k=0.5, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
 
