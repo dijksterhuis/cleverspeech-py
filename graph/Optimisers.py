@@ -69,6 +69,10 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
         self.variables = {}
         gradients = []
 
+        warn = "\nWARNING: Large batches increase time to process ops ..."
+        s = "Loading {n} train ops ... ".format(n=len(self.optimizers))
+        log(s + warn if len(self.optimizers) > 10 else s, wrap=True)
+
         for idx, opt in enumerate(self.optimizers):
 
             grad_var = opt.compute_gradients(
@@ -81,13 +85,15 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
             training_op = opt.apply_gradients(grad_var)
             train_ops.append(training_op)
             gradients.append(grad_var[0][0])
-
             self.variables[idx] = opt.variables()
 
-        log("{n} Optimisers Loaded ...".format(n=len(train_ops)), wrap=True)
+            if (idx + 1) % 10 == 0:
+                log("{n} train ops loaded ...".format(n=idx + 1), wrap=False)
 
         self.train = tf.group(train_ops)
         self.gradients = tf.stack(gradients, axis=0)
+
+        log("\nAll {n} train ops loaded.".format(n=len(train_ops)), wrap=True)
 
 
 class AbstractBatchwiseOptimiser(AbstractOptimiser):
