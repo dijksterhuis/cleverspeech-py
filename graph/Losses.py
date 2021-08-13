@@ -18,10 +18,10 @@ The results, of course, depend on the loss function!
 import tensorflow as tf
 import numpy as np
 
-from cleverspeech.utils.Utils import log
+from abc import ABC, abstractmethod
 
 
-class BaseLoss:
+class BaseLoss(ABC):
     """
     Abstract base loss which enables us to perform any loss weightings applied
     during optimisation uniformly across all child classes.
@@ -33,18 +33,39 @@ class BaseLoss:
         second entry is how much to add to the current weighting after an
         update.
     """
-    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
 
+    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
         assert type(weight_settings) in [list, tuple]
         assert type(updateable) is bool
         assert all(type(t) in [float, int] for t in weight_settings)
         assert len(weight_settings) == 2
 
-        initial = weight_settings[0]
-        increment = weight_settings[1]
-
         self.updateable = updateable
-        self.__sess = attack.sess
+        self.attack = attack
+        self.weights = None
+        self.initial = None
+        self.increment = None
+
+        self.init_weights(attack, weight_settings)
+
+    @abstractmethod
+    def init_weights(self, attack, weight_settings):
+        pass
+
+    @abstractmethod
+    def update_one(self, idx: int):
+        pass
+
+    @abstractmethod
+    def update_many(self, batch_successes: list):
+        pass
+
+
+class SimpleWeightings(BaseLoss):
+
+    def init_weights(self, attack, weight_settings):
+
+        self.initial, self.increment = weight_settings
 
         self.weights = tf.Variable(
             tf.ones(attack.batch.size, dtype=tf.float32),
@@ -53,10 +74,8 @@ class BaseLoss:
             name="qq_loss_weight"
         )
 
-        initial_vals = initial * np.ones([attack.batch.size], dtype=np.float32)
-        self.__sess.run(self.weights.assign(initial_vals))
-
-        self.increment = float(increment)
+        initial_vals = self.initial * np.ones([attack.batch.size], dtype=np.float32)
+        attack.sess.run(self.weights.assign(initial_vals))
 
     def update_one(self, idx: int):
         """
@@ -64,9 +83,9 @@ class BaseLoss:
 
         :param idx: the batch index of the example to update
         """
-        weights = self.__sess.run(self.weights)
+        weights = self.attack.sess.run(self.weights)
         weights[idx] += self.increment
-        self.__sess.run(self.weights.assign(weights))
+        self.attack.sess.run(self.weights.assign(weights))
 
     def update_many(self, batch_successes: list):
         """
@@ -76,16 +95,16 @@ class BaseLoss:
             the loss weighting should be updated for each example in a batch
         """
 
-        weights = self.__sess.run(self.weights)
+        weights = self.attack.sess.run(self.weights)
 
         for idx, success_check in enumerate(batch_successes):
             if success_check is True:
                 weights[idx] += self.increment
 
-        self.__sess.run(self.weights.assign(weights))
+        self.attack.sess.run(self.weights.assign(weights))
 
 
-class CarliniL2Loss(BaseLoss):
+class L2CarliniLoss(SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -104,7 +123,51 @@ class CarliniL2Loss(BaseLoss):
         self.loss_fn = l2delta * self.weights
 
 
-class SampleL2Loss(BaseLoss):
+class L2SquaredLoss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
+        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
+
+        l2delta = tf.reduce_sum(attack.perturbations ** 2, axis=-1)
+        self.loss_fn = l2delta * self.weights
+
+
+class L2Log10Loss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        def log10(x):
+            numerator = tf.log(x + 1e-8)
+            denominator = tf.log(tf.constant(10.0, dtype=tf.float32))
+            return tf.cast(tf.cast(numerator / denominator, dtype=tf.int32), dtype=tf.float32)
+
+        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
+        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
+
+        l2delta = tf.reduce_sum(attack.perturbations ** 2, axis=-1)
+        self.loss_fn = l2delta / tf.pow(10.0, log10(l2delta) + 1)
+        self.loss_fn *= self.weights
+
+
+class L2SampleLoss(SimpleWeightings):
     """
     Normalised L2 loss component from https://arxiv.org/abs/1801.01944
 
@@ -130,7 +193,7 @@ class SampleL2Loss(BaseLoss):
         self.loss_fn = self.l2_loss * self.weights
 
 
-class LinfLoss(BaseLoss):
+class LinfLoss(SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -145,11 +208,30 @@ class LinfLoss(BaseLoss):
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
-        l2delta = tf.reduce_max(attack.perturbations, axis=1)
+        l2delta = tf.reduce_max(tf.abs(attack.perturbations), axis=1)
         self.loss_fn = l2delta * self.weights
 
 
-class EntropyLoss(BaseLoss):
+class RootMeanSquareLoss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
+        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
+
+        l2delta = tf.sqrt(tf.reduce_mean(attack.perturbations ** 2, axis=-1))
+        self.loss_fn = l2delta * self.weights
+
+
+class EntropyLoss(SimpleWeightings):
     """
     Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
     to try to detect adversarial examples.
@@ -172,7 +254,7 @@ class EntropyLoss(BaseLoss):
         self.loss_fn = neg_max * self.weights
 
 
-class CTCLoss(BaseLoss):
+class CTCLoss(SimpleWeightings):
     """
     Simple adversarial CTC Loss from https://arxiv.org/abs/1801.01944
 
@@ -198,7 +280,7 @@ class CTCLoss(BaseLoss):
         ) * self.weights
 
 
-class CTCLossV2(BaseLoss):
+class CTCLossV2(SimpleWeightings):
     """
     Simple adversarial CTC Loss from https://arxiv.org/abs/1801.01944
 
@@ -226,7 +308,7 @@ class CTCLossV2(BaseLoss):
         ) * self.weights
 
 
-class BasePathsLoss(BaseLoss):
+class BasePathsLoss(SimpleWeightings):
     """
     Base class that can be used for logits difference losses, like CW f_6
     and the adaptive kappa variant.
@@ -470,7 +552,7 @@ class AdaptiveKappaMaxMin(BasePathsLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class SinglePathCTCLoss(BaseLoss):
+class SinglePathCTCLoss(SimpleWeightings):
     """
     Adversarial CTC Loss that uses an alignment as a target instead of a
     transcription.
@@ -683,10 +765,6 @@ BEAM_SEARCH_ADV_LOSSES = {
     "ctc-fixed-path": SinglePathCTCLoss,
     "sumlogprobs-fwd": FwdOnlyLogProbsLoss,
     "sumlogprobs-back": BackOnlyLogProbsLoss,
-    # "cumulativelogprobs-fwd": None,
-    # "cumulativelogprobs-back": None,
-    # "logprobsgreedydiff": None,
-    # "maxconfctc": None,
 }
 
 ALL_ADV_LOSS_TERMS = {
@@ -704,8 +782,8 @@ ALL_ADV_LOSS_TERMS = {
 }
 
 DISTANCE_LOSS_TERMS = {
-    "l2-carlini": CarliniL2Loss,
-    "l2-sample": SampleL2Loss,
+    "l2-carlini": L2SquaredLoss,
+    "l2-sample": L2SquaredLoss,
     "linf": LinfLoss,
     "rms-energy": None,
     "energy": None,
