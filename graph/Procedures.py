@@ -47,6 +47,8 @@ class AbstractProcedure(ABC):
         can do the CTCAlign* procedures (special case).
         """
 
+        log("Initialising graph variables ...", wrap=False)
+
         self.attack.optimiser.create_optimiser()
 
         opt_vars = self.attack.delta_graph.opt_vars
@@ -56,6 +58,7 @@ class AbstractProcedure(ABC):
             opt_vars += val
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
+        log("Graph variables initialised.", wrap=True)
 
     def tf_run(self, tf_variables):
         """
