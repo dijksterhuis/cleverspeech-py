@@ -37,7 +37,9 @@ def create_unbounded_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.Unbounded,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        apply_pgd_rounding=settings["pgd_rounding"],
+        apply_warm_up=settings["random_warm_up"],
     )
 
     return attack
@@ -77,7 +79,9 @@ def create_l2_cgd_evasion_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.EvasionCGD,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        apply_pgd_rounding=settings["pgd_rounding"],
+        apply_warm_up=settings["random_warm_up"],
     )
 
     return attack
@@ -116,7 +120,9 @@ def create_l2_regularised_evasion_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.Unbounded,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        apply_pgd_rounding=settings["pgd_rounding"],
+        apply_warm_up=settings["random_warm_up"],
     )
 
     return attack
