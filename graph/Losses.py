@@ -236,9 +236,7 @@ class BasePathsLoss(BaseLoss):
     :param: softmax: bool type. whether to use softmax or activations
     :param: weight_settings: how to update this loss function on success
     """
-    # TODO: attack should only be the attack.victim member (or potentially only
-    #  the actual softmax or logits attribute that we want). Although we'd also
-    #  need to pass in the tf.Sess and batch objects separately too.
+
     def __init__(self, attack, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         super().__init__(
