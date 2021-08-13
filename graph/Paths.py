@@ -118,7 +118,7 @@ class _LinearlyDistributed(Path):
         return (actual_n_feats * self.density) // target_phrase_length
 
     @staticmethod
-    def _create_path_indices(new_target, n_feats, length, repeats):
+    def _create_path_indices(new_target, n_feats, repeats):
 
         """
         Taking into account the space we have available, find out the new argmax
@@ -132,21 +132,26 @@ class _LinearlyDistributed(Path):
         :return: the index for each frame in turn
         """
 
-        spacing = n_feats // length
+        spacing = n_feats // len(new_target)
+
+        # guarantee non-minus number of characters
+        n_chars = repeats - 1 if repeats > 0 else 0
 
         for t in new_target:
             for i in range(spacing):
-                if i > repeats:
-                    yield 28
-                else:
+                if i <= n_chars:
                     yield t
+                else:
+                    yield 28
 
     def path_calculation(self, modified_transcriptions):
+
+        new_lengths = l_map(len, modified_transcriptions)
 
         # calculate the actual number of repeats
         n_repeats = l_map(
             lambda x: self.calculate_repeats(*x),
-            zip(self.actual_feats, self.lengths)
+            zip(self.actual_feats, new_lengths)
         )
 
         # do linear expansion only on the existing indices (target phrases
@@ -154,7 +159,6 @@ class _LinearlyDistributed(Path):
         z = zip(
             modified_transcriptions,
             self.actual_feats,
-            l_map(len, modified_transcriptions),
             n_repeats
         )
 
