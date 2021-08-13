@@ -117,12 +117,11 @@ class AbstractAttackConstructor(ABC):
         """
         # Note that the attribute `loss_fn` is called here
         new_loss = loss(self, *args, **kwargs)
-        if self.loss_fn is None:
+
+        if self.loss is None:
             self.loss = [new_loss]
-            self.loss_fn = new_loss.loss_fn
         else:
-            self.loss = self.loss + [new_loss]
-            self.loss_fn = self.loss_fn + new_loss.loss_fn
+            self.loss.append(new_loss)
 
     def create_loss_fn(self):
         """
@@ -134,7 +133,7 @@ class AbstractAttackConstructor(ABC):
         :return: None
         """
         assert self.loss is not None
-        self.loss_fn = sum(l.loss_fn for l in self.loss)
+        self.loss_fn = sum([l.loss_fn for l in self.loss])
 
     def add_optimiser(self, optimiser, *args, **kwargs):
         """

@@ -28,6 +28,8 @@ class AbstractOptimiser(ABC):
         self.attack = attack
         self.learning_rate = learning_rate
 
+        assert attack.loss_fn is not None
+
         self.train = None
         self.variables = None
         self.gradients = None
