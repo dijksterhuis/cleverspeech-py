@@ -9,8 +9,6 @@ import tensorflow as tf
 import numpy as np
 
 from abc import ABC, abstractmethod
-
-from cleverspeech.graph.Placeholders import Placeholders
 from cleverspeech.utils.Utils import np_arr, lcomp
 
 
