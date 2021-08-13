@@ -267,7 +267,7 @@ class CustomShiftPatch(_TranscriptionPatch):
         return path
 
 
-class RandomMonotonic(Path):
+class RandomMonotonicSparse(Path):
 
     @staticmethod
     def monotonic_random_sparse_path(t_mod, af):
@@ -544,7 +544,7 @@ ALL_PATHS = {
     "dense": Dense,
     "sparse": Sparse,
     "ctc": CTC,
-    "mono-sparse": None,
+    "mono-sparse": RandomMonotonicSparse,
     "patch-start": StartPatch,
     "patch-mid": MidPatch,
     "patch-end": EndPatch,
