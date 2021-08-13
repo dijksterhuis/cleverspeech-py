@@ -14,9 +14,10 @@ from tensorflow import errors as tf_errors
 from cleverspeech import data
 from cleverspeech import graph
 from cleverspeech import models
+
+from cleverspeech.config.ExperimentArguments import args
+from cleverspeech.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.Utils import log
-from cleverspeech.utils.runtime.TensorflowRuntime import TFRuntime
-from cleverspeech.utils.runtime.ExperimentArguments import args
 
 
 def custom_executor(settings, batch, attack_fn):

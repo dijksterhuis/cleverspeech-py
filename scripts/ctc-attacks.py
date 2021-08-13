@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import os
+
 from cleverspeech import data
 from cleverspeech import graph
 from cleverspeech import models
+
+from cleverspeech.config.ExperimentArguments import args
+from cleverspeech.runtime.Execution import default_manager
 from cleverspeech.utils.Utils import log
-from cleverspeech.utils.runtime.Execution import default_manager
-from cleverspeech.utils.runtime.ExperimentArguments import args
 
 
 def create_unbounded_graph(sess, batch, settings):

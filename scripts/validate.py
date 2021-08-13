@@ -4,10 +4,13 @@ import traceback
 import tensorflow as tf
 import multiprocessing as mp
 
-from cleverspeech import data, graph, models
+from cleverspeech import data
+from cleverspeech import graph
+from cleverspeech import models
+
+from cleverspeech.config.ExperimentArguments import args
+from cleverspeech.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.Utils import log
-from cleverspeech.utils.runtime.TensorflowRuntime import TFRuntime
-from cleverspeech.utils.runtime.ExperimentArguments import args
 
 
 def custom_executor(settings, batch, model_fn):
