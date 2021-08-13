@@ -75,15 +75,7 @@ class AbstractPerturbationSubGraph(ABC):
         deltas *= masks
 
         # Restrict delta to valid space before applying constraints
-
-        lower = -self.__bit_depth
-        upper = self.__bit_depth - 1
-
-        self.final_deltas = tf.clip_by_value(
-            deltas,
-            clip_value_min=lower,
-            clip_value_max=upper
-        )
+        self.final_deltas = self.apply_box_constraint(deltas)
 
         # initialise static variables
         initial_masks = np_arr(
@@ -92,6 +84,16 @@ class AbstractPerturbationSubGraph(ABC):
         )
 
         sess.run(masks.assign(initial_masks))
+
+    def apply_box_constraint(self, deltas):
+        lower = -self.__bit_depth
+        upper = self.__bit_depth - 1
+
+        return tf.clip_by_value(
+            deltas,
+            clip_value_min=lower,
+            clip_value_max=upper
+        )
 
     def get_valid_perturbations(self, sess):
         return sess.run(self.final_deltas)
