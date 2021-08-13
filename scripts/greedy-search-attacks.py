@@ -38,6 +38,7 @@ def create_unbounded_graph(sess, batch, settings):
             graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
             use_softmax=settings["use_softmax"],
         )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
@@ -53,7 +54,7 @@ def create_unbounded_graph(sess, batch, settings):
     return attack
 
 
-def create_l2_cgd_evasion_graph(sess, batch, settings):
+def create_cgd_evasion_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
@@ -88,61 +89,13 @@ def create_l2_cgd_evasion_graph(sess, batch, settings):
             graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
             use_softmax=settings["use_softmax"],
         )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
         graph.Procedures.EvasionCGD,
-        steps=settings["nsteps"],
-        update_step=settings["decode_step"],
-        apply_pgd_rounding=settings["pgd_rounding"],
-        apply_warm_up=settings["random_warm_up"],
-    )
-
-    return attack
-
-
-def create_l2_regularised_evasion_graph(sess, batch, settings):
-
-    attack = graph.AttackConstructors.EvasionAttackConstructor(
-        sess, batch
-    )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
-    )
-    attack.add_placeholders(
-        graph.Placeholders.Placeholders
-    )
-    attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
-    )
-    attack.add_victim(
-        models.DeepSpeech_093.Model,
-        decoder=settings["decoder"],
-        beam_width=settings["beam_width"],
-    )
-    if settings["loss"] in KAPPA_LOSSES:
-        attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-            k=settings["kappa"]
-        )
-    else:
-        attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-        )
-    attack.add_loss(
-        graph.Losses.CarliniL2Loss,
-        weight_settings=(0.0, 0.1),
-    )
-    attack.add_optimiser(
-        graph.Optimisers.AdamIndependentOptimiser,
-        learning_rate=settings["learning_rate"]
-    )
-    attack.add_procedure(
-        graph.Procedures.Unbounded,
         steps=settings["nsteps"],
         update_step=settings["decode_step"],
         apply_pgd_rounding=settings["pgd_rounding"],
@@ -203,11 +156,10 @@ def attack_run(master_settings):
 
 ATTACK_GRAPHS = {
     "unbounded": create_unbounded_graph,
-    "cgd_evasion": create_l2_cgd_evasion_graph,
-    "regularised_evasion": create_l2_regularised_evasion_graph,
+    "cgd_evasion": create_cgd_evasion_graph,
 }
 
-KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]
+KAPPA_LOSSES = ["cw", "cw-toks", "weightedmaxmin", "adaptivekappa"]
 
 
 if __name__ == '__main__':
