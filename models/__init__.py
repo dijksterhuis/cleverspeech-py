@@ -1,1 +1,1 @@
-from cleverspeech.models import DeepSpeech_093
+from cleverspeech.models import DeepSpeech

@@ -8,9 +8,9 @@ from abc import ABC
 from multiprocessing import cpu_count
 from cleverspeech.utils.Utils import lcomp, l_map
 
-from cleverspeech.models.DeepSpeech_v0_9_3.src.training.deepspeech_training.train import create_model
-from cleverspeech.models.DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import Config, initialize_globals
-from cleverspeech.models.DeepSpeech_v0_9_3.src.training.deepspeech_training.util.flags import create_flags
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.train import create_model
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import Config, initialize_globals
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.flags import create_flags
 
 
 class TFSignalMFCC:
@@ -92,12 +92,12 @@ class Model(ABC):
 
         self.checkpoint_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "./DeepSpeech_v0_9_3/data/deepspeech-0.9.3-checkpoint/"
+                model_data_path, "./__DeepSpeech_v0_9_3/data/deepspeech-0.9.3-checkpoint/"
             )
         )
         self.model_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "./DeepSpeech_v0_9_3/data/models/"
+                model_data_path, "./__DeepSpeech_v0_9_3/data/models/"
             )
         )
 
