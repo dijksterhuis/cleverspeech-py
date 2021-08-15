@@ -5,8 +5,6 @@ import argparse
 import numpy as np
 import tensorflow as tf
 
-from cleverspeech.utils.Utils import log
-
 
 def args(attack_run, additional_args: dict = None):
     from cleverspeech.graph.Paths import ALL_PATHS
