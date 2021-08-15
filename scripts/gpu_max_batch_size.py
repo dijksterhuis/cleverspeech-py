@@ -134,6 +134,7 @@ def create_cw_unbounded_graph(sess, batch, settings):
         use_softmax=False,
         k=settings["kappa"]
     )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]

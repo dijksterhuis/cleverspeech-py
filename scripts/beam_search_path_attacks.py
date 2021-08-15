@@ -32,6 +32,7 @@ def create_unbounded_graph(sess, batch, settings):
     attack.add_loss(
         graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
     )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
@@ -74,6 +75,7 @@ def create_cgd_evasion_graph(sess, batch, settings):
     attack.add_loss(
         graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
     )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
