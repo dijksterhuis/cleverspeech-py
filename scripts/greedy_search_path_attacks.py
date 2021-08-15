@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-
 from cleverspeech import data
 from cleverspeech import graph
 from cleverspeech import models
@@ -15,6 +14,9 @@ def create_unbounded_graph(sess, batch, settings):
     attack = graph.AttackConstructors.UnboundedAttackConstructor(
         sess, batch
     )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -22,13 +24,21 @@ def create_unbounded_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
-    attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
-    )
+    if settings["loss"] in KAPPA_LOSSES:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            k=settings["kappa"]
+        )
+    else:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+        )
     attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
@@ -37,7 +47,9 @@ def create_unbounded_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.Unbounded,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        apply_pgd_rounding=settings["pgd_rounding"],
+        apply_warm_up=settings["random_warm_up"],
     )
 
     return attack
@@ -47,6 +59,9 @@ def create_cgd_evasion_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
+    )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -60,13 +75,21 @@ def create_cgd_evasion_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
-    attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
-    )
+    if settings["loss"] in KAPPA_LOSSES:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            k=settings["kappa"]
+        )
+    else:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+        )
     attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
@@ -75,7 +98,9 @@ def create_cgd_evasion_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.EvasionCGD,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        apply_pgd_rounding=settings["pgd_rounding"],
+        apply_warm_up=settings["random_warm_up"],
     )
 
     return attack
@@ -95,14 +120,27 @@ def attack_run(master_settings):
     :return: None
     """
 
+    master_settings["use_softmax"] = bool(master_settings["use_softmax"])
+
+    if master_settings["loss"] in KAPPA_LOSSES:
+        assert master_settings["kappa"] is not None
+        if master_settings["use_softmax"] is True:
+            assert 0 <= master_settings["kappa"] < 1
+        else:
+            assert master_settings["kappa"] >= 0
+
     attack_type = master_settings["attack_graph"]
+    align = master_settings["align"]
     loss = master_settings["loss"]
     decoder = master_settings["decoder"]
+    kappa = master_settings["kappa"]
     outdir = master_settings["outdir"]
 
     outdir = os.path.join(outdir, attack_type)
     outdir = os.path.join(outdir, "{}/".format(loss))
+    outdir = os.path.join(outdir, "{}/".format(align))
     outdir = os.path.join(outdir, "{}/".format(decoder))
+    outdir = os.path.join(outdir, "k{}/".format(kappa))
 
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type
@@ -122,22 +160,21 @@ ATTACK_GRAPHS = {
     "cgd_evasion": create_cgd_evasion_graph,
 }
 
-LOSSES = {
-    "ctc": graph.Losses.CTCLoss,
-    "ctc_v2": graph.Losses.CTCLossV2,
-}
+KAPPA_LOSSES = ["cw", "cw-toks", "weightedmaxmin", "adaptivekappa"]
 
 
-if __name__ == '__main__':
-
+def main():
     log("", wrap=True)
 
     extra_args = {
-        "attack_graph": [str, "unbounded", False, ATTACK_GRAPHS.keys()],
-        "loss": [str, "ctc", True, LOSSES.keys()]
+        "attack_graph": [str, "unbounded", True, ATTACK_GRAPHS.keys()],
+        "loss": [str, None, True, graph.Losses.GREEDY_SEARCH_ADV_LOSSES.keys()],
+        "kappa": [float, None, False, None],
+        'use_softmax': [int, 0, False, [0, 1]],
     }
 
     args(attack_run, additional_args=extra_args)
 
 
-
+if __name__ == '__main__':
+    main()

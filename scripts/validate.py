@@ -97,7 +97,7 @@ def create_validation_graph(sess, batch, settings):
         audio_lengths_ph: batch.audios["ds_feats"],
     }
 
-    model = models.DeepSpeech_093.Model(
+    model = models.DeepSpeech.Model(
         sess, audios_ph, batch,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
@@ -126,11 +126,12 @@ def attack_run(master_settings):
     log("Finished all runs.")
 
 
-if __name__ == '__main__':
-
+def main():
     log("", wrap=True)
-
     args(attack_run)
 
+
+if __name__ == '__main__':
+    main()
 
 

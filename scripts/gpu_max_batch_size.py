@@ -89,7 +89,7 @@ def create_ctc_unbounded_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
@@ -125,7 +125,7 @@ def create_cw_unbounded_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
@@ -198,8 +198,7 @@ def attack_run(master_settings):
     log("Finished all runs.")
 
 
-if __name__ == '__main__':
-
+def main():
     log("", wrap=True)
 
     extra_args = {
@@ -209,4 +208,5 @@ if __name__ == '__main__':
     args(attack_run, additional_args=extra_args)
 
 
-
+if __name__ == '__main__':
+    main()

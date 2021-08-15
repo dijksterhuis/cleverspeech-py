@@ -7,9 +7,9 @@ from abc import ABC
 from multiprocessing import cpu_count
 from cleverspeech.utils.Utils import np_arr, lcomp, log
 
-from cleverspeech.models.DeepSpeech_v0_4_1.src import DeepSpeech
-from cleverspeech.models.DeepSpeech_v0_4_1.src.util.config import Config
-from cleverspeech.models.DeepSpeech_v0_4_1.src.util.text import Alphabet
+from cleverspeech.models.__DeepSpeech_v0_4_1.src import DeepSpeech
+from cleverspeech.models.__DeepSpeech_v0_4_1.src.util.config import Config
+from cleverspeech.models.__DeepSpeech_v0_4_1.src.util.text import Alphabet
 
 
 class CarliniWagnerTransforms:

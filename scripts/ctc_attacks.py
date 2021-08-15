@@ -15,9 +15,6 @@ def create_unbounded_graph(sess, batch, settings):
     attack = graph.AttackConstructors.UnboundedAttackConstructor(
         sess, batch
     )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
-    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -25,13 +22,14 @@ def create_unbounded_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
         graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
     )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
@@ -39,9 +37,7 @@ def create_unbounded_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.Unbounded,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"],
-        apply_pgd_rounding=settings["pgd_rounding"],
-        apply_warm_up=settings["random_warm_up"],
+        update_step=settings["decode_step"]
     )
 
     return attack
@@ -51,9 +47,6 @@ def create_cgd_evasion_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
-    )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -67,13 +60,14 @@ def create_cgd_evasion_graph(sess, batch, settings):
         graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
-        models.DeepSpeech_093.Model,
+        models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
         graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
     )
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
@@ -81,9 +75,7 @@ def create_cgd_evasion_graph(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.EvasionCGD,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"],
-        apply_pgd_rounding=settings["pgd_rounding"],
-        apply_warm_up=settings["random_warm_up"],
+        update_step=settings["decode_step"]
     )
 
     return attack
@@ -104,14 +96,12 @@ def attack_run(master_settings):
     """
 
     attack_type = master_settings["attack_graph"]
-    align = master_settings["align"]
     loss = master_settings["loss"]
     decoder = master_settings["decoder"]
     outdir = master_settings["outdir"]
 
     outdir = os.path.join(outdir, attack_type)
     outdir = os.path.join(outdir, "{}/".format(loss))
-    outdir = os.path.join(outdir, "{}/".format(align))
     outdir = os.path.join(outdir, "{}/".format(decoder))
 
     master_settings["outdir"] = outdir
@@ -132,17 +122,22 @@ ATTACK_GRAPHS = {
     "cgd_evasion": create_cgd_evasion_graph,
 }
 
+LOSSES = {
+    "ctc": graph.Losses.CTCLoss,
+    "ctc_v2": graph.Losses.CTCLossV2,
+}
 
-if __name__ == '__main__':
 
+def main():
     log("", wrap=True)
 
     extra_args = {
         "attack_graph": [str, "unbounded", False, ATTACK_GRAPHS.keys()],
-        "loss": [str, None, True, graph.Losses.BEAM_SEARCH_ADV_LOSSES.keys()]
+        "loss": [str, "ctc", True, LOSSES.keys()]
     }
 
     args(attack_run, additional_args=extra_args)
 
 
-
+if __name__ == '__main__':
+    main()
