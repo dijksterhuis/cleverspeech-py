@@ -105,7 +105,6 @@ def attack_run(master_settings):
     outdir = os.path.join(outdir, "{}/".format(decoder))
 
     master_settings["outdir"] = outdir
-    master_settings["attack type"] = attack_type
 
     batch_gen = data.ingress.mcv_v1.BatchIterator(master_settings)
 
