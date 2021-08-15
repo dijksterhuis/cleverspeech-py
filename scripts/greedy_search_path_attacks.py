@@ -9,7 +9,7 @@ from cleverspeech.runtime.Execution import default_manager
 from cleverspeech.utils.Utils import log
 
 
-def create_unbounded_graph(sess, batch, settings):
+def only_box_constraint_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.UnboundedAttackConstructor(
         sess, batch
@@ -55,7 +55,7 @@ def create_unbounded_graph(sess, batch, settings):
     return attack
 
 
-def create_cgd_evasion_graph(sess, batch, settings):
+def clipped_gradient_descent_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
@@ -156,8 +156,8 @@ def attack_run(master_settings):
 
 
 ATTACK_GRAPHS = {
-    "unbounded": create_unbounded_graph,
-    "cgd_evasion": create_cgd_evasion_graph,
+    "box": only_box_constraint_graph,
+    "cgd": clipped_gradient_descent_graph,
 }
 
 KAPPA_LOSSES = ["cw", "cw-toks", "weightedmaxmin", "adaptivekappa"]
@@ -167,7 +167,7 @@ def main():
     log("", wrap=True)
 
     extra_args = {
-        "attack_graph": [str, "unbounded", True, ATTACK_GRAPHS.keys()],
+        "attack_graph": [str, "box", True, ATTACK_GRAPHS.keys()],
         "loss": [str, None, True, graph.Losses.GREEDY_SEARCH_ADV_LOSSES.keys()],
         "kappa": [float, None, False, None],
         'use_softmax': [int, 0, False, [0, 1]],

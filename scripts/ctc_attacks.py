@@ -10,7 +10,7 @@ from cleverspeech.runtime.Execution import default_manager
 from cleverspeech.utils.Utils import log
 
 
-def create_unbounded_graph(sess, batch, settings):
+def only_box_constraint_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.UnboundedAttackConstructor(
         sess, batch
@@ -43,7 +43,7 @@ def create_unbounded_graph(sess, batch, settings):
     return attack
 
 
-def create_cgd_evasion_graph(sess, batch, settings):
+def clipped_gradient_descent_graph(sess, batch, settings):
 
     attack = graph.AttackConstructors.EvasionAttackConstructor(
         sess, batch
@@ -118,8 +118,8 @@ def attack_run(master_settings):
 
 
 ATTACK_GRAPHS = {
-    "unbounded": create_unbounded_graph,
-    "cgd_evasion": create_cgd_evasion_graph,
+    "box": only_box_constraint_graph,
+    "cgd": clipped_gradient_descent_graph,
 }
 
 LOSSES = {
@@ -132,7 +132,7 @@ def main():
     log("", wrap=True)
 
     extra_args = {
-        "attack_graph": [str, "unbounded", False, ATTACK_GRAPHS.keys()],
+        "attack_graph": [str, "box", False, ATTACK_GRAPHS.keys()],
         "loss": [str, "ctc", True, LOSSES.keys()]
     }
 
