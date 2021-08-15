@@ -197,8 +197,7 @@ def attack_run(master_settings):
     log("Finished all runs.")
 
 
-if __name__ == '__main__':
-
+def main():
     log("", wrap=True)
 
     extra_args = {
@@ -208,4 +207,5 @@ if __name__ == '__main__':
     args(attack_run, additional_args=extra_args)
 
 
-
+if __name__ == '__main__':
+    main()
