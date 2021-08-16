@@ -1,26 +1,5 @@
 """
-One of the general implications of Wild Patterns (Biggio et al. 2017) is that
-hard constraints are better for security evaluations as we can analyse the
-effects of an attack on a given model for specific perturbation sizes.
-
-We use a similar approach to Carlini & Wagner's original work. They applied an
-Linf norm hard constraint on the perturbation and gradually reduce it. We mostly
-ignore perceptual / perturbation size objectives (loss function components) and
-rely on iteratively reducing the hard constraint to minimise perturbation size.
-
-L-2 and L-inf are the only L-Norms currently implemented (there doesn't seem to
-be a "clip by L1" in TF v1.13.1).
-
-TODO: AbstractConstraint class
-
-TODO: SpectralLNorm class
-
-TODO: L1 class
-
-TODO: L0 class
-
-TODO: cleverhans eta function? apparently it's more accurate and handles 0->inf
-
+Hard constraints to use with Clipped Gradient Descent Perturbation Graphs.
 --------------------------------------------------------------------------------
 """
 
@@ -35,17 +14,7 @@ from cleverspeech.utils.Utils import lcomp, np_arr
 
 class AbstractConstraint(ABC):
     """
-    Abstract class for LNorm constraints, funnily enough.
-
-    :param sess: a tensorflow Session object
-    :param batch: the input batch, a
-        cleverspeech.data.ingress.batch_generators.batch object
-    :param bit_depth: the maximum possible value for the initial bound
-    :param r_constant: how much to reduce the constraint by if updated
-    :param update_method: how to perform updates, choice of 'lin', 'geom',
-        or 'log'
-    :param lowest_bound: if we should stop updating at a specified bound, what
-        should that bound be?
+    Abstract class for constraints, funnily enough.
     """
     def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, update_method="geom", lowest_bound=None):
 
@@ -87,9 +56,6 @@ class AbstractConstraint(ABC):
         Generate the initial bounds based on the the maximum possible value for
         a perturbation and it's actual un-padded length (i.e. number of audio
         samples).
-
-        :param act_lengths: the real un-padded lengths of perturbations in a batch
-        :return: the maximum bound to allow when starting optimisation.
         """
         for l in act_lengths:
             yield self.analyse([self.__bit_depth for _ in range(l)])
@@ -112,10 +78,6 @@ class AbstractConstraint(ABC):
         """
         Get a new bound using the method defined by the `update_method`
         attribute.
-
-        :param bound: the current value of the bound i.e. tau
-        :param distance: the current distance
-        :return: a new bound value i.e. tau
         """
 
         if self.update_method == "lin":
@@ -128,10 +90,6 @@ class AbstractConstraint(ABC):
     def get_new_geometric(self, bound, distance):
         """
         Get a new rescale constant with geometric progression.
-
-        :param bound: the current bound (tau)
-        :param distance: the current size of the perturbation
-        :return: a new bound value (tau)
         """
         rc = self.r_constant
         new = distance * rc if bound > distance else bound * rc
@@ -141,9 +99,6 @@ class AbstractConstraint(ABC):
     def get_new_linear(self, bound):
         """
         Get a new rescale constant linearly.
-
-        :param bound: the current bound (tau)
-        :return: a new bound value (tau)
         """
         new_bound = np.round(bound - bound * self.r_constant, 6)
 
@@ -165,10 +120,6 @@ class AbstractConstraint(ABC):
 
         Note -- make sure to set rescale to something like 0.1 so it doesn't
         become a geometric progression.
-
-        :param bound: the current bound (tau)
-        :return: a new bound value (tau)
-
         """
         new_bound = np.round(bound, 8) * self.r_constant
 
@@ -197,9 +148,6 @@ class AbstractConstraint(ABC):
 
         """
         Update bounds for all perturbations in a batch, if they've found success
-        :param deltas: an array of perturbations
-        :param successes: an array of True/False values, ordering the same as deltas
-        :return: None
         """
 
         current_bounds = self.tf_run(self.bounds)
@@ -211,29 +159,8 @@ class AbstractConstraint(ABC):
 
         self.tf_run(self.bounds.assign(current_bounds))
 
-    def update(self, new_bounds):
-        """
-        Do the update operation given an array of some new bounds. Useful if you
-        want to calculate bounds somewhere else.
-
-        :param new_bounds: an array of new bound (tau) values
-        :return: None
-        """
-        self.tf_run(self.bounds.assign(new_bounds))
-
 
 class L2(AbstractConstraint):
-    """
-    An L2 Norm hard constraint.
-
-    :param sess: a tensorflow Session object
-    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
-    :param maxval: the maximum possible value for the initial bound
-    :param r_constant: how much to reduce the constraint by if updated
-    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
-    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
-    """
-
     def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
 
         super().__init__(
@@ -246,40 +173,18 @@ class L2(AbstractConstraint):
         )
 
     def analyse(self, x):
-        """
-        What is the current size of x according to an L2 norm.
-
-        :param x: some input array, must be passable to numpy functions
-        :return: the current l2 norm of the given array
-        """
         res = np.power(np.sum(np.power(np.abs(x), 2), axis=-1), 1 / 2)
         if type(res) != list:
             res = [res]
         return res
 
     def clip(self, x):
-        """
-        Apply the hard constraint to some tensorflow tensor.
-
-        :param x: the tensorflow tensor to apply the L2 hard constraint to.
-        :return: the L2 clipped tensorflow tensor
-        """
         # N.B. The `axes` flag for `p=2` must be used as as tensorflow runs
         # the over *all* tensor dimensions by default.
         return tf.clip_by_norm(x, self.bounds, axes=[1])
 
 
 class Linf(AbstractConstraint):
-    """
-    An Linf Norm hard constraint.
-
-    :param sess: a tensorflow Session object
-    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
-    :param maxval: the maximum possible value for the initial bound
-    :param r_constant: how much to reduce the constraint by if updated
-    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
-    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
-    """
     def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
@@ -291,40 +196,18 @@ class Linf(AbstractConstraint):
         )
 
     def analyse(self, x):
-        """
-        What is the current size of x according to an Linf norm.
-
-        :param x: some input array, must be passable to numpy functions
-        :return: the current Linf norm of the given array
-        """
         res = np.max(np.abs(x), axis=-1)
         if type(res) != list:
             res = [res]
         return res
 
     def clip(self, x):
-        """
-        Apply the hard constraint to some tensorflow tensor.
-
-        :param x: the tensorflow tensor to apply the L2 hard constraint to.
-        :return: the Linf clipped tensorflow tensor
-        """
         # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the
         # operation on the last tensor dimension by default.
         return tf.clip_by_value(x, -self.bounds, self.bounds)
 
 
 class Energy(AbstractConstraint):
-    """
-    An Linf Norm hard constraint.
-
-    :param sess: a tensorflow Session object
-    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
-    :param maxval: the maximum possible value for the initial bound
-    :param r_constant: how much to reduce the constraint by if updated
-    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
-    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
-    """
     def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
@@ -336,42 +219,17 @@ class Energy(AbstractConstraint):
         )
 
     def analyse(self, x):
-        """
-        What is the current size of x according to an Linf norm.
-
-        :param x: some input array, must be passable to numpy functions
-        :return: the current Linf norm of the given array
-        """
         res = np.sum(np.abs(x) ** 2, axis=-1)
         if type(res) != list:
             res = [res]
         return res
 
     def clip(self, x):
-        """
-        Apply the hard constraint to some tensorflow tensor.
-
-        :param x: the tensorflow tensor to apply the L2 hard constraint to.
-        :return: the Linf clipped tensorflow tensor
-        """
-        # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the
-        # operation on the last tensor dimension by default.
-
         energy = tf.reduce_sum(tf.abs(x ** 2), axis=-1)
         return x * (self.bounds / tf.maximum(self.bounds, energy))
 
 
 class RMS(AbstractConstraint):
-    """
-    An Linf Norm hard constraint.
-
-    :param sess: a tensorflow Session object
-    :param batch: the input batch, a cleverspeech.data.ingress.batch_generators.batch object
-    :param maxval: the maximum possible value for the initial bound
-    :param r_constant: how much to reduce the constraint by if updated
-    :param update_method: how to perform updates, choice of 'lin', 'geom', or 'log'
-    :param lowest_bound: if we should stop updating at a specified bound, what should that bound be?
-    """
     def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
@@ -383,26 +241,12 @@ class RMS(AbstractConstraint):
         )
 
     def analyse(self, x):
-        """
-        What is the current size of x according to an Linf norm.
-
-        :param x: some input array, must be passable to numpy functions
-        :return: the current Linf norm of the given array
-        """
         res = np.sqrt(np.mean(np.abs(x) ** 2, axis=-1))
         if type(res) != list:
             res = [res]
         return res
 
     def clip(self, x):
-        """
-        Apply the hard constraint to some tensorflow tensor.
-
-        :param x: the tensorflow tensor to apply the L2 hard constraint to.
-        :return: the Linf clipped tensorflow tensor
-        """
-        # N.B. There is no `axes` flag for `p=inf` as tensorflow runs the
-        # operation on the last tensor dimension by default.
 
         rms = tf.sqrt(tf.reduce_mean(tf.abs(x ** 2), axis=-1))
         return x * (self.bounds / tf.maximum(self.bounds, rms))
