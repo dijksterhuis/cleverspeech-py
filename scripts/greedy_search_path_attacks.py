@@ -11,7 +11,7 @@ from cleverspeech.utils.Utils import log
 
 def only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.Constructor(
+    attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
     attack.add_path_search(
@@ -21,7 +21,7 @@ def only_box_constraint_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        graph.Perturbations.BoxConstraintOnly,
         random_scale=settings["delta_randomiser"]
     )
     attack.add_victim(
@@ -56,7 +56,7 @@ def only_box_constraint_graph(sess, batch, settings):
 
 def clipped_gradient_descent_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.Constructor(
+    attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
     attack.add_path_search(
@@ -66,7 +66,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.ClippedGradientDescent,
+        graph.Perturbations.ClippedGradientDescent,
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],

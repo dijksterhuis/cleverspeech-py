@@ -83,7 +83,7 @@ def custom_manager(settings, attack_fn, batch_gen):
 
 def create_validation_graph(sess, batch, settings):
 
-    feeds = graph.AttackConstructors.Feeds()
+    feeds = graph.GraphConstructor.Feeds()
 
     audios_ph = tf.placeholder(
         tf.float32, [batch.size, batch.audios["max_samples"]], name="new_input"

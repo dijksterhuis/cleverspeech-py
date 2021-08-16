@@ -79,14 +79,14 @@ def custom_manager(settings, attack_fn, batch_gen):
 
 def ctc_only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.Constructor(
+    attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        graph.Perturbations.BoxConstraintOnly,
         random_scale=settings["delta_randomiser"]
     )
     attack.add_victim(
@@ -113,7 +113,7 @@ def ctc_only_box_constraint_graph(sess, batch, settings):
 
 def cw_only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.Constructor(
+    attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
     attack.add_path_search(
@@ -123,7 +123,7 @@ def cw_only_box_constraint_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        graph.Perturbations.BoxConstraintOnly,
         random_scale=settings["delta_randomiser"],
     )
     attack.add_victim(
