@@ -8,8 +8,6 @@ methods here, i.e. attack.victim.inference()
 """
 
 
-import tensorflow as tf
-from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import log
 
 
@@ -18,12 +16,13 @@ class Feeds:
     attack = None
 
 
-class AbstractAttackConstructor(ABC):
-    def __init__(self, sess, batch, bit_depth=2**15):
+class Constructor:
+    def __init__(self, sess, batch, settings, bit_depth=2**15):
 
         self.batch = batch
         self.sess = sess
         self.bit_depth = bit_depth
+        self.settings = settings
 
         self.path_search = None
         self.feeds = Feeds()
@@ -72,10 +71,9 @@ class AbstractAttackConstructor(ABC):
 
         pass
 
-    @abstractmethod
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
         """
-        Must be implemented in child classes -- add a perturbation graph.
+        Add a perturbation graph.
 
         :param graph: an uninitialised reference to a
             cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
@@ -83,7 +81,14 @@ class AbstractAttackConstructor(ABC):
         :param kwargs: any optional args with which to initialise the class
         :return: None
         """
-        pass
+
+        self.delta_graph = graph(
+            self.sess,
+            self.batch,
+            self.placeholders,
+            *args,
+            **kwargs,
+        )
 
     def add_victim(self, model, *args, **kwargs):
         """
@@ -97,7 +102,7 @@ class AbstractAttackConstructor(ABC):
         """
         self.victim = model(
             self.sess,
-            self.adversarial_examples,
+            self.delta_graph.adversarial_examples,
             self.batch,
             *args,
             **kwargs
@@ -202,115 +207,4 @@ class AbstractAttackConstructor(ABC):
 
         s = ["{:.0f}".format(x) for x in self.batch.audios["n_samples"]]
         log("Real Samples: ", "\n".join(s), wrap=True)
-
-
-class EvasionAttackConstructor(AbstractAttackConstructor):
-    """
-    Construct an evasion attack with a hard constraint for security evaluations.
-    ----------------------------------------------------------------------------
-
-    :param sess: a tensorflow session object
-    :param batch: the current batch of input data to run the attack with,
-        a cleverspeech.data.ingress.batch_generators.batch object
-
-    :param feeds: the input feeds for the tensorflow graph (references between
-        the tensorflow graph placeholders and batch data), a
-        cleverspeech.data.ingress.Feeds object
-    """
-    def __init__(self, sess, batch, bit_depth=2**15):
-
-        super().__init__(sess, batch, bit_depth=bit_depth)
-
-    def add_hard_constraint(self, constraint, *args, **kwargs):
-        """
-        Add some hard constraint which we will clip the adversarial examples
-        with. Often this constraint will be iteratively reduced over time.
-
-        :param constraint: reference to the **uninitialised**
-            cleverspeech.graph.Constraints class
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-
-        self.hard_constraint = constraint(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-            bit_depth=self.bit_depth
-        )
-
-    def add_perturbation_subgraph(self, graph, *args, **kwargs):
-        """
-        Add a perturbation variables to the attack graph.
-
-        :param graph: an uninitialised reference to a
-            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-        self.delta_graph = graph(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-        )
-
-        self.perturbations = self.hard_constraint.clip(
-            self.delta_graph.final_deltas
-        )
-
-        # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.perturbations + self.placeholders.audios,
-            clip_value_min=-self.bit_depth,
-            clip_value_max=self.bit_depth - 1
-        )
-
-
-class UnboundedAttackConstructor(AbstractAttackConstructor):
-    """
-    Construct an unbounded attack with no constraints.
-    ----------------------------------------------------------------------------
-
-    :param sess: a tensorflow session object
-    :param batch: the current batch of input data to run the attack with,
-        a cleverspeech.data.ingress.batch_generators.batch object
-    :param feeds: the input feeds for the tensorflow graph (references between
-        the tensorflow graph placeholders and batch data), a
-        cleverspeech.data.ingress.Feeds object
-    """
-
-    def __init__(self, sess, batch, bit_depth=2 ** 15):
-
-        super().__init__(sess, batch, bit_depth=bit_depth)
-
-    def add_perturbation_subgraph(self, graph, *args, **kwargs):
-        """
-        Add a perturbation variables to the attack graph.
-
-        :param graph: an uninitialised reference to a
-            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-        self.delta_graph = graph(
-            self.sess,
-            self.batch,
-            *args,
-            **kwargs,
-        )
-
-        self.perturbations = self.delta_graph.final_deltas
-
-        # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.perturbations + self.placeholders.audios,
-            clip_value_min=-self.bit_depth,
-            clip_value_max=self.bit_depth - 1
-        )
-
 

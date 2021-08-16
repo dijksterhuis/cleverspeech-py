@@ -12,19 +12,7 @@ from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import np_arr, lcomp
 
 
-class AbstractPerturbationSubGraph(ABC):
-    """
-    Abstract Base Class to define how an adversarial examples are created.
-    Mostly to get tensorflow to do x_{adv} = x + delta correctly when working
-    in batches by applying masks etc.
-
-    :param sess: a tensorflow Session object
-    :param batch: a cleverspeech.data.ingress.batch_generators.batch object
-    """
-
-    @abstractmethod
-    def create_perturbations(self, batch_size, max_len):
-        pass
+class AbstractPerturbationsGraph(ABC):
 
     @staticmethod
     def _gen_mask(lengths, max_len):
@@ -46,15 +34,254 @@ class AbstractPerturbationSubGraph(ABC):
                     m.append(0)
             yield m
 
-    def __init__(self, sess, batch, bit_depth=2**15):
+    def __init__(
+            self,
+            sess,
+            batch,
+            bit_depth=2**15,
+            random_scale=0.002,
+            updateable=False
+    ):
+
+        self.batch = batch
+        self.sess = sess
+        self.bit_depth = bit_depth
+        self.random_scale = random_scale
+        self.updateable = updateable
+
+        self.raw_deltas = None
+        self.opt_vars = None
+
+        self.final_deltas = None
+        self.hard_constraint = None
+        self.perturbations = None
+        self.adversarial_examples = None
+
+    @abstractmethod
+    def create_perturbations(self, batch_size, max_len):
+        pass
+
+    @abstractmethod
+    def create_graph(self, sess, batch, placeholders):
+        pass
+
+    def initial_delta_values(self, shape):
+
+        upper = (self.bit_depth - 1) * self.random_scale
+        lower = -self.bit_depth * self.random_scale
+
+        return tf.random.uniform(
+            shape,
+            minval=lower,
+            maxval=upper,
+            dtype=tf.float32
+        )
+
+    def get_valid_perturbations(self, sess):
+        return sess.run(self.final_deltas)
+
+    def get_raw_perturbations(self, sess):
+        return sess.run(self.raw_deltas)
+
+    def get_optimisable_variables(self):
+        return self.opt_vars
+
+    def apply_box_constraint(self, deltas):
+
+        lower = -self.bit_depth
+        upper = self.bit_depth - 1
+
+        return tf.clip_by_value(
+            deltas,
+            clip_value_min=lower,
+            clip_value_max=upper
+        )
+
+
+class IndependentVariables(AbstractPerturbationsGraph):
+
+    def create_perturbations(self, batch_size, max_len):
+
+        self.raw_deltas = []
+
+        for _ in range(batch_size):
+            d = tf.Variable(
+                self.initial_delta_values([max_len]),
+                trainable=True,
+                validate_shape=True,
+                dtype=tf.float32,
+                name='qq_delta'
+            )
+            self.raw_deltas.append(d)
+
+        self.opt_vars = self.raw_deltas
+
+        return tf.stack(self.raw_deltas, axis=0)
+
+    @abstractmethod
+    def create_graph(self, sess, batch, placeholders):
+        pass
+
+    @abstractmethod
+    def pre_optimisation_updates(self, successess: list):
+        pass
+
+    @abstractmethod
+    def post_optimisation_updates(self, successess: list):
+        pass
+
+
+class BoxConstraintOnly(IndependentVariables):
+
+    def __init__(
+            self,
+            sess,
+            batch,
+            placeholders,
+            bit_depth=2 ** 15,
+            random_scale=0.002
+    ):
+
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            random_scale=random_scale,
+        )
+        self.create_graph(sess, batch, placeholders)
+
+    def create_graph(self, sess, batch, placeholders):
 
         batch_size = batch.size
         max_len = batch.audios["max_samples"]
         act_lengths = batch.audios["n_samples"]
 
-        self.__bit_depth = bit_depth
-        self.raw_deltas = None
-        self.opt_vars = None
+        masks = tf.Variable(
+            tf.zeros([batch_size, max_len]),
+            trainable=False,
+            validate_shape=True,
+            dtype=tf.float32,
+            name='qq_masks'
+        )
+
+        # Generate a batch of delta variables which will be optimised as a batch
+
+        deltas = self.create_perturbations(batch_size, max_len)
+
+        # Mask deltas first so we zero value *any part of the signal* that is
+        # zero value padded in the original audio
+        deltas *= masks
+
+        # Restrict delta to valid space before applying constraints
+        self.perturbations = self.final_deltas = self.apply_box_constraint(
+            deltas)
+
+        # clip example to valid range
+        self.adversarial_examples = tf.clip_by_value(
+            self.perturbations + placeholders.audios,
+            clip_value_min=-self.bit_depth,
+            clip_value_max=self.bit_depth - 1
+        )
+
+        # initialise static variables
+        initial_masks = np_arr(
+            lcomp(self._gen_mask(act_lengths, max_len)),
+            np.float32
+        )
+
+        sess.run(masks.assign(initial_masks))
+
+    def pre_optimisation_updates(self, successess: list):
+        pass
+
+    def post_optimisation_updates(self, successess: list):
+        pass
+
+
+class ProjectedGradientDescentRounding(BoxConstraintOnly):
+    def __init__(
+            self,
+            sess,
+            batch,
+            placeholders,
+            bit_depth=2 ** 15,
+            random_scale=0.002,
+    ):
+
+        super().__init__(
+            sess,
+            batch,
+            placeholders,
+            bit_depth=bit_depth,
+            random_scale=random_scale,
+        )
+
+        self.create_graph(sess, batch, placeholders)
+
+    def pre_optimisation_updates(self, successes: list):
+        pass
+
+    def post_optimisation_updates(self, successes: list):
+
+        def rounding_func(delta):
+            signs = np.sign(delta)
+            abs_floor = np.floor(np.abs(delta)).astype(np.int32)
+            new_delta = np.round((signs * abs_floor).astype(np.float32))
+            return new_delta
+
+        deltas = self.sess.run(self.perturbations)
+
+        assign_ops = [
+            self.raw_deltas[i].assign(rounding_func(d)) for i, d in enumerate(deltas)
+        ]
+
+        self.sess.run(assign_ops)
+
+
+class ClippedGradientDescent(IndependentVariables):
+
+    def __init__(
+            self,
+            sess,
+            batch,
+            placeholders,
+            constraint_cls=None,
+            bit_depth=2 ** 15,
+            random_scale=0.002,
+            r_constant=0.95,
+            update_method="geom",
+    ):
+
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            random_scale=random_scale,
+            updateable=True,
+        )
+
+        self.create_graph(
+            sess,
+            batch,
+            placeholders,
+            constraint_cls=constraint_cls,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def create_graph(
+            self,
+            sess,
+            batch,
+            placeholders,
+            constraint_cls=None,
+            r_constant=0.95,
+            update_method="geom",
+    ):
+
+        batch_size = batch.size
+        max_len = batch.audios["max_samples"]
+        act_lengths = batch.audios["n_samples"]
 
         masks = tf.Variable(
             tf.zeros([batch_size, max_len]),
@@ -75,6 +302,24 @@ class AbstractPerturbationSubGraph(ABC):
         # Restrict delta to valid space before applying constraints
         self.final_deltas = self.apply_box_constraint(deltas)
 
+        self.hard_constraint = constraint_cls(
+            self.sess,
+            self.batch,
+            r_constant=r_constant,
+            update_method=update_method
+        )
+
+        self.perturbations = self.hard_constraint.clip(
+            self.final_deltas
+        )
+
+        # clip example to valid range
+        self.adversarial_examples = tf.clip_by_value(
+            self.perturbations + placeholders.audios,
+            clip_value_min=-self.bit_depth,
+            clip_value_max=self.bit_depth - 1
+        )
+
         # initialise static variables
         initial_masks = np_arr(
             lcomp(self._gen_mask(act_lengths, max_len)),
@@ -83,130 +328,58 @@ class AbstractPerturbationSubGraph(ABC):
 
         sess.run(masks.assign(initial_masks))
 
-    def apply_box_constraint(self, deltas):
-        lower = -self.__bit_depth
-        upper = self.__bit_depth - 1
+    def pre_optimisation_updates(self, successess: list):
 
-        return tf.clip_by_value(
-            deltas,
-            clip_value_min=lower,
-            clip_value_max=upper
+        self.hard_constraint.update(
+            self.sess.run(self.perturbations), successess
         )
 
-    def get_valid_perturbations(self, sess):
-        return sess.run(self.final_deltas)
-
-    def get_raw_perturbations(self, sess):
-        return sess.run(self.raw_deltas)
-
-    def get_optimisable_variables(self):
-        return self.opt_vars
-
-    @abstractmethod
-    def deltas_apply(self, sess, func):
+    def post_optimisation_updates(self, successess: list):
         pass
 
 
-class Independent(AbstractPerturbationSubGraph):
-    """
-    This graph creates a batch of B perturbations which are combined with B
-    optimisers to directly optimise each delta_b with optimiser_b so that each
-    example is optimised independently of other items in a batch
+class ClippedGradientDescentWithProjectedRounding(ClippedGradientDescent):
 
-    To be used with classes that inherit the AbstractIndependentOptimiser ABC
-    class.
-
-    Uses more GPU memory than a Batch graph.
-
-    TODO: Rename to IndependentPerturbationsSubGraph
-
-    """
-
-    def create_perturbations(self, batch_size, max_len):
-        """
-        Method to generate the perturbations as a B x [N] vectors for a
-        independent variable graph.
-
-        :param batch_size: size of the current batch
-        :param max_len: maximum number of audio samples (don't forget padding!)
-        :return: stacked raw_deltas vectors, a tf.Variable of size [B x N] with
-            type float32
-        """
-
-        self.raw_deltas = []
-
-        for _ in range(batch_size):
-            d = tf.Variable(
-                tf.zeros([max_len], dtype=tf.float32),
-                trainable=True,
-                validate_shape=True,
-                dtype=tf.float32,
-                name='qq_delta'
-            )
-            self.raw_deltas.append(d)
-
-        self.opt_vars = self.raw_deltas
-
-        return tf.stack(self.raw_deltas, axis=0)
-
-    def deltas_apply(self, sess, func):
-
-        deltas = sess.run(self.final_deltas)
-
-        assign_ops = [
-            self.raw_deltas[i].assign(func(d)) for i, d in enumerate(deltas)
-        ]
-
-        sess.run(assign_ops)
-
-
-class Batch(AbstractPerturbationSubGraph):
-    """
-    This graph creates a batch of B perturbations to be optimised by a single
-    optimiser. This seems to have side effects such as learning rates being
-    affected by constraint updates on other examples in a batch
-
-    To be used with optimisers that inherit from the AbstractBatchOptimiser
-    class.
-
-    Uses less GPU memory than the Independent graph.
-
-    TODO: Rename to BatchPerturbationsSubGraph
-
-    """
-    def create_perturbations(self, batch_size, max_len):
-        """
-        Method to generate the perturbations as a [B x N] matrix for a batch
-        variable graph.
-
-        :param batch_size: size of the current batch
-        :param max_len: maximum number of audio samples (don't forget padding!)
-        :return: raw_deltas, a tf.Variable of size [B x N] with type float32
-        """
-        self.raw_deltas = tf.Variable(
-            tf.zeros([batch_size, max_len], dtype=tf.float32),
-            trainable=True,
-            validate_shape=True,
-            dtype=tf.float32,
-            name='qq_delta'
+    def __init__(
+            self,
+            sess,
+            batch,
+            placeholders,
+            constraint_cls=None,
+            bit_depth=2 ** 15,
+            random_scale=0.002,
+            r_constant=0.95,
+            update_method="geom",
+    ):
+        super(ClippedGradientDescent).__init__(
+                sess,
+                batch,
+                placeholders,
+                constraint_cls=constraint_cls,
+                bit_depth=bit_depth,
+                random_scale=random_scale,
+                r_constant=r_constant,
+                update_method=update_method,
         )
 
-        self.opt_vars = [self.raw_deltas]
-        return self.raw_deltas
+    def post_optimisation_updates(self, successes: list):
 
-    def deltas_apply(self, sess, func):
+        def rounding_func(delta):
+            signs = np.sign(delta)
+            abs_floor = np.floor(np.abs(delta)).astype(np.int32)
+            new_delta = np.round((signs * abs_floor).astype(np.float32))
+            return new_delta
 
-        new_deltas = []
-        deltas = sess.run(self.final_deltas)
+        deltas = self.sess.run(self.perturbations)
 
-        for idx, delta in enumerate(deltas):
+        assign_ops = [
+            self.raw_deltas[i].assign(rounding_func(d)) for i, d in enumerate(deltas)
+        ]
 
-            new_delta = func(delta)
-            new_deltas.append(new_delta)
+        self.sess.run(assign_ops)
 
-        new_deltas = np.asarray(new_deltas)
-        assign_op = [self.raw_deltas.assign(new_deltas)]
 
-        sess.run(assign_op)
+
+
 
 

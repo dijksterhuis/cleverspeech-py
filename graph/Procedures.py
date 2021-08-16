@@ -8,7 +8,6 @@ actually doing an attack.
 --------------------------------------------------------------------------------
 """
 
-import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
@@ -16,49 +15,26 @@ from cleverspeech.utils.Utils import l_map, log
 
 
 class AbstractProcedure(ABC):
-    """
-    Base class that sets up a wealth of stuff to execute the attack over a
-    number of iterations.
-    This class should never be initialised by itself, it should always be
-    extended. See examples below.
-
-    :param: attack: an attack graph
-    :param: steps: number of iterations to run the attack for
-    :param: decode_step: when to stop and check a current decoding
-
-    """
-
-    def __init__(
-            self,
-            attack,
-            *args,
-            steps: int = 1000,
-            update_step: int = 100,
-            results_step: int = 100,
-            pgd_step: int = 100,
-            apply_pgd_rounding: bool = True,
-            apply_warm_up: bool = True,
-    ):
+    def __init__(self, attack, steps: int = 1000, update_step: int = 100):
 
         self.steps = steps + 1
         self.update_step = update_step
-        self.results_step = update_step
-        self.pgd_step = update_step
-        self.apply_pgd_rounding = apply_pgd_rounding
-        self.apply_warm_up = apply_warm_up
 
         assert attack.optimiser is not None
 
         self.attack = attack
         self.current_step = 0
 
+        self.successes = tf.Variable(
+            tf.ones(attack.batch.size, dtype=tf.int16),
+            trainable=False,
+            name="successes"
+        )
+
     def init_optimiser_variables(self):
         """
         We must wait to initialise the optimiser so that we can initialise only
         the attack variables (i.e. not the deepspeech ones).
-
-        This must be called in **EVERY** child classes' __init__() method so we
-        can do the CTCAlign* procedures (special case).
         """
 
         log("Initialising graph variables ...", wrap=False)
@@ -89,46 +65,6 @@ class AbstractProcedure(ABC):
         """
         return self.current_step < self.steps
 
-    def do_warm_up(self):
-        """
-        Should anything else be done before we start?
-
-        N.B. This method is not abstract as it is *not* required to run an
-        attack, but feel free to override it.
-
-        For example, you could start with randomised perturbations.
-        """
-        def random_uniform_func(delta):
-
-            rand_uni = np.random.uniform(
-                0.002 * self.attack.bit_depth * -1,
-                0.002 * self.attack.bit_depth,
-                delta.shape
-            )
-            return delta + rand_uni
-
-        self.attack.delta_graph.deltas_apply(
-            self.attack.sess, random_uniform_func
-        )
-
-    def post_optimisation_hook(self):
-        """
-        Should we do any post optimisation + pre-decoding processing?
-
-        N.B. This method is not abstract as it is *not* required to run an
-        attack, but feel free to override it.
-        """
-
-        def rounding_func(delta):
-            signs = np.sign(delta)
-            abs_floor = np.floor(np.abs(delta)).astype(np.int32)
-            new_delta = np.round((signs * abs_floor).astype(np.float32))
-            return new_delta
-
-        self.attack.delta_graph.deltas_apply(
-            self.attack.sess, rounding_func
-        )
-
     @abstractmethod
     def check_for_successful_examples(self):
         """
@@ -140,87 +76,84 @@ class AbstractProcedure(ABC):
     def results_hook(self):
         return True
 
-    @abstractmethod
-    def pre_optimisation_updates_hook(self):
+    def pre_optimisation_updates_hook(self, successes):
+
+        self.attack.delta_graph.pre_optimisation_updates(
+            successes
+        )
+
+        for loss in self.attack.loss:
+            if loss.updateable is True:
+                loss.update_many(successes)
+
+    def post_optimisation_hook(self, successes):
         """
-        How should we update the attack for whatever we consider a success?
-        This should be defined in **EVERY** child implementation of this class.
+        Should we do any post optimisation + pre-decoding processing?
+
+        N.B. This method is not abstract as it is *not* required to run an
+        attack, but feel free to override it.
         """
-        pass
+
+        self.attack.delta_graph.post_optimisation_updates(
+            successes
+        )
 
     def run(self):
         """
         Do the actual optimisation.
         """
+        log("Starting optimisation....")
+
         a = self.attack
 
-        self.do_warm_up() if self.apply_warm_up else None
-
-        # TODO: This whole procedure needs some heavy "why" comments to explain
-        #  what's what and what's where.
+        # write out initial step 0 data
+        yield self.results_hook()
 
         while self.steps_rule():
-
-            is_pgd_step = self.current_step % self.pgd_step == 0
-            is_pgd_step = is_pgd_step and self.apply_pgd_rounding
-
-            is_results_step = self.current_step % self.results_step == 0
 
             is_update_step = self.current_step % self.update_step == 0
             is_update_step = is_update_step and not self.current_step == 0
 
-            if is_pgd_step:
+            if is_update_step:
+
+                successes = l_map(
+                    lambda x: x, self.check_for_successful_examples()
+                )
 
                 # perform some rounding regardless of success or not.
                 # currently uses PGD to round/floor perturbations to integers
                 # prior to the results call (otherwise we might tag examples
                 # as successful when rounding would make them unsuccessesful)
-
-                self.post_optimisation_hook()
-
-            if is_results_step:
+                self.post_optimisation_hook(successes)
 
                 # signal that we've finished optimisation for now **BEFORE**
                 # doing any updates (e.g. hard constraint bounds) to attack
                 # variables.
 
                 yield self.results_hook()
-
-            if is_update_step:
-
                 # perform updates that will affect the success of perturbations.
                 # e.g. CGD clipping etc. These ops must be run *after* results
                 # call else we'll never show anything as successful in the logs
 
-                self.pre_optimisation_updates_hook()
+                self.pre_optimisation_updates_hook(successes)
 
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
             self.current_step += 1
 
 
-class Unbounded(AbstractProcedure):
+class SuccessOnDecoding(AbstractProcedure):
     """
-    Never update the constraint or loss weightings.
-
-    Useful to validate that an attack works correctly as all unbounded
-    attacks should eventually find successful adversarial examples.
+    Check whether current adversarial decodings match the target phrase,
+    yielding True if so, False if not.
     """
-    def __init__(self, attack, *args, **kwargs):
+    def __init__(self, attack, **kwargs):
 
-        super().__init__(attack, *args, **kwargs)
+        super().__init__(attack, **kwargs)
+
         self.init_optimiser_variables()
 
     def check_for_successful_examples(self):
-        """
-        Check whether current adversarial decodings match the target phrase,
-        yielding True if so, False if not.
-
-        Additionally, if all the decodings match all the target phrases then set
-        `self.finished = True` to stop the attack.
-
-        :return: bool
-        """
 
         decodings, _ = self.attack.victim.inference(
             self.attack.batch,
@@ -230,98 +163,38 @@ class Unbounded(AbstractProcedure):
 
         phrases = self.attack.batch.targets["phrases"]
 
-        z1, z2 = zip(decodings, phrases), zip(decodings, phrases)
-
-        for idx, (left, right) in enumerate(z1):
-            if left == right:
-                yield True
-
-            else:
-                yield False
-
-    def pre_optimisation_updates_hook(self):
-        """
-        do nothing
-        """
-        pass
+        return l_map(
+            lambda x: x[0] == x[1], zip(decodings, phrases)
+        )
 
 
-class UnboundedWithEarlyStopping(Unbounded):
+class SuccessOnLosses(AbstractProcedure):
     """
-    Never update the constraint or loss weightings.
-
-    Useful to validate that an attack works correctly as all unbounded
-    attacks should eventually find successful adversarial examples.
+    Perform updates when loss reaches a specified threshold.
     """
+    def __init__(self, attack, loss_lower_bound=0.1, **kwargs):
 
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
+        super().__init__(attack, **kwargs)
 
-        self.early_stop_bools = l_map(lambda _: False, range(attack.batch.size))
+        self.loss_bound = loss_lower_bound
 
     def check_for_successful_examples(self):
-        """
-        Check whether current adversarial decodings match the target phrase,
-        yielding True if so, False if not.
 
-        Additionally, if all the decodings match all the target phrases then set
-        `self.finished = True` to stop the attack.
+        loss = self.tf_run(self.attack.loss_fn)
+        threshold = [self.loss_bound for _ in range(self.attack.batch.size)]
 
-        :return: bool
-        """
-        for idx, res in enumerate(super().check_for_successful_examples()):
-            if self.early_stop_bools[idx] is True:
-                pass
-            else:
-                if res is True:
-                    self.early_stop_bools[idx] = True
-
-    def steps_rule(self):
-        """
-        Stop optimising once everything in a batch is successful, or we've hit a
-        maximum number of iteration steps.
-        """
-        return not all(self.early_stop_bools) and self.current_step < self.steps
+        return l_map(
+            lambda x: x[0] <= x[1], zip(loss, threshold)
+        )
 
 
-class HardcoreMode(Unbounded):
+class HardcoreMode(SuccessOnDecoding):
     """
     Optimise forever (or until you KeyboardInterrupt).
 
     Useful for development: leave it running overnight to see how long an
     extreme optimisation case takes to finish.
     """
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(
-            attack,
-            *args,
-            **kwargs
-        )
-
-    def check_for_successful_examples(self):
-        """
-        Never stop optimising, but report if decoding is successful.
-        """
-
-        decodings, _ = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
-
-        phrases = self.attack.batch.targets["phrases"]
-
-        z = zip(decodings, phrases)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left == right:
-                yield True
-
-            else:
-                yield False
-
     def steps_rule(self):
         """
         Keep optimising regardless of any kind of success.
@@ -329,124 +202,17 @@ class HardcoreMode(Unbounded):
         return True
 
 
-class LossWeightingsUpdater(AbstractProcedure):
+class SuccessOnDecoderLogProbs(AbstractProcedure):
     """
-    MixIn to check which loss object should be updated and then applies
-    those updates.
-
-    This class should never be initialised by itself, it should always be
-    extended.
+    Perform updates when decoder log probs reach a specified threshold.
     """
-    def pre_optimisation_updates_hook(self):
+    def __init__(self, attack, probs_diff=10.0, **kwargs):
 
-        successes = l_map(
-            lambda x: x, self.check_for_successful_examples()
-        )
-
-        for loss in self.attack.loss:
-            if loss.updateable is True:
-                loss.update_many(successes)
-
-
-class ClippedGradientDescentUpdater(AbstractProcedure):
-    """
-    MixIn to only update hard constraint bounds.
-
-    This class should never be initialised by itself, it should always be
-    extended.
-    """
-
-    def pre_optimisation_updates_hook(self):
-        """
-        Update both hard constraint bound and any loss weightings.
-        """
-
-        deltas = self.tf_run(self.attack.perturbations)
-        successes = l_map(
-            lambda x: x, self.check_for_successful_examples()
-        )
-
-        self.attack.hard_constraint.update_many(
-            deltas, successes
-        )
-
-
-class DecodingCGD(ClippedGradientDescentUpdater):
-    """
-    Perform updates when decoding matches a target transcription.
-    """
-    def __init__(self, attack, *args, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-    def check_for_successful_examples(self):
-        """
-        Success is when the decoding matches the target phrase.
-        """
-        decodings, _ = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
-
-        phrases = self.attack.batch.targets["phrases"]
-
-        z = zip(decodings, phrases)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left == right:
-                yield True
-
-            else:
-                yield False
-
-
-class LossCGD(ClippedGradientDescentUpdater):
-    """
-    Perform updates when loss reaches a specified threshold.
-    """
-
-    def __init__(self, attack, *args, loss_lower_bound=0.1, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-        self.loss_bound = loss_lower_bound
-
-    def check_for_successful_examples(self):
-        """
-        Success is when the loss reaches a specified threshold.
-        """
-        loss = self.tf_run(self.attack.loss_fn)
-        threshold = [self.loss_bound for _ in range(self.attack.batch.size)]
-
-        z = zip(loss, threshold)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left <= right:
-                yield True
-
-            else:
-                yield False
-
-
-class DeepSpeechLogProbsCGD(ClippedGradientDescentUpdater):
-    """
-    Perform updates when deepspeech decoder log probs reach a specified
-    threshold.
-    """
-    def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
+        super().__init__(attack, **kwargs)
 
         self.probs_diff = probs_diff
 
     def check_for_successful_examples(self):
-        """
-        Success is when log likelihood (decoder probabilities) have reached a
-        certain threshold.
-        """
 
         _, probs = self.attack.victim.inference(
             self.attack.batch,
@@ -454,136 +220,10 @@ class DeepSpeechLogProbsCGD(ClippedGradientDescentUpdater):
             top_five=False,
         )
 
-        threshold = [self.probs_diff for _ in range(self.attack.batch.size)]
-
-        z = zip(probs, threshold)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left <= right:
-                yield True
-
-            else:
-                yield False
-
-
-class EvasionCGD(DecodingCGD):
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
-
-
-class HighConfidenceEvasionCGD(LossCGD):
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
-
-
-class DecodingLWU(LossWeightingsUpdater):
-    """
-    Perform updates when decoding matches a target transcription.
-    """
-
-    def __init__(self, attack, *args, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-    def check_for_successful_examples(self):
-        """
-        Success is when the decoding matches the target phrase.
-        """
-        decodings, _ = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
-
-        phrases = self.attack.batch.targets["phrases"]
-
-        z = zip(decodings, phrases)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left == right:
-                yield True
-
-            else:
-                yield False
-
-
-class LossLWU(LossWeightingsUpdater):
-    """
-    Perform updates when loss reaches a specified threshold.
-    """
-
-    def __init__(self, attack, *args, loss_lower_bound=0.1, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-        self.loss_bound = loss_lower_bound
-
-    def check_for_successful_examples(self):
-        """
-        Success is when the loss reaches a specified threshold.
-        """
         loss = self.tf_run(self.attack.loss_fn)
-        threshold = [self.loss_bound for _ in range(self.attack.batch.size)]
-
-        z = zip(loss, threshold)
-
-        for idx, (left, right) in enumerate(z):
-
-            if left <= right:
-                yield True
-
-            else:
-                yield False
-
-
-class DeepSpeechLogProbsLWU(LossWeightingsUpdater):
-    """
-    Perform updates when deepspeech decoder log probs reach a specified
-    threshold.
-    """
-
-    def __init__(self, attack, *args, probs_diff=10.0, **kwargs):
-
-        super().__init__(attack, *args, **kwargs)
-
-        self.probs_diff = probs_diff
-
-    def check_for_successful_examples(self):
-        """
-        Success is when log likelihood (decoder probabilities) have reached a
-        certain threshold.
-        """
-
-        _, probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
-
         threshold = [self.probs_diff for _ in range(self.attack.batch.size)]
 
-        z = zip(probs, threshold)
+        return l_map(
+            lambda x: x[0] <= x[1], zip(loss, threshold)
+        )
 
-        for idx, (left, right) in enumerate(z):
-
-            if left <= right:
-                yield True
-
-            else:
-                yield False
-
-
-class EvasionLWU(DecodingLWU):
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()
-
-
-class HighConfidenceEvasionLWU(LossLWU):
-    def __init__(self, attack, *args, **kwargs):
-        super().__init__(attack, *args, **kwargs)
-        self.init_optimiser_variables()

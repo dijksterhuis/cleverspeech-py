@@ -77,16 +77,17 @@ def custom_manager(settings, attack_fn, batch_gen):
             raise
 
 
-def create_ctc_unbounded_graph(sess, batch, settings):
+def ctc_only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.UnboundedAttackConstructor(
-        sess, batch
+    attack = graph.AttackConstructors.Constructor(
+        sess, batch, settings
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
+        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        random_scale=settings["delta_randomiser"]
     )
     attack.add_victim(
         models.DeepSpeech.Model,
@@ -102,7 +103,7 @@ def create_ctc_unbounded_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.Unbounded,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -110,10 +111,10 @@ def create_ctc_unbounded_graph(sess, batch, settings):
     return attack
 
 
-def create_cw_unbounded_graph(sess, batch, settings):
+def cw_only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.UnboundedAttackConstructor(
-        sess, batch
+    attack = graph.AttackConstructors.Constructor(
+        sess, batch, settings
     )
     attack.add_path_search(
         graph.Paths.ALL_PATHS[settings["align"]]
@@ -122,7 +123,8 @@ def create_cw_unbounded_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
+        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        random_scale=settings["delta_randomiser"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
@@ -135,12 +137,13 @@ def create_cw_unbounded_graph(sess, batch, settings):
         k=settings["kappa"]
     )
     attack.create_loss_fn()
+    attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.Unbounded,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -149,8 +152,8 @@ def create_cw_unbounded_graph(sess, batch, settings):
 
 
 ATTACK_GRAPHS= {
-    "ctc": create_ctc_unbounded_graph,
-    "cw": create_cw_unbounded_graph,
+    "ctc": ctc_only_box_constraint_graph,
+    "cw": cw_only_box_constraint_graph,
 }
 
 

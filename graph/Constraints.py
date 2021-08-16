@@ -125,37 +125,17 @@ class AbstractConstraint(ABC):
 
         return np.ceil(new_bound)
 
-    def update_one(self, delta, index):
-
-        """
-        Only update the bound (tau) for one perturbation at a time.
-
-        :param delta: the perturbation to update
-        :param index: the index of the perturbation within the batch
-        :return: None
-        """
-
-        current_bounds = self.tf_run(self.bounds)
-        current_bound = current_bounds[index][0]
-        current_distance = self.analyse(delta)
-
-        new_bound = self.get_new_bound(current_bound, current_distance)
-
-        current_bounds[index][0] = new_bound
-        self.tf_run(self.bounds.assign(current_bounds))
-
-    def update_many(self, deltas, successes):
-
+    def update(self, deltas, successes):
         """
         Update bounds for all perturbations in a batch, if they've found success
         """
 
         current_bounds = self.tf_run(self.bounds)
-        current_distances = self.analyse(deltas)
+        current_distances = self.analyse(deltas)[0]
 
-        for b, dist, success in zip(current_bounds, current_distances, successes):
-            if success is True:
-                b[0] = self.get_new_bound(b[0], dist[0])
+        for b, d, s in zip(current_bounds, current_distances, successes):
+            if s is True:
+                b[0] = self.get_new_bound(b[0], d)
 
         self.tf_run(self.bounds.assign(current_bounds))
 

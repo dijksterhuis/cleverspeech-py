@@ -75,15 +75,15 @@ def get_audio_batch(batch):
     return auds
 
 
-def get_success_bools(attack):
+def get_success_bools(batch, decodings):
     return l_map(
-        lambda x: x, attack.procedure.check_for_successful_examples()
+        lambda x: x[0] == x[1], zip(decodings, batch.targets["phrases"])
     )
 
 
 def get_constraint_raw_distances(attack, deltas):
     return l_map(
-        attack.hard_constraint.analyse, deltas
+        attack.delta_graph.hard_constraint.analyse, deltas
     )
 
 
@@ -114,19 +114,18 @@ def get_attack_state(attack):
 
     tf_graph_variables = [
         attack.loss_fn,
-        attack.perturbations,
-        attack.adversarial_examples,
-        attack.delta_graph.opt_vars,
+        attack.delta_graph.perturbations,
+        attack.delta_graph.adversarial_examples,
         attack.victim.logits,
         tf.transpose(attack.victim.raw_logits, [1, 0, 2]),
         # attack.optimiser.gradients,
     ]
 
-    if attack.hard_constraint is not None:
+    if attack.delta_graph.hard_constraint is not None:
 
-        initial_taus = attack.hard_constraint.initial_taus
+        initial_taus = attack.delta_graph.hard_constraint.initial_taus
 
-        tf_graph_variables.append(attack.hard_constraint.bounds)
+        tf_graph_variables.append(attack.delta_graph.hard_constraint.bounds)
 
         np_vars = get_tf_graph_variables(
             tf_graph_variables, attack.procedure.tf_run
@@ -136,7 +135,6 @@ def get_attack_state(attack):
             total_losses,
             deltas,
             adv_audio,
-            delta_vars,
             softmax_logits,
             raw_logits,
             # gradients,
@@ -156,7 +154,6 @@ def get_attack_state(attack):
             total_losses,
             deltas,
             adv_audio,
-            delta_vars,
             softmax_logits,
             raw_logits,
             # gradients,
@@ -170,10 +167,9 @@ def get_attack_state(attack):
         "deltas": deltas,
         "advs": adv_audio,
         # "gradients": gradients,
-        "delta_vars": [d for d in delta_vars[0]],
         "softmax_logits": softmax_logits,
         "raw_logits": raw_logits,
-        "success": get_success_bools(attack),
+        "success": get_success_bools(attack.batch, decodings["decodings"]),
         "bounds_raw": bounds_raw,
         "initial_taus": initial_taus,
     }

@@ -12,14 +12,15 @@ from cleverspeech.utils.Utils import log
 
 def only_box_constraint_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.UnboundedAttackConstructor(
-        sess, batch
+    attack = graph.AttackConstructors.Constructor(
+        sess, batch, settings
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
+        graph.PerturbationSubGraphs.BoxConstraintOnly,
+        random_scale=settings["delta_randomiser"]
     )
     attack.add_victim(
         models.DeepSpeech.Model,
@@ -35,7 +36,7 @@ def only_box_constraint_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.Unbounded,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -45,19 +46,18 @@ def only_box_constraint_graph(sess, batch, settings):
 
 def clipped_gradient_descent_graph(sess, batch, settings):
 
-    attack = graph.AttackConstructors.EvasionAttackConstructor(
-        sess, batch
+    attack = graph.AttackConstructors.Constructor(
+        sess, batch, settings
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    attack.add_hard_constraint(
-        graph.Constraints.L2,
+    attack.add_perturbation_subgraph(
+        graph.PerturbationSubGraphs.ClippedGradientDescent,
+        random_scale=settings["delta_randomiser"],
+        constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
         update_method=settings["constraint_update"],
-    )
-    attack.add_perturbation_subgraph(
-        graph.PerturbationSubGraphs.Independent
     )
     attack.add_victim(
         models.DeepSpeech.Model,
@@ -73,7 +73,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.EvasionCGD,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
