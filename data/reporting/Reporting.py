@@ -7,7 +7,6 @@ import numpy as np
 
 from collections import OrderedDict
 from cleverspeech.utils.Utils import log
-from cleverspeech.utils import WavFile
 
 from cleverspeech.data.egress.metrics import DetectionMetrics
 from cleverspeech.data.egress.metrics import NoiseWeightings

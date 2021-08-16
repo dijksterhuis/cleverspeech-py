@@ -5,7 +5,7 @@ import numpy as np
 
 from bz2 import compress as bz2_compress
 from os import path, makedirs
-from cleverspeech.utils import WavFile
+from cleverspeech.data.utils import WavFile
 
 
 def convert_types_for_json(results):

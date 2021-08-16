@@ -4,8 +4,7 @@ import random
 import numpy as np
 
 from cleverspeech.utils.Utils import np_arr, np_zero, lcomp, l_map, log
-from cleverspeech.utils import WavFile
-
+from cleverspeech.data.utils import WavFile
 
 TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
 
