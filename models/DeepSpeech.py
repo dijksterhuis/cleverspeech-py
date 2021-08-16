@@ -571,28 +571,29 @@ class Model(ABC):
             merge_repeated=False,
             beam_width=self.beam_width
         )
-        dense = tf.sparse.to_dense(tf_decode[0])
-        tf_dense = self.tf_run([dense])
+        dense = [tf.sparse.to_dense(tf_decode[0])]
+        tf_dense, probs = self.tf_run([dense, log_probs])
+
         tf_outputs = [''.join([
             tokens[int(x)] for x in tf_dense[0][i]
         ]) for i in range(tf_dense[0].shape[0])]
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
-
-        probs = self.tf_run(log_probs)
         probs = [prob[0] for prob in probs]
+
         return tf_outputs, probs
 
-    def tf_greedy_decode(self, logits, features_lengths, tokens,
-            merge_repeated=True):
+    def tf_greedy_decode(self, logits, features_lengths, tokens, merge_repeated=True):
 
         tf_decode, log_probs = tf.nn.ctc_greedy_decoder(
             logits,
             features_lengths,
             merge_repeated=merge_repeated,
         )
-        dense = tf.sparse.to_dense(tf_decode[0])
-        tf_dense = self.tf_run([dense])
+        dense = [tf.sparse.to_dense(tf_decode[0])]
+
+        tf_dense, neg_sum_logits = self.tf_run([dense, log_probs])
+
         tf_outputs = [''.join([
             tokens[int(x)] for x in tf_dense[0][i]
         ]) for i in range(tf_dense[0].shape[0])]
