@@ -32,7 +32,7 @@ def np_one(x, t):
     return np.ones(x, dtype=t)
 
 
-def log(*args, funcs=None, wrap=True, outdir=None, stdout=True, timings=False):
+def log(*args, funcs=None, wrap=True, outdir=None, fname="log.txt", stdout=True, timings=False):
     s = ""
     wrapper = "-" * 30
     if args:
@@ -50,8 +50,8 @@ def log(*args, funcs=None, wrap=True, outdir=None, stdout=True, timings=False):
     if wrap:
         s += "\n" + wrapper
 
-    if outdir is not None:
-        outfile = path.join(outdir, "log.txt")
+    if outdir is not None and fname is not None:
+        outfile = path.join(outdir, fname)
         with open(outfile, "a+") as f:
             f.write(s + "\n")
 
