@@ -22,23 +22,9 @@ from abc import ABC, abstractmethod
 
 
 class BaseLoss(ABC):
-    """
-    Abstract base loss which enables us to perform any loss weightings applied
-    during optimisation uniformly across all child classes.
-
-    :param: sess: a tensorflow session object.
-    :param: batch_size: the size of the input batch.
-    :param: weight_settings: how to weight this loss object, tuple of floats
-        with length 2 where the first entry is the initial weighting and the
-        second entry is how much to add to the current weighting after an
-        update.
-    """
 
     def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
-        assert type(weight_settings) in [list, tuple]
         assert type(updateable) is bool
-        assert all(type(t) in [float, int] for t in weight_settings)
-        assert len(weight_settings) == 2
 
         self.updateable = updateable
         self.attack = attack
@@ -63,9 +49,36 @@ class BaseLoss(ABC):
 
 class SimpleWeightings(BaseLoss):
 
-    def init_weights(self, attack, weight_settings):
+    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
 
-        self.initial, self.increment = weight_settings
+        assert type(weight_settings) in [list, tuple]
+        assert all(type(t) in [float, int] for t in weight_settings)
+        assert len(weight_settings) == 2
+
+        self.lower_bound = None
+        self.upper_bound = None
+        self.weights = None
+        self.initial = None
+        self.increment = None
+
+        super().__init__(attack, updateable=updateable)
+
+    def init_weights(self, attack, weight_settings):
+        weight_settings = [float(s) for s in weight_settings]
+
+        if len(weight_settings) == 2:
+
+            self.initial, self.increment = weight_settings
+            self.upper_bound = self.initial
+
+        elif len(weight_settings) == 3:
+            self.initial, self.increment, n = weight_settings
+            # never be more than N steps away from initial value
+            self.upper_bound = self.initial
+            self.lower_bound = self.initial * ((1 / self.increment) ** n)
+
+        else:
+            raise ValueError
 
         self.weights = tf.Variable(
             tf.ones(attack.batch.size, dtype=tf.float32),
@@ -78,30 +91,21 @@ class SimpleWeightings(BaseLoss):
         attack.sess.run(self.weights.assign(initial_vals))
 
     def update_one(self, idx: int):
-        """
-        Apply the loss weighting updates to only one example in a batch.
-
-        :param idx: the batch index of the example to update
-        """
-        weights = self.attack.sess.run(self.weights)
-        weights[idx] += self.increment
-        self.attack.sess.run(self.weights.assign(weights))
+        raise NotImplementedError
 
     def update_many(self, batch_successes: list):
-        """
-        Apply the loss weighting updates to only one example in a batch.
 
-        :param batch_successes: a list of True/False false indicating whether
-            the loss weighting should be updated for each example in a batch
-        """
+        w = self.attack.sess.run(self.weights)
 
-        weights = self.attack.sess.run(self.weights)
+        incr, upper, lower = self.increment, self.upper_bound, self.lower_bound
 
         for idx, success_check in enumerate(batch_successes):
             if success_check is True:
-                weights[idx] += self.increment
+                w[idx] = w[idx] * incr if w[idx] * incr > lower else lower
+            else:
+                w[idx] = w[idx] / incr if w[idx] / incr < upper else upper
 
-        self.attack.sess.run(self.weights.assign(weights))
+        self.attack.sess.run(self.weights.assign(w))
 
 
 class L2CarliniLoss(SimpleWeightings):
