@@ -255,9 +255,7 @@ class _BaseCTCGradientsPath:
 
 
 class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
-    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
-
-        assert k >= 0
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         self.gradient_argmin = self.get_argmin_softmax_gradient(attack)
 
@@ -279,6 +277,13 @@ class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
 
 class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights, _BaseCTCGradientsPath):
     def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+
+        # flip the increment round so it's actually doing the opposite but don't
+        # make the scripts worry about it
+
+        weight_settings = list(weight_settings)
+        weight_settings[1] = 1 / weight_settings[1]
+        weight_settings = tuple(weight_settings)
 
         self.gradient_argmin = self.get_argmin_softmax_gradient(attack)
 
@@ -305,7 +310,7 @@ class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights, _BaseCTCGradientsPa
 
 GRADIENT_PATHS = {
     "cw": CWMaxMin,
-    "sumlogprobs-fwd": SumLogProbsForward
+    "sumlogprobs-fwd": SumLogProbsForward,
 }
 
 CTC = {
