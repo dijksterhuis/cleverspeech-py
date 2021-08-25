@@ -93,7 +93,7 @@ class SimpleWeightings(BaseLoss):
         self.attack.sess.run(self.weights.assign(w))
 
 
-class BaseAlignmentLoss(SimpleWeightings):
+class BaseAlignmentLoss(BaseLoss):
     def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         self.use_softmax = use_softmax
@@ -211,25 +211,50 @@ class _BeamSearchPath(_BasePathSearch):
         return tf.cast(blanks, dtype=tf.int32)
 
 
-class _BinarySearch(_BasePathSearch, BaseAlignmentLoss):
-    pass
+class _BaseBinarySearches(_BasePathSearch, BaseAlignmentLoss):
+    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
+
+        assert type(weight_settings) in [list, tuple]
+        assert all(type(t) in [float, int] for t in weight_settings)
+        assert len(weight_settings) == 2
+
+        self.lower_bound = None
+        self.upper_bound = None
+        self.weights = None
+        self.initial = None
+        self.increment = None
+
+        super().__init__(attack, updateable=updateable)
 
 
-class _SimpleTokenWeights(_BinarySearch):
+class _SimpleTokenWeights(_BaseBinarySearches):
 
     def init_weights(self, attack, weight_settings):
+
+        weight_settings = [float(s) for s in weight_settings]
+
+        if len(weight_settings) == 2:
+
+            self.initial, self.increment = weight_settings
+            self.upper_bound = self.initial
+
+        elif len(weight_settings) == 3:
+            self.initial, self.increment, n = weight_settings
+            # never be more than N steps away from initial value
+            self.upper_bound = self.initial
+            self.lower_bound = self.initial * ((1 / self.increment) ** n)
+
+        else:
+            raise ValueError
 
         weight_settings = [float(setting) for setting in weight_settings]
         self.initial, self.increment = weight_settings
 
-        if self.use_softmax is False:
-            self.upper_bound = self.initial
-        else:
-            self.upper_bound = 1.0
+        # handle the case where we might take log probs and want to set initial
+        # value as small and double for bad frames (increase their influence)
 
-        # never be more than N checks away from initial value
-        n = 5
-        self.lower_bound = self.initial * (self.increment ** n)
+        if self.use_softmax is True:
+            self.upper_bound = 1.0
 
         shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
 
@@ -286,17 +311,14 @@ class _SimpleTokenWeights(_BinarySearch):
 
 class _DoubleTokenWeights(_SimpleTokenWeights):
 
-    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
 
         self.super_upper_bound = None
         self.super_lower_bound = None
         self.super_weights = None
 
         super().__init__(
-            attack,
-            custom_target=custom_target,
-            use_softmax=use_softmax,
-            weight_settings=weight_settings, updateable=updateable
+            attack, weight_settings=weight_settings, updateable=updateable
         )
 
     def init_weights(self, attack, weight_settings):
@@ -346,15 +368,12 @@ class _DoubleTokenWeights(_SimpleTokenWeights):
 
 
 class _KappableTokenWeights(_DoubleTokenWeights):
-    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
+    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
 
         self.kappa = None
 
         super().__init__(
-            attack,
-            custom_target=custom_target,
-            use_softmax=use_softmax,
-            weight_settings=weight_settings, updateable=updateable
+            attack, weight_settings=weight_settings, updateable=updateable
         )
 
     def init_weights(self, attack, weight_settings):
@@ -412,4 +431,84 @@ class DoubleBeamSearchTokenWeights(_DoubleTokenWeights, _BeamSearchPath):
 class KappaBeamSearchTokenWeights(_KappableTokenWeights, _BeamSearchPath):
     pass
 
+
+class _InvertedSimpleTokenWeights(_BaseBinarySearches):
+
+    def init_weights(self, attack, weight_settings):
+
+        weight_settings = [float(s) for s in weight_settings]
+
+        if len(weight_settings) == 2:
+
+            self.initial, self.increment = weight_settings
+
+        elif len(weight_settings) == 3:
+            self.initial, self.increment, n = weight_settings
+            # never be more than N steps away from initial value
+            self.lower_bound = self.initial * ((1 / self.increment) ** n)
+
+        else:
+            raise ValueError
+
+        weight_settings = [float(setting) for setting in weight_settings]
+        self.initial, self.increment = weight_settings
+
+        # softmax has a known maximum, minimum is (usually) never zero though
+        self.upper_bound = 1.0
+
+        # never be more than N checks away from initial value
+        n = 5
+        self.lower_bound = self.initial * (self.increment ** n)
+
+        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
+
+        self.weights = tf.Variable(
+            tf.ones(shape, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = self.initial * np.ones(shape, dtype=np.float32)
+        attack.sess.run(self.weights.assign(initial_vals))
+
+    def check_token_weights(self):
+        current_most_likely_path = self.get_most_likely_path_as_tf()
+
+        target_argmax = tf.cast(
+            self.target_argmax, dtype=tf.int32
+        )
+
+        argmax_test = tf.where(
+            tf.equal(target_argmax, current_most_likely_path),
+            tf.multiply(self.increment, self.weights),
+            tf.multiply(1 / self.increment, self.weights),
+        )
+        upper_bound = self.upper_bound * tf.ones_like(
+            argmax_test, dtype=tf.float32
+        )
+        lower_bound = self.lower_bound * tf.ones_like(
+            argmax_test, dtype=tf.float32
+        )
+
+        max_clamp = tf.where(
+            tf.greater(argmax_test, upper_bound),
+            upper_bound,
+            argmax_test,
+        )
+        new_weights = tf.where(
+            tf.less(max_clamp, lower_bound),
+            lower_bound,
+            max_clamp,
+        )
+
+        new_weights = self.attack.procedure.tf_run(new_weights)
+
+        self.attack.sess.run(self.weights.assign(new_weights))
+
+    def update_one(self, idx: int):
+        raise Exception
+
+    def update_many(self, batch_successes: list):
+        self.check_token_weights()
 

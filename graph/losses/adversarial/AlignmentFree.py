@@ -247,7 +247,7 @@ class SoftmaxCTCLoss(Bases.SimpleWeightings):
         return array_ops.concat([blank_olabels, label_olabels], axis=-1)
 
 
-class AlignmentFreeCWMaxMin(Bases.KappaGreedySearchTokenWeights, SoftmaxCTCLoss):
+class AlignmentFreeCWMaxMin(Bases.BaseAlignmentLoss, Bases.KappaGreedySearchTokenWeights, SoftmaxCTCLoss):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
@@ -305,4 +305,49 @@ class AlignmentFreeCWMaxMin(Bases.KappaGreedySearchTokenWeights, SoftmaxCTCLoss)
         self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap
 
         self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
+
+
+class AlignmentFreeSumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleBeamSearchTokenWeights, SoftmaxCTCLoss):
+    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+
+        with tf.GradientTape() as tape:
+
+            tape.watch(attack.victim.logits)
+
+            path_gradient_loss = self.ctc(
+                labels=attack.placeholders.targets,
+                logits=attack.victim.logits,
+                label_length=attack.placeholders.target_lengths,
+                logit_length=attack.batch.audios["ds_feats"],
+                blank_index=-1,
+                logits_time_major=False,
+                apply_softmax=False,
+
+            )
+
+        gradients = tape.gradient(
+            path_gradient_loss,
+            attack.victim.logits
+        )
+        argmin_grads = tf.argmin(gradients, axis=-1)
+
+        super().__init__(
+            attack,
+            custom_target=argmin_grads,
+            use_softmax=True,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        self.log_smax = tf.log(self.target_logit * self.weights)
+
+        self.fwd_target_log_probs = tf.reduce_sum(
+            self.log_smax, axis=-1
+        )
+
+        self.back_target_log_probs = tf.reduce_sum(
+            tf.reverse(self.log_smax, axis=[-1]), axis=-1
+        )
+
+        self.loss_fn = - self.fwd_target_log_probs
 

@@ -2,7 +2,7 @@ import tensorflow as tf
 from cleverspeech.graph.losses import Bases
 
 
-class TargetClassesFramewise(Bases.BaseAlignmentLoss):
+class TargetClassesFramewise(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -17,7 +17,7 @@ class TargetClassesFramewise(Bases.BaseAlignmentLoss):
         self.loss_fn *= self.weights
 
 
-class BiggioMaxMin(Bases.BaseAlignmentLoss):
+class BiggioMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -33,7 +33,7 @@ class BiggioMaxMin(Bases.BaseAlignmentLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class MaxOfMaxMin(Bases.BaseAlignmentLoss):
+class MaxOfMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -49,7 +49,7 @@ class MaxOfMaxMin(Bases.BaseAlignmentLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class CWMaxMin(Bases.BaseAlignmentLoss):
+class CWMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
@@ -68,7 +68,7 @@ class CWMaxMin(Bases.BaseAlignmentLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss):
+class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, k=0.0, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -100,7 +100,7 @@ class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class WeightedMaxMin(Bases.BaseAlignmentLoss):
+class WeightedMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0)):
 
         super().__init__(
@@ -116,16 +116,72 @@ class WeightedMaxMin(Bases.BaseAlignmentLoss):
         self.loss_fn *= self.weights
 
 
-# GreedyPathTokenWeightingBinarySearch
+class SinglePathCTCLoss(Bases.SimpleWeightings):
+    """
+    Adversarial CTC Loss that uses an alignment as a target instead of a
+    transcription.
 
+    This means we can perform maximum likelihood estimation optimisation for a
+    specified target alignment. But it is inefficient as we don't need all the
+    CTC rules if we have a known target alignment that maps to a target
+    transcription.
 
-class BaseSumOfLogProbsLoss(Bases.BaseAlignmentLoss):
-    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+    Does not work for target transcriptions on their own as they end up like
+    `----o--o-oo-o----p- ...` which merges down to `ooop ...` instead of `open`.
+
+    Notes:
+        - This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
+        - This loss is pretty much the same as SumofLogProbs Losses, except it's
+        more computationally expensive.
+
+    :param: attack_graph:
+    :param: alignment
+    :param: weight_settings
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         super().__init__(
             attack,
             weight_settings=weight_settings,
-            use_softmax=True,
+            updateable=updateable,
+        )
+
+        seq_lengths = attack.batch.audios["ds_feats"]
+
+        self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths,
+        )
+
+        logits_shape = attack.victim.raw_logits.get_shape().as_list()
+
+        blank_token_pad = tf.zeros(
+            [logits_shape[0], logits_shape[1], 1],
+            tf.float32
+        )
+
+        logits_mod = tf.concat(
+            [attack.victim.raw_logits, blank_token_pad],
+            axis=2
+        )
+
+        self.loss_fn = tf.nn.ctc_loss(
+            labels=tf.cast(self.ctc_target, tf.int32),
+            inputs=logits_mod,
+            sequence_length=seq_lengths,
+            preprocess_collapse_repeated=False,
+            ctc_merge_repeated=False,
+        ) * self.weights
+
+
+class SumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
             updateable=updateable,
         )
 
@@ -138,8 +194,56 @@ class BaseSumOfLogProbsLoss(Bases.BaseAlignmentLoss):
             tf.reverse(self.log_smax, axis=[-1]), axis=-1
         )
 
+        self.loss_fn = - self.fwd_target_log_probs
 
-class BaseCumulativeLogProbsLoss(Bases.BaseAlignmentLoss):
+
+class SumLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        self.log_smax = tf.log(self.target_logit * self.weights)
+
+        self.fwd_target_log_probs = tf.reduce_sum(
+            self.log_smax, axis=-1
+        )
+        self.back_target_log_probs = tf.reduce_sum(
+            tf.reverse(self.log_smax, axis=[-1]), axis=-1
+        )
+
+        self.loss_fn = - self.back_target_log_probs
+
+
+class SumLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        self.log_smax = tf.log(self.target_logit * self.weights)
+
+        self.fwd_target_log_probs = tf.reduce_sum(
+            self.log_smax, axis=-1
+        )
+        self.back_target_log_probs = tf.reduce_sum(
+            tf.reverse(self.log_smax, axis=[-1]), axis=-1
+        )
+
+        self.loss_fn = -(self.back_target_log_probs * self.fwd_target_log_probs)
+
+
+class CumulativeLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack_graph, weight_settings=(None, None)):
 
         super().__init__(
@@ -156,6 +260,8 @@ class BaseCumulativeLogProbsLoss(Bases.BaseAlignmentLoss):
         self.fwd_target_log_probs = self.fwd_target[:, -1]
         self.back_target_log_probs = self.back_target[:, -1]
 
+        self.loss_fn = - self.fwd_target_log_probs
+
     @staticmethod
     def target_probs(x_t, backward_pass=False):
         probability_vector = tf.cumsum(
@@ -170,16 +276,83 @@ class BaseCumulativeLogProbsLoss(Bases.BaseAlignmentLoss):
         return probability_vector
 
 
-class FwdOnlyLogProbsLoss(BaseSumOfLogProbsLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-        """
-        """
-
+class CumulativeLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+    def __init__(self, attack_graph, weight_settings=(None, None)):
         super().__init__(
-            attack,
+            attack_graph,
             weight_settings=weight_settings,
-            updateable=updateable,
+            use_softmax=True
         )
 
-        self.loss_fn = - self.fwd_target_log_probs
+        self.log_smax = tf.log(self.target_logit * self.weights)
 
+        self.fwd_target = self.target_probs(self.log_smax)
+        self.back_target = self.target_probs(self.log_smax, backward_pass=True)
+
+        self.fwd_target_log_probs = self.fwd_target[:, -1]
+        self.back_target_log_probs = self.back_target[:, -1]
+
+        self.loss_fn = - self.back_target_log_probs
+
+    @staticmethod
+    def target_probs(x_t, backward_pass=False):
+        probability_vector = tf.cumsum(
+            x_t,
+            exclusive=False,
+            reverse=backward_pass,
+            axis=1
+        )
+        if backward_pass:
+            probability_vector = tf.reverse(probability_vector, axis=[1])
+
+        return probability_vector
+
+
+class CumulativeLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+    def __init__(self, attack_graph, weight_settings=(None, None)):
+        super().__init__(
+            attack_graph,
+            weight_settings=weight_settings,
+            use_softmax=True
+        )
+
+        self.log_smax = tf.log(self.target_logit * self.weights)
+
+        self.fwd_target = self.target_probs(self.log_smax)
+        self.back_target = self.target_probs(self.log_smax, backward_pass=True)
+
+        self.fwd_target_log_probs = self.fwd_target[:, -1]
+        self.back_target_log_probs = self.back_target[:, -1]
+
+        self.loss_fn = -(self.back_target_log_probs * self.fwd_target_log_probs)
+
+    @staticmethod
+    def target_probs(x_t, backward_pass=False):
+        probability_vector = tf.cumsum(
+            x_t,
+            exclusive=False,
+            reverse=backward_pass,
+            axis=1
+        )
+        if backward_pass:
+            probability_vector = tf.reverse(probability_vector, axis=[1])
+
+        return probability_vector
+
+
+GREEDY = {
+    "cw": CWMaxMin,
+    "biggio": BiggioMaxMin,
+    "maxofmaxmin": MaxOfMaxMin,
+    "adaptive-kappa": AdaptiveKappaMaxMin,
+    "maxtargetonly": TargetClassesFramewise,
+    "weightedmaxmin": WeightedMaxMin,
+}
+
+
+NON_GREEDY = {
+    "ctc-fixed-path": SinglePathCTCLoss,
+    "sumlogprobs-fwd": SumLogProbsForward,
+    "sumlogprobs-back": SumLogProbsBackward,
+    "sumlogprobs-mult": SumLogProbsProduct,
+}
