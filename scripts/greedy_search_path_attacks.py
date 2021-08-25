@@ -14,9 +14,11 @@ def only_box_constraint_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
-    )
+    print(settings["loss"])
+    if "gradientpath" not in settings["loss"]:
+        attack.add_path_search(
+            graph.Paths.ALL_PATHS[settings["align"]]
+        )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -59,9 +61,10 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
-    )
+    if "gradientpath" not in settings["loss"]:
+        attack.add_path_search(
+            graph.Paths.ALL_PATHS[settings["align"]]
+        )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -82,13 +85,137 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         attack.add_loss(
             graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
             use_softmax=settings["use_softmax"],
-            k=settings["kappa"]
+            k=settings["kappa"],
+            weight_settings=(1.0, 0.5),
+            updateable=True,
         )
     else:
         attack.add_loss(
             graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
             use_softmax=settings["use_softmax"],
+            weight_settings=(1.0, 0.5),
+            updateable=True,
         )
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"]
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"]
+    )
+
+    return attack
+
+
+def carlini_and_wagner_stt_simple_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    print(settings["loss"])
+    if "gradientpath" not in settings["loss"]:
+        attack.add_path_search(
+            graph.Paths.ALL_PATHS[settings["align"]]
+        )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.ClippedGradientDescent,
+        random_scale=settings["delta_randomiser"],
+        constraint_cls=graph.Constraints.L2,
+        r_constant=settings["rescale"],
+        update_method=settings["constraint_update"],
+    )
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder=settings["decoder"],
+        beam_width=settings["beam_width"]
+    )
+
+    if settings["loss"] in KAPPA_LOSSES:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            k=settings["kappa"],
+            weight_settings=(1e3, 0.5),
+            updateable=True,
+        )
+    else:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            weight_settings=(1e3, 0.5),
+            updateable=True,
+        )
+    attack.add_loss(
+        graph.Losses.LinfLoss,
+        weight_settings=(1.0e-3, 1),
+        updateable=True,
+    )
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"]
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"]
+    )
+
+    return attack
+
+
+def clipped_l2_with_linf_loss(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    print(settings["loss"])
+    if "gradientpath" not in settings["loss"]:
+        attack.add_path_search(
+            graph.Paths.ALL_PATHS[settings["align"]]
+        )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.ClippedGradientDescentWithProjectedRounding,
+        random_scale=settings["delta_randomiser"],
+        constraint_cls=graph.Constraints.L2,
+        r_constant=settings["rescale"],
+        update_method=settings["constraint_update"],
+    )
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder=settings["decoder"],
+        beam_width=settings["beam_width"]
+    )
+
+    if settings["loss"] in KAPPA_LOSSES:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            k=settings["kappa"],
+            weight_settings=(1e3, 0.5),
+            updateable=True,
+        )
+    else:
+        attack.add_loss(
+            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            use_softmax=settings["use_softmax"],
+            weight_settings=(1e3, 0.5),
+            updateable=True,
+        )
+    attack.add_loss(
+        graph.Losses.LinfLoss,
+        weight_settings=(1.0e-3, 1),
+        updateable=False,
+    )
     attack.create_loss_fn()
     attack.add_optimiser(
         graph.Optimisers.AdamIndependentOptimiser,
@@ -155,6 +282,8 @@ def attack_run(master_settings):
 ATTACK_GRAPHS = {
     "box": only_box_constraint_graph,
     "cgd": clipped_gradient_descent_graph,
+    "cw-simple": carlini_and_wagner_stt_simple_graph,
+    "l2_linf": clipped_l2_with_linf_loss
 }
 
 KAPPA_LOSSES = ["cw", "cw-toks", "weightedmaxmin", "adaptivekappa"]

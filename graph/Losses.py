@@ -13,35 +13,27 @@ The results, of course, depend on the loss function!
 
 --------------------------------------------------------------------------------
 """
-
-
 import tensorflow as tf
 import numpy as np
 
 from abc import ABC, abstractmethod
-
-from tensorflow_core.python.framework import function, ops
+from tensorflow_core.python.framework import ops
 from tensorflow_core.python.ops.ctc_ops import (
-    ilabel_to_state,
     _ctc_state_trans,
     _get_dim,
     ctc_state_log_probs,
-    _scan,
-    _ctc_loss_grad,
-    _ctc_loss_shape,
-    _state_to_olabel,
     _forward_backward_log,
     _state_to_olabel_unique,
-    _state,
     _ilabel_to_state
 )
 from tensorflow_core.python.ops import (
     nn_ops,
     array_ops,
     math_ops,
-    linalg_ops,
     custom_gradient
 )
+from cleverspeech.utils.Utils import log
+import numpy as np
 
 
 class BaseLoss(ABC):
@@ -54,8 +46,6 @@ class BaseLoss(ABC):
         self.weights = None
         self.initial = None
         self.increment = None
-
-        self.init_weights(attack, weight_settings)
 
     @abstractmethod
     def init_weights(self, attack, weight_settings):
@@ -86,7 +76,10 @@ class SimpleWeightings(BaseLoss):
 
         super().__init__(attack, updateable=updateable)
 
+        self.init_weights(attack, weight_settings)
+
     def init_weights(self, attack, weight_settings):
+
         weight_settings = [float(s) for s in weight_settings]
 
         if len(weight_settings) == 2:
@@ -115,6 +108,7 @@ class SimpleWeightings(BaseLoss):
 
     def update_one(self, idx: int):
         raise NotImplementedError
+        pass
 
     def update_many(self, batch_successes: list):
 
@@ -130,8 +124,13 @@ class SimpleWeightings(BaseLoss):
 
         self.attack.sess.run(self.weights.assign(w))
 
+import numpy as np
+import tensorflow as tf
+from abc import ABC, abstractmethod
+from cleverspeech.graph.losses import Bases
 
-class L2CarliniLoss(SimpleWeightings):
+
+class L2CarliniLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -150,7 +149,7 @@ class L2CarliniLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class L2SquaredLoss(SimpleWeightings):
+class L2SquaredLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -166,7 +165,7 @@ class L2SquaredLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class L2TanhSquaredLoss(SimpleWeightings):
+class L2TanhSquaredLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -187,7 +186,7 @@ class L2TanhSquaredLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class L2TanhCarliniLoss(SimpleWeightings):
+class L2TanhCarliniLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -205,7 +204,7 @@ class L2TanhCarliniLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class L2Log10Loss(SimpleWeightings):
+class L2Log10Loss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -227,7 +226,7 @@ class L2Log10Loss(SimpleWeightings):
         self.loss_fn *= self.weights
 
 
-class L2SampleLoss(SimpleWeightings):
+class L2SampleLoss(Bases.SimpleWeightings):
     """
     Normalised L2 loss component from https://arxiv.org/abs/1801.01944
 
@@ -253,7 +252,7 @@ class L2SampleLoss(SimpleWeightings):
         self.loss_fn = self.l2_loss * self.weights
 
 
-class LinfLoss(SimpleWeightings):
+class LinfLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -269,7 +268,7 @@ class LinfLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class LinfTanhLoss(SimpleWeightings):
+class LinfTanhLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -288,7 +287,7 @@ class LinfTanhLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class RootMeanSquareLoss(SimpleWeightings):
+class RootMeanSquareLoss(Bases.SimpleWeightings):
     """
     L2 loss component from https://arxiv.org/abs/1801.01944
     """
@@ -304,7 +303,7 @@ class RootMeanSquareLoss(SimpleWeightings):
         self.loss_fn = l2delta * self.weights
 
 
-class EntropyLoss(SimpleWeightings):
+class EntropyLoss(Bases.SimpleWeightings):
     """
     Try to minimise the maximum entropy measure as it was used by Lea Schoenherr
     to try to detect adversarial examples.
@@ -325,6 +324,105 @@ class EntropyLoss(SimpleWeightings):
         neg_max = tf.reduce_max(-log_mult_sum, axis=1)
 
         self.loss_fn = neg_max * self.weights
+
+
+class BasePathsLoss(SimpleWeightings):
+    """
+    Base class that can be used for logits difference losses, like CW f_6
+    and the adaptive kappa variant.
+
+    :param: attack: an attack class.
+    :param: target_argmax: frame length vector of desired target class indices
+    :param: softmax: bool type. whether to use softmax or activations
+    :param: weight_settings: how to update this loss function on success
+    """
+
+    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
+
+        self.use_softmax = use_softmax
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        # Indices of the specified alignment per frame
+        if custom_target is None:
+            self.target_argmax = attack.placeholders.targets
+        else:
+            self.target_argmax = custom_target
+
+        # we want to be able to choose either softmax or activations depending
+        # on the attack
+
+        if use_softmax is False:
+
+            # logits are time major so transpose them
+            self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
+
+        else:
+
+            # softmax is batch major so all is well
+            self.current = attack.victim.logits
+
+        # Use one hot matrix as a filter on current network outputs
+
+        targ_onehot = tf.one_hot(
+            self.target_argmax,
+            self.current.shape.as_list()[2],
+            on_value=1.0,
+            off_value=0.0
+        )
+
+        # targ will only be non-zero for the target class in each frame
+        # so we can just do a sum after filtering to get the current value
+
+        self.targ = self.current * targ_onehot
+        self.target_logit = tf.reduce_sum(self.targ, axis=2)
+
+        # the max other class per frame is slightly more tricky if we're using
+        # activations
+
+        others_onehot = tf.one_hot(
+            self.target_argmax,
+            self.current.shape.as_list()[2],
+            on_value=0.0,
+            off_value=1.0
+        )
+
+        if use_softmax is False:
+
+            # if the most likely other activation for a frame is negative we
+            # need to make sure we don't accidentally select the 0.0 one hot
+            # filter value
+
+            # get the current maximal value over the entire activations matix
+
+            maximal = tf.reduce_max(self.current, axis=0)
+
+            # set the onehot zero values to the negative of 2 * the biggest
+            # current activation entry to guarantee we *never* choose it
+            # ==> we could minus by a constant, but this could lead to weird
+            # edge case behaviour if an attack were to do *really* well
+
+            self.others = tf.where(
+                tf.equal(others_onehot, tf.zeros_like(others_onehot)),
+                tf.zeros_like(others_onehot) - (2 * maximal),
+                self.current * others_onehot
+            )
+
+        else:
+
+            # softmax is guaranteed to be in the 0 -> 1 range, so we don't need
+            # to worry about doing this
+
+            self.others = self.current * others_onehot
+
+        # finally, we can do the max_{k' \neq k} op.
+
+        self.max_other_logit = tf.reduce_max(self.others, axis=2)
+
 
 
 class CTCLoss(SimpleWeightings):
@@ -556,104 +654,29 @@ class SoftmaxCTCLoss(SimpleWeightings):
         return array_ops.concat([blank_olabels, label_olabels], axis=-1)
 
 
-class BasePathsLoss(SimpleWeightings):
-    """
-    Base class that can be used for logits difference losses, like CW f_6
-    and the adaptive kappa variant.
-
-    :param: attack: an attack class.
-    :param: target_argmax: frame length vector of desired target class indices
-    :param: softmax: bool type. whether to use softmax or activations
-    :param: weight_settings: how to update this loss function on success
-    """
-
-    def __init__(self, attack, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
-
-        super().__init__(
-            attack,
-            weight_settings=weight_settings,
-            updateable=updateable,
-        )
-
-        # Indices of the specified alignment per frame
-        self.target_argmax = attack.placeholders.targets
-
-        # we want to be able to choose either softmax or activations depending
-        # on the attack
-
-        if use_softmax is False:
-
-            # logits are time major so transpose them
-            self.current = tf.transpose(attack.victim.raw_logits, [1, 0, 2])
-
-        else:
-
-            # softmax is batch major so all is well
-            self.current = attack.victim.logits
-
-        # Use one hot matrix as a filter on current network outputs
-
-        targ_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=1.0,
-            off_value=0.0
-        )
-
-        # targ will only be non-zero for the target class in each frame
-        # so we can just do a sum after filtering to get the current value
-
-        self.targ = self.current * targ_onehot
-        self.target_logit = tf.reduce_sum(self.targ, axis=2)
-
-        # the max other class per frame is slightly more tricky if we're using
-        # activations
-
-        others_onehot = tf.one_hot(
-            self.target_argmax,
-            self.current.shape.as_list()[2],
-            on_value=0.0,
-            off_value=1.0
-        )
-
-        if use_softmax is False:
-
-            # if the most likely other activation for a frame is negative we
-            # need to make sure we don't accidentally select the 0.0 one hot
-            # filter value
-
-            # get the current maximal value over the entire activations matix
-
-            maximal = tf.reduce_max(self.current, axis=0)
-
-            # set the onehot zero values to the negative of 2 * the biggest
-            # current activation entry to guarantee we *never* choose it
-            # ==> we could minus by a constant, but this could lead to weird
-            # edge case behaviour if an attack were to do *really* well
-
-            self.others = tf.where(
-                tf.equal(others_onehot, tf.zeros_like(others_onehot)),
-                tf.zeros_like(others_onehot) - (2 * maximal),
-                self.current * others_onehot
-            )
-
-        else:
-
-            # softmax is guaranteed to be in the 0 -> 1 range, so we don't need
-            # to worry about doing this
-
-            self.others = self.current * others_onehot
-
-        # finally, we can do the max_{k' \neq k} op.
-
-        self.max_other_logit = tf.reduce_max(self.others, axis=2)
 
 
 class GreedyPathTokenWeightingBinarySearch(BasePathsLoss):
 
     def init_weights(self, attack, weight_settings):
 
+        weight_settings = [float(setting) for setting in weight_settings]
         self.initial, self.increment = weight_settings
+
+        if self.use_softmax is False:
+            self.upper_bound = self.initial
+        else:
+            self.upper_bound = 1.0
+
+        # never be more than N checks away from initial value
+        n = 5
+        self.lower_bound = self.initial * (self.increment ** n)
+
+        self.kappa = tf.Variable(
+            tf.zeros(attack.batch.size, dtype=tf.float32),
+        )
+        self.attack.sess.run(
+            self.kappa.assign(0.0 * np.zeros(attack.batch.size)))
 
         shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
 
@@ -678,22 +701,547 @@ class GreedyPathTokenWeightingBinarySearch(BasePathsLoss):
             the loss weighting should be updated for each example in a batch
         """
 
+        # current_entropy = - tf.reduce_sum(
+        #     self.attack.victim.logits * tf.log(self.attack.victim.logits),
+        #     axis=-1
+        # )
+        smax = self.attack.victim.logits
+
+        kaps, losses, msamx = self.attack.procedure.tf_run(
+            [self.kappa, self.attack.loss[0].loss_fn, smax]
+        )
+        z = zip(batch_successes, kaps, losses)
+        for idx, (suc, k, l) in enumerate(z):
+            s = "step: {i} {s}, {k}, {l}".format(
+                i=self.attack.procedure.current_step,
+                s=suc, k=k, l=l
+            )
+
+            s += "\nsmax max: {}".format(  # mean: {} min: {}".format(
+                np.max(msamx, axis=-1)
+                # , np.mean(msamx, axis=-1), np.min(msamx, axis=-1)
+            )
+            if suc is False and l <= 0:
+                kaps[idx] += 1
+
+                s += "\nIncreased kappa by 1 to {k} for sample {i}".format(
+                    k=kaps[idx], i=self.attack.batch.audios["basenames"][idx]
+                )
+            log(
+                s,
+                wrap=False,
+                stdout=False,
+                outdir=self.attack.settings["outdir"],
+                fname="kappa_updates.txt"
+            )
+
+        kaps_assign = self.kappa.assign(kaps)
+        self.attack.sess.run(kaps_assign)
+
         current_argmax = tf.cast(
             tf.argmax(self.current, axis=-1), dtype=tf.int32
         )
 
-        argmax_test = tf.where(
-            tf.equal(self.target_argmax, current_argmax),
-            tf.multiply(self.increment, self.weights),
-            self.weights,
+        target_argmax = tf.cast(
+            self.target_argmax, dtype=tf.int32
         )
 
-        new_weights = self.attack.procedure.tf_run(argmax_test)
-        for idx, reset, in enumerate(batch_successes):
-            if reset:
-                new_weights[idx] = self.initial * np.ones(new_weights[idx].shape, dtype=np.float32)
+        argmax_test = tf.where(
+            tf.equal(target_argmax, current_argmax),
+            tf.multiply(self.increment, self.weights),
+            tf.multiply(1 / self.increment, self.weights),
+        )
+        upper_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.upper_bound
+        lower_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.lower_bound
 
-        self.attack.procedure.tf_run(self.weights.assign(new_weights))
+        max_clamp = tf.where(
+            tf.greater(argmax_test, upper_bound),
+            upper_bound,
+            argmax_test,
+        )
+        new_weights = tf.where(
+            tf.less(max_clamp, lower_bound),
+            lower_bound,
+            max_clamp,
+        )
+
+        new_weights = self.attack.procedure.tf_run(new_weights)
+
+        self.attack.sess.run(self.weights.assign(new_weights))
+
+
+
+
+class CWMaxMinWithCTCGrads(GreedyPathTokenWeightingBinarySearch):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+
+        assert k >= 0
+
+        ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
+        )
+
+        if use_softmax is True:
+            watch_gradient_var = attack.victim.logits
+            time_major = False
+            apply_softmax = False
+            print(watch_gradient_var.shape)
+
+        else:
+
+            watch_gradient_var = attack.victim.logits
+            print(watch_gradient_var.shape)
+            time_major = False
+            apply_softmax = False
+
+        with tf.GradientTape() as tape:
+
+            tape.watch(watch_gradient_var)
+
+            path_gradient_loss = self.ctc(
+                labels=attack.placeholders.targets,
+                logits=watch_gradient_var,
+                label_length=attack.placeholders.target_lengths,
+                logit_length=attack.batch.audios["ds_feats"],
+                blank_index=-1,
+                logits_time_major=time_major,
+                apply_softmax=apply_softmax,
+
+            )
+
+        gradients = tape.gradient(
+            path_gradient_loss,
+            watch_gradient_var
+        )
+        print(gradients)
+        #gradients = tf.transpose(gradients, [1, 0, 2])
+        print(gradients)
+        argmin_grads = tf.argmin(gradients, axis=-1)
+        print(argmin_grads)
+        self.grad_logits = gradients
+        if argmin_grads.shape[-1] == attack.batch.size:
+            print("lkdsj\f")
+            self.gradient_argmin = tf.transpose(argmin_grads, [1, 0])
+        else:
+            self.gradient_argmin = argmin_grads
+
+        print(self.gradient_argmin.shape)
+
+        super().__init__(
+            attack,
+            custom_target=self.gradient_argmin,
+            use_softmax=use_softmax,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+        kap = self.kappa[:, tf.newaxis]
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap
+        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
+        self.loss_fn = self.loss_fn
+
+    def ctc(self, labels, logits, label_length, logit_length,
+            logits_time_major=True, unique=None, blank_index=None, name=None,
+            apply_softmax=True):
+        """
+        Set everything up for CTC
+        """
+        if blank_index is None:
+            blank_index = -1
+
+        logits = ops.convert_to_tensor(logits, name="logits")
+        labels = ops.convert_to_tensor(labels, name="labels")
+        label_length = ops.convert_to_tensor(
+            label_length, name="label_length"
+        )
+        logit_length = ops.convert_to_tensor(
+            logit_length, name="logit_length"
+        )
+
+        if not logits_time_major:
+            logits = array_ops.transpose(logits, perm=[1, 0, 2])
+
+        if apply_softmax:
+            logits = nn_ops.softmax(logits)
+
+        if blank_index != 0:
+            if blank_index < 0:
+                blank_index += _get_dim(logits, 2)
+            logits = array_ops.concat([
+                logits[:, :, blank_index:blank_index + 1],
+                logits[:, :, :blank_index],
+                logits[:, :, blank_index + 1:],
+            ],
+                axis=2
+            )
+            labels = array_ops.where(
+                labels < blank_index, labels + 1, labels
+            )
+
+        args = [logits, labels, label_length, logit_length]
+
+        if unique:
+            unique_y, unique_idx = unique
+            args.extend([unique_y, unique_idx])
+
+        @custom_gradient.custom_gradient
+        def compute_ctc_loss(logits_t, labels_t, label_length_t, logit_length_t,
+                *unique_t):
+
+            """
+            Compute CTC loss.
+            """
+
+            logits_t.set_shape(logits.shape)
+            labels_t.set_shape(labels.shape)
+            label_length_t.set_shape(label_length.shape)
+            logit_length_t.set_shape(logit_length.shape)
+
+            kwargs = dict(
+                logits=logits_t,
+                labels=labels_t,
+                label_length=label_length_t,
+                logit_length=logit_length_t
+            )
+            if unique_t:
+                kwargs["unique"] = unique_t
+
+            result = self.ctc_loss_and_grad(**kwargs)
+
+            def grad(grad_loss):
+                grad = [
+                    array_ops.reshape(grad_loss, [1, -1, 1]) * result[1]]
+                grad += [None] * (len(args) - len(grad))
+                return grad
+
+            return result[0], grad
+
+        return compute_ctc_loss(*args)
+
+    def ctc_loss_and_grad(self, logits, labels, label_length, logit_length,
+            unique=None):
+
+        """
+        Computes the actual loss and gradients.
+        """
+
+        num_labels = _get_dim(logits, 2)
+        max_label_seq_length = _get_dim(labels, 1)
+
+        ilabel_log_probs = tf.log(logits)
+        state_log_probs = _ilabel_to_state(labels, num_labels, ilabel_log_probs)
+        state_trans_probs = _ctc_state_trans(labels)
+        initial_state_log_probs, final_state_log_probs = ctc_state_log_probs(
+            label_length, max_label_seq_length)
+        fwd_bwd_log_probs, log_likelihood = _forward_backward_log(
+            state_trans_log_probs=math_ops.log(state_trans_probs),
+            initial_state_log_probs=initial_state_log_probs,
+            final_state_log_probs=final_state_log_probs,
+            observed_log_probs=state_log_probs,
+            sequence_length=logit_length)
+
+        if unique:
+            olabel_log_probs = _state_to_olabel_unique(labels, num_labels,
+                                                       fwd_bwd_log_probs,
+                                                       unique)
+        else:
+            # olabel_log_probs = _state_to_olabel(labels, num_labels,
+            #                                     fwd_bwd_log_probs)
+            olabel_log_probs = self.custom_state_to_olabel_max(labels,
+                                                               num_labels,
+                                                               fwd_bwd_log_probs)
+
+        grad = math_ops.exp(ilabel_log_probs) - math_ops.exp(olabel_log_probs)
+        loss = -log_likelihood
+        return loss, grad
+
+    @staticmethod
+    def custom_state_to_olabel_max(labels, num_labels, states):
+        """Sum state log probs to ilabel log probs."""
+
+        num_label_states = _get_dim(labels, 1) + 1
+        label_states = states[:, :, 1:num_label_states]
+        blank_states = states[:, :, num_label_states:]
+
+        one_hot = array_ops.one_hot(
+            labels - 1,
+            depth=(num_labels - 1),
+            on_value=0.0,
+            off_value=math_ops.log(0.0)
+        )
+        one_hot = array_ops.expand_dims(one_hot, axis=0)
+
+        label_states = array_ops.expand_dims(label_states, axis=3)
+
+        label_olabels = math_ops.reduce_logsumexp(
+            label_states + one_hot, axis=2
+        )
+        blank_olabels = math_ops.reduce_logsumexp(
+            blank_states, axis=2, keepdims=True
+        )
+
+        return array_ops.concat([blank_olabels, label_olabels], axis=-1)
+
+
+
+class SuperGreedyPathTokenWeightingBinarySearch(BasePathsLoss):
+
+    def init_weights(self, attack, weight_settings):
+
+        weight_settings = [float(setting) for setting in weight_settings]
+        self.initial, self.increment = weight_settings
+
+        if self.use_softmax is False:
+            self.upper_bound = self.initial
+        else:
+            self.upper_bound = 1.0
+
+        self.lower_bound = 1.0e-6
+
+        self.super_upper_bound = self.initial
+        n = 25
+        self.super_lower_bound = self.initial * (self.increment ** n)
+
+        # never be more than N checks away from initial value
+        n = 25
+        self.lower_bound = self.initial * (self.increment ** n)
+
+        self.super_weights = tf.Variable(
+            tf.ones(attack.batch.size, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
+
+        self.weights = tf.Variable(
+            tf.ones(shape, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = self.upper_bound * np.ones(shape, dtype=np.float32)
+        super_vals = self.super_upper_bound * np.ones(attack.batch.size,
+                                                      dtype=np.float32)
+
+        attack.sess.run([
+            self.weights.assign(initial_vals),
+            self.super_weights.assign(super_vals),
+        ])
+
+    def update_one(self, idx: int):
+        raise Exception
+
+    def update_many(self, batch_successes: list):
+
+        current_argmax = tf.cast(
+            tf.argmax(self.current, axis=-1), dtype=tf.int32
+        )
+
+        target_argmax = tf.cast(
+            self.target_argmax, dtype=tf.int32
+        )
+        # swap around vs. simple greedy weightings
+        argmax_test = tf.where(
+            tf.equal(target_argmax, current_argmax),
+            tf.multiply(self.increment, self.weights),
+            tf.multiply(1 / self.increment, self.weights),
+        )
+        upper_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.upper_bound
+        lower_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.lower_bound
+
+        max_clamp = tf.where(
+            tf.greater(argmax_test, upper_bound),
+            upper_bound,
+            argmax_test,
+        )
+        new_weights = tf.where(
+            tf.less(max_clamp, lower_bound),
+            lower_bound,
+            max_clamp,
+        )
+
+        new_weights, super_weights = self.attack.procedure.tf_run([
+            new_weights, self.super_weights
+        ])
+        # print("loss_calc", new_weights)
+
+        for idx, success_check in enumerate(batch_successes):
+            if success_check is True:
+                test_weight = super_weights[idx] * self.increment
+                if test_weight < self.super_lower_bound:
+                    test_weight = self.super_lower_bound
+            else:
+
+                test_weight = super_weights[idx] / self.increment
+                if test_weight > self.super_upper_bound:
+                    test_weight = self.super_upper_bound
+
+            super_weights[idx] = test_weight
+
+        # print("loss calc supers", super_weights)
+
+        self.attack.sess.run([
+            self.weights.assign(new_weights),
+            self.super_weights.assign(super_weights)
+        ])
+
+
+class SuperBeamSearchPathTokenWeightingBinarySearch(BasePathsLoss):
+
+    def init_weights(self, attack, weight_settings):
+
+        weight_settings = [float(setting) for setting in weight_settings]
+        self.initial, self.increment = weight_settings
+
+        if self.use_softmax is False:
+            self.upper_bound = self.initial
+        else:
+            self.upper_bound = 1.0
+
+        self.lower_bound = 1.0e-6
+
+        self.super_upper_bound = self.initial
+        n = 25
+        self.super_lower_bound = self.initial * (self.increment ** n)
+
+        # never be more than N checks away from initial value
+        n = 25
+        self.lower_bound = self.initial * (self.increment ** n)
+
+        self.super_weights = tf.Variable(
+            tf.ones(attack.batch.size, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
+
+        self.weights = tf.Variable(
+            tf.ones(shape, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = self.upper_bound * np.ones(shape, dtype=np.float32)
+        super_vals = self.super_upper_bound * np.ones(attack.batch.size,
+                                                      dtype=np.float32)
+
+        attack.sess.run([
+            self.weights.assign(initial_vals),
+            self.super_weights.assign(super_vals),
+        ])
+
+    def update_one(self, idx: int):
+        raise Exception
+
+    def update_many(self, batch_successes: list):
+
+        (
+            labellings,
+            probs,
+            token_order,
+            timestep_switches
+        ) = self.attack.victim.ds_decode_batch_no_lm(
+            self.attack.procedure.tf_run(
+                self.attack.victim.logits
+            ),
+            self.attack.batch.audios["ds_feats"],
+            top_five=False, with_metadata=True
+        )
+
+        blanks = np.ones(self.target_argmax.shape, dtype=np.int32) * 28
+
+        for tok, time in zip(token_order, timestep_switches):
+            blanks[0][time] = tok
+
+        self.blanks = blanks
+
+        # current_argmax = tf.cast(blanks, dtype=tf.int32)
+
+        current_argmax = tf.cast(
+            tf.argmax(self.current, axis=-1), dtype=tf.int32
+        )
+
+        target_argmax = tf.cast(
+            self.target_argmax, dtype=tf.int32
+        )
+        # swap around vs. simple greedy weightings
+        argmax_test = tf.where(
+            tf.equal(target_argmax, current_argmax),
+            tf.multiply(self.increment, self.weights),
+            tf.multiply(1 / self.increment, self.weights),
+        )
+        upper_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.upper_bound
+        lower_bound = tf.ones_like(argmax_test,
+                                   dtype=tf.float32) * self.lower_bound
+
+        max_clamp = tf.where(
+            tf.greater(argmax_test, upper_bound),
+            upper_bound,
+            argmax_test,
+        )
+        new_weights = tf.where(
+            tf.less(max_clamp, lower_bound),
+            lower_bound,
+            max_clamp,
+        )
+
+        new_weights, super_weights = self.attack.procedure.tf_run([
+            new_weights, self.super_weights
+        ])
+        # print("loss_calc", new_weights)
+
+        loss_value = self.attack.procedure.tf_run(self.attack.loss[0].loss_fn)
+
+        for idx, (success_check, loss) in enumerate(
+                zip(batch_successes, loss_value)):
+            if success_check is False and loss <= 0:
+                print("BAD SAMPLE {}".format(idx))
+            #     # somethings gone wrong, re-ini the perturbation
+            #
+            #     print("RESETTING SAMPLE {idx}".format(idx=idx))
+            #     assign_op = self.attack.delta_graph.raw_deltas[idx].assign(
+            #         tf.random.uniform(
+            #             [self.attack.batch.audios["max_samples"]],
+            #             minval=1000,
+            #             maxval=-1000,
+            #             dtype=tf.float32
+            #         ),
+            #     )
+            #     self.attack.sess.run(assign_op)
+
+            if success_check is True:
+                test_weight = super_weights[idx] * self.increment
+                if test_weight < self.super_lower_bound:
+                    test_weight = self.super_lower_bound
+            else:
+
+                test_weight = super_weights[idx] / self.increment
+                if test_weight > self.super_upper_bound:
+                    test_weight = self.super_upper_bound
+
+            # perform a safety check
+
+            super_weights[idx] = test_weight
+
+        # print("loss calc supers", super_weights)
+
+        self.attack.sess.run([
+            self.weights.assign(new_weights),
+            self.super_weights.assign(super_weights)
+        ])
+
 
 
 class TargetClassesFramewise(BasePathsLoss):
@@ -744,33 +1292,6 @@ class MaxOfMaxMin(BasePathsLoss):
 
 
 class CWMaxMin(BasePathsLoss):
-    """
-    This is f_{6} from https://arxiv.org/abs/1608.04644 using the gradient
-    clipping update method.
-
-    Difference of:
-
-    - target logits value (B)
-    - max other logits value (A -- most likely other)
-
-    Once B > A, then B is most likely and we can stop optimising.
-
-    Unless -k > B, then k acts as a confidence threshold and continues
-    optimisation.
-
-    This will push B to become even more likely.
-
-    N.B. This loss does *not* seems to conform to:
-        l(x + d, t) <= 0 <==> C(x + d) = t
-
-    But it does a much better job than the ArgmaxLowConfidence
-    implementation as 0 <= l(x + d, t) < 1.0 for a successful decoding
-
-    :param: attack:
-    :param: target_logits:
-    :param: k:
-    :param: weight_settings:
-    """
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
@@ -812,32 +1333,6 @@ class CWMaxMinWithPerTokenWeights(GreedyPathTokenWeightingBinarySearch):
 
 
 class AdaptiveKappaMaxMin(BasePathsLoss):
-    """
-    This is a modified version of f_{6} from https://arxiv.org/abs/1608.04644
-    using the gradient clipping update method.
-
-    Difference of:
-    - target logits value (B)
-    - max other logits value (A -- 2nd most likely)
-
-    Once  B > A, then B is most likely and we can stop optimising.
-
-    Unless -kappa > B, then kappa acts as a confidence threshold and continues
-    optimisation.
-
-    Where kappa is an adaptive value based on the results of the reference
-    function on the softmax vector values for that frame.
-
-    Basically, each frame step should have a different k constant, so we
-    calculate it adaptively based on the frame's probability distribution.
-
-    :param: attack_graph
-    :param: target_argmax
-    :param: k
-    :param: ref_fn
-    :param: weight_settings
-
-    """
     def __init__(self, attack, k=0.0, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -943,20 +1438,197 @@ class WeightedMaxMin(BasePathsLoss):
         self.loss_fn *= self.weights
 
 
-class BaseSumOfLogProbsLoss(BasePathsLoss):
-    def __init__(self, attack, weight_settings=(None, None)):
+class LogProbsTokenWeightingBinarySearch(BasePathsLoss):
+
+    def init_weights(self, attack, weight_settings):
+
+        weight_settings = [float(setting) for setting in weight_settings]
+        self.initial, self.increment = weight_settings
+
+        self.super_weights = tf.Variable(
+            tf.ones(attack.batch.size, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+        self.upper_bound = tf.cast(1.0, tf.float32)
+        self.lower_bound = tf.cast(1.0e-6, tf.float32)
+
+
+        # never be more than N checks away from initial value
+        n = 25
+        self.super_lower_bound = self.initial * (self.increment ** n)
+        self.super_upper_bound = 1.0e3
+
+        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
+
+        self.weights = tf.Variable(
+            tf.ones(shape, dtype=tf.float32),
+            trainable=False,
+            validate_shape=True,
+            name="qq_loss_weight"
+        )
+
+        initial_vals = 1e-8 * np.ones(shape, dtype=np.float32)
+        super_vals = self.super_upper_bound * np.ones(attack.batch.size, dtype=np.float32)
+
+        attack.sess.run([
+            self.weights.assign(initial_vals),
+            self.super_weights.assign(super_vals),
+        ])
+
+    def update_one(self, idx: int):
+        raise Exception
+
+    def update_many(self, batch_successes: list):
+        """
+        Apply the loss weighting updates to only one example in a batch.
+
+        :param batch_successes: a list of True/False false indicating whether
+            the loss weighting should be updated for each example in a batch
+        """
+
+        # [!!!] DO NOT USE THE TENSORFLOW BEAM SEARCH DECODER
+        # ==> it's very inefficient time wise.
+        # for a batch of 100 examples it takes 7 seconds to perform decoding
+        # while the DeepSpeech batch decoder only takes 2 or 3 seconds.
+
+        (
+            labellings,
+            probs,
+            token_order,
+            timestep_switches
+        ) = self.attack.victim.ds_decode_batch_no_lm(
+            self.attack.procedure.tf_run(
+                self.attack.victim.logits
+            ),
+            self.attack.batch.audios["ds_feats"],
+            top_five=False, with_metadata=True
+        )
+
+        blanks = np.ones(self.target_argmax.shape, dtype=np.int32) * 28
+
+        for tok, time in zip(token_order, timestep_switches):
+            blanks[0][time] = tok
+
+        self.blanks = blanks
+
+
+        # current_argmax = tf.cast(
+        #     tf.argmax(self.current, axis=-1), dtype=tf.int32
+        # )
+
+        current_argmax = tf.cast(blanks, dtype=tf.int32)
+
+        target_argmax = tf.cast(
+            self.target_argmax, dtype=tf.int32
+        )
+        # swap around vs. simple greedy weightings
+        argmax_test = tf.where(
+            tf.equal(target_argmax, current_argmax),
+            tf.multiply(1/self.increment, self.weights),
+            tf.multiply(self.increment, self.weights),
+        )
+        upper_bound = tf.ones_like(argmax_test, dtype=tf.float32) * self.upper_bound
+        lower_bound = tf.ones_like(argmax_test, dtype=tf.float32) * self.lower_bound
+
+        max_clamp = tf.where(
+            tf.greater(argmax_test, upper_bound),
+            upper_bound,
+            argmax_test,
+        )
+        new_weights = tf.where(
+            tf.less(max_clamp, lower_bound),
+            lower_bound,
+            max_clamp,
+        )
+
+        new_weights, super_weights = self.attack.procedure.tf_run([
+            new_weights, self.super_weights
+        ])
+        # print("loss_calc", new_weights)
+
+        for idx, success_check in enumerate(batch_successes):
+            if success_check is True:
+                test_weight = super_weights[idx] * self.increment
+                if test_weight < self.super_lower_bound:
+                    test_weight = self.super_lower_bound
+            else:
+
+                test_weight = super_weights[idx] / self.increment
+                if test_weight > self.super_upper_bound:
+                    test_weight = self.super_upper_bound
+
+            super_weights[idx] = test_weight
+
+        # print("loss calc supers", super_weights)
+
+        self.attack.sess.run([
+            self.weights.assign(new_weights),
+            self.super_weights.assign(super_weights)
+        ])
+
+
+class BaseSumOfLogProbsLossOld(GreedyPathTokenWeightingBinarySearch):
+    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
 
         super().__init__(
             attack,
             weight_settings=weight_settings,
-            use_softmax=True
+            use_softmax=True,
+            updateable=updateable,
         )
 
-        self.log_smax = tf.log(self.target_logit)
+        self.log_smax = tf.log(self.target_logit * self.weights)
 
         self.fwd_target_log_probs = tf.reduce_sum(
             self.log_smax, axis=-1
         )
+        self.back_target_log_probs = tf.reduce_sum(
+            tf.reverse(self.log_smax, axis=[-1]), axis=-1
+        )
+
+
+class BaseSumOfLogProbsLoss(LogProbsTokenWeightingBinarySearch):
+    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+
+        ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
+        )
+
+        with tf.GradientTape() as tape:
+            tape.watch(attack.victim.raw_logits)
+
+            path_gradient_loss = tf.nn.ctc_loss(
+                labels=ctc_target,
+                inputs=attack.victim.raw_logits,
+                sequence_length=attack.placeholders.audio_lengths,
+            )
+
+        gradients = tape.gradient(
+            path_gradient_loss,
+            attack.victim.raw_logits
+        )
+        gradients = tf.transpose(gradients, [1, 0, 2])
+        argmin_grads = tf.argmin(gradients, axis=-1)
+
+        self.gradient_argmin = argmin_grads
+        self.gradient_argmax = tf.argmax(gradients, axis=-1)
+
+        super().__init__(
+            attack,
+            custom_target=argmin_grads,
+            use_softmax=True,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        self.log_smax = tf.log(self.target_logit * self.weights)
+
+        self.fwd_target_log_probs = tf.reduce_sum(
+            self.log_smax, axis=-1
+        ) * self.super_weights
         self.back_target_log_probs = tf.reduce_sum(
             tf.reverse(self.log_smax, axis=[-1]), axis=-1
         )
@@ -993,18 +1665,34 @@ class BaseCumulativeLogProbsLoss(BasePathsLoss):
         return probability_vector
 
 
-class FwdOnlyLogProbsLoss(BaseSumOfLogProbsLoss):
-    def __init__(self, attack, weight_settings=(1.0, 1.0)):
+class FwdOnlyLogProbsLoss(BaseSumOfLogProbsLossOld):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
         """
         """
 
         super().__init__(
             attack,
             weight_settings=weight_settings,
+            updateable=updateable,
         )
 
-        self.loss_fn = self.fwd_target_log_probs
-        self.loss_fn *= -self.weights
+        self.loss_fn = - self.fwd_target_log_probs
+        # self.loss_fn *= -self.weights
+
+
+class FwdOnlyLogProbsLossWithGradsPath(BaseSumOfLogProbsLoss):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+        """
+        """
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable
+        )
+
+        self.loss_fn = - self.fwd_target_log_probs
+        # self.loss_fn *= -self.weights
 
 
 class BackOnlyLogProbsLoss(BaseSumOfLogProbsLoss):
@@ -1071,6 +1759,7 @@ GREEDY_SEARCH_ADV_LOSSES = {
     "ctcv2": CTCLossV2,
     "cw": CWMaxMin,
     "cw-toks": CWMaxMinWithPerTokenWeights,
+    "cw-gradientpath": CWMaxMinWithCTCGrads,
     "biggio": BiggioMaxMin,
     "maxofmaxmin": MaxOfMaxMin,
     "adaptive-kappa": AdaptiveKappaMaxMin,
@@ -1084,6 +1773,7 @@ BEAM_SEARCH_ADV_LOSSES = {
     "ctc-fixed-path": SinglePathCTCLoss,
     "sumlogprobs-fwd": FwdOnlyLogProbsLoss,
     "sumlogprobs-back": BackOnlyLogProbsLoss,
+    "logprobs-gradientpath": FwdOnlyLogProbsLossWithGradsPath,
 }
 
 ALL_ADV_LOSS_TERMS = {
@@ -1108,3 +1798,248 @@ DISTANCE_LOSS_TERMS = {
     "energy": None,
     "peak-to-peak": None,
 }
+
+
+class SoftmaxCTCLoss(SimpleWeightings):
+    """
+    Tensorflow implementatons of CTC Loss take the activations/logits as input and
+    convert them to time major softmax values for us... but this means we can't take a
+    partial derivative w.r.t. the softmax outputs (only the logits).
+    This class fixes that problem.
+    """
+
+    def __init__(self, attack, weight_settings=(1.0, 1.0),
+            updateable: bool = False):
+        super().__init__(attack, weight_settings=weight_settings,
+                         updateable=updateable)
+
+        self.attack = attack
+
+        self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
+        )
+
+        self.loss_fn = self.ctc(
+            labels=attack.placeholders.targets,
+            logits=attack.victim.logits,
+            label_length=attack.placeholders.target_lengths,
+            logit_length=attack.batch.audios["ds_feats"],
+            blank_index=-1
+        )
+
+    def ctc(self, labels, logits, label_length, logit_length,
+            logits_time_major=True, unique=None, blank_index=None, name=None,
+            apply_softmax=True):
+        """
+        Set everything up for CTC
+        """
+        if blank_index is None:
+            blank_index = -1
+
+        logits = ops.convert_to_tensor(logits, name="logits")
+        labels = ops.convert_to_tensor(labels, name="labels")
+        label_length = ops.convert_to_tensor(
+            label_length, name="label_length"
+        )
+        logit_length = ops.convert_to_tensor(
+            logit_length, name="logit_length"
+        )
+
+        if not logits_time_major:
+            logits = array_ops.transpose(logits, perm=[1, 0, 2])
+
+        if apply_softmax:
+            logits = nn_ops.softmax(logits)
+
+        if blank_index != 0:
+            if blank_index < 0:
+                blank_index += _get_dim(logits, 2)
+            logits = array_ops.concat([
+                logits[:, :, blank_index:blank_index + 1],
+                logits[:, :, :blank_index],
+                logits[:, :, blank_index + 1:],
+            ],
+                axis=2
+            )
+            labels = array_ops.where(
+                labels < blank_index, labels + 1, labels
+            )
+
+        args = [logits, labels, label_length, logit_length]
+
+        if unique:
+            unique_y, unique_idx = unique
+            args.extend([unique_y, unique_idx])
+
+        @custom_gradient.custom_gradient
+        def compute_ctc_loss(logits_t, labels_t, label_length_t, logit_length_t,
+                *unique_t):
+
+            """
+            Compute CTC loss.
+            """
+
+            logits_t.set_shape(logits.shape)
+            labels_t.set_shape(labels.shape)
+            label_length_t.set_shape(label_length.shape)
+            logit_length_t.set_shape(logit_length.shape)
+
+            kwargs = dict(
+                logits=logits_t,
+                labels=labels_t,
+                label_length=label_length_t,
+                logit_length=logit_length_t
+            )
+            if unique_t:
+                kwargs["unique"] = unique_t
+
+            result = self.ctc_loss_and_grad(**kwargs)
+
+            def grad(grad_loss):
+                grad = [
+                    array_ops.reshape(grad_loss, [1, -1, 1]) * result[1]]
+                grad += [None] * (len(args) - len(grad))
+                return grad
+
+            return result[0], grad
+
+        return compute_ctc_loss(*args)
+
+    def ctc_loss_and_grad(self, logits, labels, label_length, logit_length,
+            unique=None):
+
+        """
+        Computes the actual loss and gradients.
+        """
+
+        num_labels = _get_dim(logits, 2)
+        max_label_seq_length = _get_dim(labels, 1)
+
+        ilabel_log_probs = tf.log(logits)
+        state_log_probs = _ilabel_to_state(labels, num_labels, ilabel_log_probs)
+        state_trans_probs = _ctc_state_trans(labels)
+        initial_state_log_probs, final_state_log_probs = ctc_state_log_probs(
+            label_length, max_label_seq_length)
+        fwd_bwd_log_probs, log_likelihood = _forward_backward_log(
+            state_trans_log_probs=math_ops.log(state_trans_probs),
+            initial_state_log_probs=initial_state_log_probs,
+            final_state_log_probs=final_state_log_probs,
+            observed_log_probs=state_log_probs,
+            sequence_length=logit_length)
+
+        if unique:
+            olabel_log_probs = _state_to_olabel_unique(labels, num_labels,
+                                                       fwd_bwd_log_probs,
+                                                       unique)
+        else:
+            # olabel_log_probs = _state_to_olabel(labels, num_labels,
+            #                                     fwd_bwd_log_probs)
+            olabel_log_probs = self.custom_state_to_olabel_max(labels,
+                                                               num_labels,
+                                                               fwd_bwd_log_probs)
+
+        grad = math_ops.exp(ilabel_log_probs) - math_ops.exp(olabel_log_probs)
+        loss = -log_likelihood
+        return loss, grad
+
+    @staticmethod
+    def custom_state_to_olabel_max(labels, num_labels, states):
+        """Sum state log probs to ilabel log probs."""
+
+        num_label_states = _get_dim(labels, 1) + 1
+        label_states = states[:, :, 1:num_label_states]
+        blank_states = states[:, :, num_label_states:]
+
+        one_hot = array_ops.one_hot(
+            labels - 1,
+            depth=(num_labels - 1),
+            on_value=0.0,
+            off_value=math_ops.log(0.0)
+        )
+        one_hot = array_ops.expand_dims(one_hot, axis=0)
+
+        label_states = array_ops.expand_dims(label_states, axis=3)
+
+        label_olabels = math_ops.reduce_logsumexp(
+            label_states + one_hot, axis=2
+        )
+        blank_olabels = math_ops.reduce_logsumexp(
+            blank_states, axis=2, keepdims=True
+        )
+
+        return array_ops.concat([blank_olabels, label_olabels], axis=-1)
+
+
+class CWMaxMinWithCTCGrads(GreedyPathTokenWeightingBinarySearch):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0),
+            updateable: bool = False, use_softmax: bool = False):
+
+        assert k >= 0
+
+        ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            attack.placeholders.targets,
+            attack.placeholders.target_lengths
+        )
+
+        if use_softmax is True:
+            watch_gradient_var = attack.victim.logits
+            time_major = False
+            ctc_fn = self.ctc_call
+            apply_softmax = False
+            print(watch_gradient_var.shape)
+
+        else:
+
+            watch_gradient_var = attack.victim.logits
+            print(watch_gradient_var.shape)
+            time_major = False
+            # ctc_fn = tf.nn.ctc_loss_v2
+            ctc_fn = self.ctc_call
+            apply_softmax = False
+
+        with tf.GradientTape() as tape:
+
+            tape.watch(watch_gradient_var)
+
+            path_gradient_loss = self.ctc_call(
+                labels=attack.placeholders.targets,
+                logits=watch_gradient_var,
+                label_length=attack.placeholders.target_lengths,
+                logit_length=attack.batch.audios["ds_feats"],
+                blank_index=-1,
+                logits_time_major=time_major,
+                apply_softmax=apply_softmax,
+
+            )
+
+        gradients = tape.gradient(
+            path_gradient_loss,
+            watch_gradient_var
+        )
+        print(gradients)
+        # gradients = tf.transpose(gradients, [1, 0, 2])
+        print(gradients)
+        argmin_grads = tf.argmin(gradients, axis=-1)
+        print(argmin_grads)
+        self.grad_logits = gradients
+        if argmin_grads.shape[-1] == attack.batch.size:
+            print("lkdsj\f")
+            self.gradient_argmin = tf.transpose(argmin_grads, [1, 0])
+        else:
+            self.gradient_argmin = argmin_grads
+
+        print(self.gradient_argmin.shape)
+
+        super().__init__(
+            attack,
+            custom_target=self.gradient_argmin,
+            use_softmax=use_softmax,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+        kap = self.kappa[:, tf.newaxis]
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap
+        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
+        self.loss_fn = self.loss_fn

@@ -6,3 +6,4 @@ from cleverspeech.graph import Optimisers
 from cleverspeech.graph import Paths
 from cleverspeech.graph import Procedures
 from cleverspeech.graph import Placeholders
+from cleverspeech.graph.losses import adversarial, Distance, Bases
