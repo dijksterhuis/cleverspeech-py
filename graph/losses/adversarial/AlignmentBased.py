@@ -33,7 +33,7 @@ class BiggioMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class MaxOfMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class MaxOfMaxMin(Bases.SimpleGreedySearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -49,7 +49,7 @@ class MaxOfMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = self.loss_fn * self.weights
 
 
-class CWMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
@@ -174,7 +174,7 @@ class SinglePathCTCLoss(Bases.SimpleWeightings):
         ) * self.weights
 
 
-class SumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
         """
         """
@@ -197,7 +197,7 @@ class SumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = - self.fwd_target_log_probs
 
 
-class SumLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class SumLogProbsBackward(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
         """
         """
@@ -220,7 +220,7 @@ class SumLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = - self.back_target_log_probs
 
 
-class SumLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class SumLogProbsProduct(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
         """
         """
@@ -243,7 +243,7 @@ class SumLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = -(self.back_target_log_probs * self.fwd_target_log_probs)
 
 
-class CumulativeLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class CumulativeLogProbsForward(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack_graph, weight_settings=(None, None)):
 
         super().__init__(
@@ -276,7 +276,7 @@ class CumulativeLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings)
         return probability_vector
 
 
-class CumulativeLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class CumulativeLogProbsBackward(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack_graph, weight_settings=(None, None)):
         super().__init__(
             attack_graph,
@@ -308,7 +308,7 @@ class CumulativeLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings
         return probability_vector
 
 
-class CumulativeLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class CumulativeLogProbsProduct(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack_graph, weight_settings=(None, None)):
         super().__init__(
             attack_graph,
