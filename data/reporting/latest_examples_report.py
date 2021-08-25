@@ -4,6 +4,7 @@ import csv
 import json
 
 import numpy as np
+import pandas as pd
 
 from collections import OrderedDict
 from cleverspeech.utils.Utils import log
@@ -17,55 +18,55 @@ from deepspeech import Model
 def get_fps(indir):
     for f in os.listdir(indir):
         yield os.path.join(indir, f)
-
-
-def start_deepspeech_package_model():
-    beam_width = 500
-    lm_alpha = 0.75
-    lm_beta = 1.85
-    n_features = 26
-    n_context = 9
-
-    # TODO: Switch to environment variable rather than relative directory path?
-    module_file_path = os.path.abspath(os.path.dirname(__file__))
-
-    cleverspeech_path = os.path.abspath(
-        os.path.join(module_file_path, "../../../")
-    )
-    deepspeech_files_path = os.path.join(
-        cleverspeech_path, "models/DeepSpeech_v041/data/models/"
-    )
-
-    alphabet_file_path = os.path.join(
-        deepspeech_files_path, "alphabet.txt"
-    )
-    model_chkpoint_file_path = os.path.join(
-        deepspeech_files_path, "output_graph.pbmm"
-    )
-    lm_file_path = os.path.join(
-        deepspeech_files_path, "lm.binary"
-    )
-    trie_file_path = os.path.join(
-        deepspeech_files_path, "trie"
-    )
-
-    ds = Model(
-        model_chkpoint_file_path,
-        n_features,
-        n_context,
-        alphabet_file_path,
-        beam_width
-    )
-
-    ds.enableDecoderWithLM(
-        alphabet_file_path,
-        lm_file_path,
-        trie_file_path,
-        lm_alpha,
-        lm_beta
-    )
-
-    return ds
+#
+#
+# def start_deepspeech_package_model():
+#     beam_width = 500
+#     lm_alpha = 0.75
+#     lm_beta = 1.85
+#     n_features = 26
+#     n_context = 9
+#
+#     # TODO: Switch to environment variable rather than relative directory path?
+#     module_file_path = os.path.abspath(os.path.dirname(__file__))
+#
+#     cleverspeech_path = os.path.abspath(
+#         os.path.join(module_file_path, "../../../")
+#     )
+#     deepspeech_files_path = os.path.join(
+#         cleverspeech_path, "models/DeepSpeech_v041/data/models/"
+#     )
+#
+#     alphabet_file_path = os.path.join(
+#         deepspeech_files_path, "alphabet.txt"
+#     )
+#     model_chkpoint_file_path = os.path.join(
+#         deepspeech_files_path, "output_graph.pbmm"
+#     )
+#     lm_file_path = os.path.join(
+#         deepspeech_files_path, "lm.binary"
+#     )
+#     trie_file_path = os.path.join(
+#         deepspeech_files_path, "trie"
+#     )
+#
+#     ds = Model(
+#         model_chkpoint_file_path,
+#         n_features,
+#         n_context,
+#         alphabet_file_path,
+#         beam_width
+#     )
+#
+#     ds.enableDecoderWithLM(
+#         alphabet_file_path,
+#         lm_file_path,
+#         trie_file_path,
+#         lm_alpha,
+#         lm_beta
+#     )
+#
+#     return ds
 
 
 def fix_padding(delta, original, advex):
@@ -101,7 +102,7 @@ def get_file_metadata(json_file_path):
     modified_time = os.path.getmtime(os.path.abspath(json_file_path))
 
     directory_split = os.path.abspath(json_file_path).split("/")
-    result_dir_index = directory_split.index('adv')
+    result_dir_index = directory_split.index('res')
 
     exp = directory_split[result_dir_index+1]
     params = directory_split[result_dir_index + 2: -1]
@@ -187,7 +188,8 @@ def preprocess_audio_data(delta, original, adv):
         ]
     )
 
-    weights = ["itu", "a", "none"]
+    # weights = ["itu", "a", "none"]
+    weights = ["none"]
     audio_file_names = ["deltas", "advs", "originals"]
 
     return outs, weights, audio_file_names
@@ -247,9 +249,9 @@ def write_to_json(stats_data, out_file_path):
     return True
 
 
-def generate_stats_file(indir):
+def generate_stats_file(indir, outdir):
 
-    stats_out_filepath = os.path.join(indir, "stats.csv")
+    stats_out_filepath = os.path.join(outdir, "stats.csv")
 
     example_json_results_file_paths = [
         fp for fp in get_fps(indir) if "sample" in fp and ".json" in fp
@@ -259,7 +261,7 @@ def generate_stats_file(indir):
     )
     log(s)
 
-    ds = start_deepspeech_package_model()
+    # ds = start_deepspeech_package_model()
 
     # settings = load_settings_file(indir)
 
@@ -282,15 +284,15 @@ def generate_stats_file(indir):
             data["advs"],
         )
 
-        client_decodings = OrderedDict(
-            [
-                (k, ds.stt(audio_data[k]["none"], 16000).replace(" ", "=")) for k in audio_file_names
-            ]
-        )
+        # client_decodings = OrderedDict(
+        #     [
+        #         (k, ds.stt(audio_data[k]["none"], 16000).replace(" ", "=")) for k in audio_file_names
+        #     ]
+        # )
 
         decodings = OrderedDict(
             [
-                ("client", client_decodings),
+                # ("client", client_decodings),
                 ("cleverspeech",
                     OrderedDict(
                         [
@@ -312,18 +314,18 @@ def generate_stats_file(indir):
                 ("bounds", OrderedDict(
                         [
                             ("raw", data["bounds_raw"][0]),
-                            ("eps", data["bounds_eps"][0]),
+                            # ("eps", data["bounds_eps"][0]),
                             ("initital", data["initial_taus"][0]),
                         ]
                     )
                  ),
-                ("distances", OrderedDict(
-                    [
-                        ("raw", data["distances_raw"][0]),
-                        ("eps", data["distances_eps"][0]),
-                    ]
-                )
-                 ),
+                # ("distances", OrderedDict(
+                #     [
+                #         ("raw", data["distances_raw"][0]),
+                #         # ("eps", data["distances_eps"][0]),
+                #     ]
+                # )
+                #  ),
                 ("decode", decodings),
             ]
         )
@@ -361,9 +363,9 @@ def generate_stats_file(indir):
 
         snr_analysis_fns = OrderedDict([
             ("snr_energy_db", DetectionMetrics.snr_energy_db),
-            ("snr_energy", DetectionMetrics.snr_energy),
+            # ("snr_energy", DetectionMetrics.snr_energy),
             ("snr_pow_db", DetectionMetrics.snr_power_db),
-            ("snr_pow", DetectionMetrics.snr_power),
+            # ("snr_pow", DetectionMetrics.snr_power),
             ("snr_seg_db", DetectionMetrics.snr_segmented),
         ])
 
@@ -383,11 +385,11 @@ def generate_stats_file(indir):
 
         dsp_analysis_fns = OrderedDict([
             ("rms_amp_db", DetectionMetrics.rms_amplitude_db),
-            ("rms_amp", DetectionMetrics.rms_amplitude),
+            # ("rms_amp", DetectionMetrics.rms_amplitude),
             ("energy_db", DetectionMetrics.energy_db),
-            ("energy", DetectionMetrics.energy),
+            # ("energy", DetectionMetrics.energy),
             ("power_db", DetectionMetrics.power_db),
-            ("power", DetectionMetrics.power),
+            # ("power", DetectionMetrics.power),
         ])
 
         dsp_stats = OrderedDict([
@@ -415,9 +417,14 @@ def generate_stats_file(indir):
             b=len(example_json_results_file_paths)
         )
         log(s, wrap=False, timings=True)
+    indices = [i for i in range(-1, -22, -1)]
 
+    print(pd.read_csv(stats_out_filepath).take(indices, axis=1).mean())
 
 if __name__ == '__main__':
-    indir = sys.argv[1]
-    generate_stats_file(indir)
+    if len(sys.argv[1:]) == 1:
+        indir = outdir = sys.argv[1]
+    else:
+        indir, outdir = sys.argv[1:]
+    generate_stats_file(indir, outdir)
 
