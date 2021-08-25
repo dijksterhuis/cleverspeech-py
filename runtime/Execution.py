@@ -1,6 +1,8 @@
 import traceback
 import multiprocessing as mp
 
+from progressbar import ProgressBar
+
 from cleverspeech.data.egress import load
 from cleverspeech.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.Utils import log
@@ -19,40 +21,53 @@ SETTINGS_WRITER_FUNCS = {
 }
 
 
+class EndOfRunException(Exception):
+    pass
+
+
 def writer_boilerplate_fn(results_transforms, queue, settings):
 
     import traceback
+    from time import sleep
 
-    settings_writer = settings["writer"].split("_")[0]
-    SETTINGS_WRITER_FUNCS[settings_writer](settings["outdir"], settings)
+    try:
 
-    while True:
-        results = queue.get()
+        settings_writer = settings["writer"].split("_")[0]
+        SETTINGS_WRITER_FUNCS[settings_writer](settings["outdir"], settings)
 
-        if results == "dead":
-            queue.task_done()
-            break
+        while True:
 
-        else:
-            try:
+            sleep(1)
+            results = queue.get()
+
+            if results == "dead":
+                queue.task_done()
+                raise EndOfRunException
+
+            else:
                 for example in results_transforms(results, settings):
                     if example["success"] is True:
                         RESULTS_WRITER_FUNCS[settings["writer"]](
                             settings["outdir"],
                             example
                         )
+    except EndOfRunException:
+        s = "Dead queue entry detected... Writer subprocess exiting."
+        log(s)
+        pass
 
-            except Exception as e:
-                tb = "".join(
-                    traceback.format_exception(None, e, e.__traceback__))
+    except KeyboardInterrupt:
+        s = "\nKeyboardInterrupt detected... Writer subprocess exiting."
+        log(s)
 
-                s = "Something broke during file writes!"
-                s += "\n\nError Traceback:\n{e}".format(e=tb)
-                log(s, wrap=True)
-                raise
+    except BaseException as e:
+        tb = "".join(
+            traceback.format_exception(None, e, e.__traceback__))
 
-            finally:
-                queue.task_done()
+        s = "\033[1;31mSomething broke during file writes!\033[1;0m"
+        s += "\n\nError Traceback:\n{e}".format(e=tb)
+        log(s)
+        raise e
 
 
 def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_fn):
@@ -77,10 +92,25 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
         )
         log(s)
 
-        for is_results_step in attack.run():
-            if is_results_step:
-                res = extract_fn(attack)
-                results_queue.put(res)
+        try:
+
+            with ProgressBar(min_value=1, max_value=settings["nsteps"]) as p:
+
+                for step, is_results_step in attack.run():
+
+                    if is_results_step:
+                        res = extract_fn(attack)
+                        results_queue.put(res)
+
+                    if step > 0:
+                        p.update(step)
+
+        except BaseException:
+            log("")
+            s = "\033[1;31mAttack failed to run for these examples:\033[1;0m\n"
+            s += '\n'.join(batch.audios["basenames"])
+            log(s)
+            raise
 
 
 def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_transform_fn=None):
@@ -94,6 +124,7 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
         results_transform_fn = transforms_gen
 
     results_queue = mp.JoinableQueue()
+    log("Initialised the results queue.")
 
     writer_process = mp.Process(
         target=writer_boilerplate_fn,
@@ -103,52 +134,43 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
     writer_process.start()
     log("Started a writer subprocess.")
 
-    for b_id, batch in batch_gen:
+    try:
 
-        # we *must* call the tensorflow session within the batch loop so the
-        # graph gets reset: the maximum example length in a batch affects the
-        # size of most graph elements.
+        for b_id, batch in batch_gen:
 
-        log("Running for Batch Number: {}".format(b_id), wrap=True)
+            # we *must* call the tensorflow session within the batch loop so the
+            # graph gets reset: the maximum example length in a batch affects
+            # the size of most graph elements.
 
-        attack_process = mp.Process(
-            target=executor_boilerplate_fn,
-            args=(results_extract_fn, results_queue, settings, batch, attack_fn)
+            log("Running for Batch Number: {}".format(b_id), wrap=True)
+            executor_boilerplate_fn(
+                results_extract_fn,
+                results_queue,
+                settings, batch,
+                attack_fn
+            )
+
+    except BaseException as e:
+
+        tb = "".join(traceback.format_exception(None, e, e.__traceback__))
+        log(
+            "\033[1;31mERROR TRACEBACK:\033[1;0m\n{e}".format(e=tb),
+            wrap=True
         )
 
-        try:
-            attack_process.start()
-            attack_process.join()
-            attack_process.terminate()
+    finally:
 
-        except Exception as e:
+        log(
+            "Attempting to close/terminate results queue/writer subprocess.",
+            wrap=True
+        )
+        results_queue.put("dead")
+        results_queue.close()
+        log("Results queue closed.", wrap=True)
 
-            tb = "".join(traceback.format_exception(None, e, e.__traceback__))
-
-            s = "Something broke! Attack failed to run for these examples:\n"
-            s += '\n'.join(batch.audios["basenames"])
-            s += "\n\nError Traceback:\n{e}".format(e=tb)
-
-            log(s, wrap=True)
-            log("Attempting to close writer queue and subprocess.", wrap=True)
-
-            results_queue.put("dead")
-            results_queue.close()
-            log("Results queue closed.", wrap=True)
-
-            writer_process.join()
-            writer_process.terminate()
-            log("Writer subprocess closed.", wrap=True)
-            raise
-
-    log("Attempting to close writer queue and subprocess.", wrap=True)
-    results_queue.put("dead")
-    results_queue.close()
-    log("Results queue closed.", wrap=True)
-
-    writer_process.join()
-    writer_process.terminate()
-    log("Writer subprocess closed.", wrap=True)
+        writer_process.join()
+        writer_process.terminate()
+        log("Writer subprocess terminated.", wrap=True)
 
 
 def default_manager(settings, attack_fn, batch_gen):

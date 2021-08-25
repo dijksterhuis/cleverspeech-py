@@ -74,7 +74,7 @@ class AbstractProcedure(ABC):
         pass
 
     def results_hook(self):
-        return True
+        return self.current_step, True
 
     def pre_optimisation_updates_hook(self, successes):
 
@@ -102,12 +102,13 @@ class AbstractProcedure(ABC):
         """
         Do the actual optimisation.
         """
-        log("Starting optimisation....")
 
         a = self.attack
 
         # write out initial step 0 data
         yield self.results_hook()
+
+        log("Initial state written, starting optimisation....")
 
         while self.steps_rule():
 
