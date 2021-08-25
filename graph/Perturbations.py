@@ -351,7 +351,7 @@ class ClippedGradientDescentWithProjectedRounding(ClippedGradientDescent):
             r_constant=0.95,
             update_method="geom",
     ):
-        super(ClippedGradientDescent).__init__(
+        super().__init__(
                 sess,
                 batch,
                 placeholders,
