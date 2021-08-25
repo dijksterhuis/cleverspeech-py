@@ -379,7 +379,7 @@ class Model(ABC):
                 "Please choose a valid decoder."
             )
 
-    def ds_decode(self, logits, top_five=False):
+    def ds_decode(self, logits, top_five=False, with_metadata=False):
 
         decoded_probs = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder(
             np.squeeze(logits),
@@ -418,9 +418,12 @@ class Model(ABC):
         timestep_switches = l_map(
             lambda x: x[3], beam_results
         )
-        return labellings, probs, token_order, timestep_switches
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
 
-    def ds_decode_batch(self, logits, lengths, top_five=False):
+    def ds_decode_batch(self, logits, lengths, top_five=False, with_metadata=False):
 
         l = lengths[0]
 
@@ -467,9 +470,12 @@ class Model(ABC):
             lambda y: l_map(lambda x: x[3], y), beam_results
         )
 
-        return labellings, probs
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
 
-    def ds_decode_batch_greedy_no_lm(self, logits, lengths, top_five=False):
+    def ds_decode_batch_greedy_no_lm(self, logits, lengths, top_five=False, with_metadata=False):
 
         l = lengths[0]
 
@@ -516,9 +522,12 @@ class Model(ABC):
             lambda y: l_map(lambda x: x[3], y), beam_results
         )
 
-        return labellings, probs
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
 
-    def ds_decode_batch_no_lm(self, logits, lengths, top_five=False):
+    def ds_decode_batch_no_lm(self, logits, lengths, top_five=False, with_metadata=False):
 
         l = lengths[0]
 
@@ -565,7 +574,10 @@ class Model(ABC):
             lambda y: l_map(lambda x: x[3], y), beam_results
         )
 
-        return labellings, probs
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
 
     def tf_beam_decode(self, logits, features_lengths, tokens):
 
