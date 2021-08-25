@@ -95,7 +95,43 @@ def ctc_only_box_constraint_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
+        graph.losses.adversarial.AlignmentFree.CTCLoss,
+    )
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"]
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"]
+    )
+
+    return attack
+
+
+def cw_gradient_path_box_constraint_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.BoxConstraintOnly,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder=settings["decoder"],
+        beam_width=settings["beam_width"]
+    )
+    attack.add_loss(
+        graph.losses.adversarial.AlignmentFree.CWMaxMin,
+        updateable=True,
+        weight_settings=(1.0, 0.5)
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -117,7 +153,7 @@ def cw_only_box_constraint_graph(sess, batch, settings):
         sess, batch, settings
     )
     attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
+        graph.Paths.CTC
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -132,7 +168,7 @@ def cw_only_box_constraint_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.Losses.CWMaxMin,
+        graph.losses.adversarial.AlignmentBased.CWMaxMin,
         use_softmax=False,
         k=settings["kappa"]
     )
@@ -151,9 +187,10 @@ def cw_only_box_constraint_graph(sess, batch, settings):
     return attack
 
 
-ATTACK_GRAPHS= {
+ATTACK_GRAPHS = {
     "ctc": ctc_only_box_constraint_graph,
     "cw": cw_only_box_constraint_graph,
+    "cw-grads": cw_gradient_path_box_constraint_graph,
 }
 
 

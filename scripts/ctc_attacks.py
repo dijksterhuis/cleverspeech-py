@@ -28,7 +28,7 @@ def only_box_constraint_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
+        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -53,7 +53,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
+        graph.Perturbations.ClippedGradientDescentWithProjectedRounding,
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
@@ -65,7 +65,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.Losses.BEAM_SEARCH_ADV_LOSSES[settings["loss"]],
+        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -121,18 +121,13 @@ ATTACK_GRAPHS = {
     "cgd": clipped_gradient_descent_graph,
 }
 
-LOSSES = {
-    "ctc": graph.Losses.CTCLoss,
-    "ctc_v2": graph.Losses.CTCLossV2,
-}
-
 
 def main():
     log("", wrap=True)
 
     extra_args = {
         "attack_graph": [str, "box", False, ATTACK_GRAPHS.keys()],
-        "loss": [str, "ctc", True, LOSSES.keys()]
+        "loss": [str, "ctc", True, graph.losses.adversarial.AlignmentFree.CTC.keys()]
     }
 
     args(attack_run, additional_args=extra_args)

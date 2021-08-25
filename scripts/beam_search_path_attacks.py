@@ -59,7 +59,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
+        graph.Perturbations.ClippedGradientDescentWithProjectedRounding,
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
@@ -100,12 +100,8 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    # attack.add_perturbation_subgraph(
-    #     graph.Perturbations.BoxConstraintOnly,
-    #     random_scale=settings["delta_randomiser"]
-    # )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
+        graph.Perturbations.ClippedGradientDescentWithProjectedRounding,
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.Linf,
         r_constant=settings["rescale"],
@@ -152,7 +148,7 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
+        graph.Perturbations.ClippedGradientDescentWithProjectedRounding,
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
