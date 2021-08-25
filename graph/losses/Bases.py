@@ -207,7 +207,7 @@ class _BeamSearchPath(_BasePathSearch):
         blanks = np.ones(self.target_argmax.shape, dtype=np.int32) * 28
 
         for idx, (tok, time) in enumerate(zip(toks, times)):
-            blanks[idx][time] = tok
+            blanks[idx, time] = tok
 
         return tf.cast(blanks, dtype=tf.int32)
 
@@ -234,6 +234,9 @@ class _BaseBinarySearches(_BasePathSearch):
 
         self.init_weights(attack, weight_settings)
 
+    def safe_lower_bound(self, n):
+        return self.initial * (self.increment ** n)
+
 
 class _SimpleTokenWeights(_BaseBinarySearches):
 
@@ -245,22 +248,23 @@ class _SimpleTokenWeights(_BaseBinarySearches):
 
             self.initial, self.increment = weight_settings
             self.upper_bound = self.initial
-            self.lower_bound = 0.0
+            self.lower_bound = 1.0e-6
 
         elif len(weight_settings) == 3:
             self.initial, self.increment, n = weight_settings
             # never be more than N steps away from initial value
             self.upper_bound = self.initial
-            self.lower_bound = self.initial * (self.increment ** n)
+            self.lower_bound = self.safe_lower_bound(n)
 
         else:
             raise ValueError
 
-        # handle the case where we might take log probs and want to set initial
-        # value as small and double for bad frames (increase their influence)
+        # if we're using softmax then override user values for safety
 
         if self.use_softmax is True:
             self.upper_bound = 1.0
+            self.lower_bound = 1.0e-6
+            self.initial = 1.0e-6
 
         shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
 
@@ -338,7 +342,7 @@ class _DoubleTokenWeights(_SimpleTokenWeights):
 
         n = 1
         self.super_upper_bound = self.initial
-        self.super_lower_bound = self.initial * (self.increment ** n)
+        self.super_lower_bound = self.safe_lower_bound(n)
 
         self.super_weights = tf.Variable(
             tf.ones(attack.batch.size, dtype=tf.float32),
@@ -402,11 +406,12 @@ class _KappaTokenWeights(_DoubleTokenWeights):
         kaps, losses, = self.attack.procedure.tf_run(
             [self.kappa, self.attack.loss[0].loss_fn]
         )
+
         z = zip(batch_successes, kaps, losses)
+
         for idx, (suc, k, l) in enumerate(z):
             if suc is False and l <= 0:
-                kaps[idx] += 1
-            print(idx, suc, l, kaps)
+                kaps[idx] += 0.01 if self.use_softmax is True else 1.0
 
         self.attack.sess.run(self.kappa.assign(kaps))
 
@@ -430,6 +435,9 @@ class KappaGreedySearchTokenWeights(_KappaTokenWeights, _GreedySearchPath):
     pass
 
 
+# TODO: The most likely path from the DeepSpeech beam search decoder is compared
+#       against the argmax in _SimpleTokWeights, which is not ideal!
+
 class SimpleBeamSearchTokenWeights(_SimpleTokenWeights, _BeamSearchPath):
     pass
 
@@ -440,84 +448,4 @@ class DoubleBeamSearchTokenWeights(_DoubleTokenWeights, _BeamSearchPath):
 
 class KappaBeamSearchTokenWeights(_KappaTokenWeights, _BeamSearchPath):
     pass
-
-
-class _InvertedSimpleTokenWeights(_BaseBinarySearches):
-
-    def init_weights(self, attack, weight_settings):
-
-        weight_settings = [float(s) for s in weight_settings]
-
-        if len(weight_settings) == 2:
-
-            self.initial, self.increment = weight_settings
-
-        elif len(weight_settings) == 3:
-            self.initial, self.increment, n = weight_settings
-            # never be more than N steps away from initial value
-            self.lower_bound = self.initial * ((1 / self.increment) ** n)
-
-        else:
-            raise ValueError
-
-        weight_settings = [float(setting) for setting in weight_settings]
-        self.initial, self.increment = weight_settings
-
-        # softmax has a known maximum, minimum is (usually) never zero though
-        self.upper_bound = 1.0
-
-        # never be more than N checks away from initial value
-        self.lower_bound = self.initial * (self.increment ** n)
-
-        shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
-
-        self.weights = tf.Variable(
-            tf.ones(shape, dtype=tf.float32),
-            trainable=False,
-            validate_shape=True,
-            name="qq_loss_weight"
-        )
-
-        initial_vals = self.initial * np.ones(shape, dtype=np.float32)
-        attack.sess.run(self.weights.assign(initial_vals))
-
-    def check_token_weights(self):
-        current_most_likely_path = self.get_most_likely_path_as_tf()
-
-        target_argmax = tf.cast(
-            self.target_argmax, dtype=tf.int32
-        )
-
-        argmax_test = tf.where(
-            tf.equal(target_argmax, current_most_likely_path),
-            tf.multiply(self.increment, self.weights),
-            tf.multiply(1 / self.increment, self.weights),
-        )
-        upper_bound = self.upper_bound * tf.ones_like(
-            argmax_test, dtype=tf.float32
-        )
-        lower_bound = self.lower_bound * tf.ones_like(
-            argmax_test, dtype=tf.float32
-        )
-
-        max_clamp = tf.where(
-            tf.greater(argmax_test, upper_bound),
-            upper_bound,
-            argmax_test,
-        )
-        new_weights = tf.where(
-            tf.less(max_clamp, lower_bound),
-            lower_bound,
-            max_clamp,
-        )
-
-        new_weights = self.attack.procedure.tf_run(new_weights)
-
-        self.attack.sess.run(self.weights.assign(new_weights))
-
-    def update_one(self, idx: int):
-        raise Exception
-
-    def update_many(self, batch_successes: list):
-        self.check_token_weights()
 
