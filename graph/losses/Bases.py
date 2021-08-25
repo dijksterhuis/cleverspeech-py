@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from abc import ABC, abstractmethod
+from cleverspeech.utils.Utils import log
 
 
 class BaseLoss(ABC):
@@ -211,12 +212,11 @@ class _BeamSearchPath(_BasePathSearch):
         return tf.cast(blanks, dtype=tf.int32)
 
 
-class _BaseBinarySearches(_BasePathSearch, BaseAlignmentLoss):
-    def __init__(self, attack, weight_settings: tuple = (None, None), updateable: bool = False):
+class _BaseBinarySearches(_BasePathSearch):
+    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         assert type(weight_settings) in [list, tuple]
         assert all(type(t) in [float, int] for t in weight_settings)
-        assert len(weight_settings) == 2
 
         self.lower_bound = None
         self.upper_bound = None
@@ -224,7 +224,15 @@ class _BaseBinarySearches(_BasePathSearch, BaseAlignmentLoss):
         self.initial = None
         self.increment = None
 
-        super().__init__(attack, updateable=updateable)
+        super().__init__(
+            attack,
+            custom_target=custom_target,
+            weight_settings=weight_settings,
+            updateable=updateable,
+            use_softmax=use_softmax,
+        )
+
+        self.init_weights(attack, weight_settings)
 
 
 class _SimpleTokenWeights(_BaseBinarySearches):
@@ -237,18 +245,16 @@ class _SimpleTokenWeights(_BaseBinarySearches):
 
             self.initial, self.increment = weight_settings
             self.upper_bound = self.initial
+            self.lower_bound = 0.0
 
         elif len(weight_settings) == 3:
             self.initial, self.increment, n = weight_settings
             # never be more than N steps away from initial value
             self.upper_bound = self.initial
-            self.lower_bound = self.initial * ((1 / self.increment) ** n)
+            self.lower_bound = self.initial * (self.increment ** n)
 
         else:
             raise ValueError
-
-        weight_settings = [float(setting) for setting in weight_settings]
-        self.initial, self.increment = weight_settings
 
         # handle the case where we might take log probs and want to set initial
         # value as small and double for bad frames (increase their influence)
@@ -269,6 +275,7 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         attack.sess.run(self.weights.assign(initial_vals))
 
     def check_token_weights(self):
+
         current_most_likely_path = self.get_most_likely_path_as_tf()
 
         target_argmax = tf.cast(
@@ -311,21 +318,25 @@ class _SimpleTokenWeights(_BaseBinarySearches):
 
 class _DoubleTokenWeights(_SimpleTokenWeights):
 
-    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         self.super_upper_bound = None
         self.super_lower_bound = None
         self.super_weights = None
 
         super().__init__(
-            attack, weight_settings=weight_settings, updateable=updateable
+            attack,
+            custom_target=custom_target,
+            weight_settings=weight_settings,
+            updateable=updateable,
+            use_softmax=use_softmax,
         )
 
     def init_weights(self, attack, weight_settings):
 
         super().init_weights(attack, weight_settings)
 
-        n = 25
+        n = 1
         self.super_upper_bound = self.initial
         self.super_lower_bound = self.initial * (self.increment ** n)
 
@@ -341,39 +352,38 @@ class _DoubleTokenWeights(_SimpleTokenWeights):
 
     def check_super_weights(self, batch_successes):
 
-        super_weights = self.attack.procedure.tf_run(self.super_weights)
+        w = self.attack.procedure.tf_run(self.super_weights)
+
+        incr, upper, lower = self.increment, self.upper_bound, self.lower_bound
 
         for idx, success_check in enumerate(batch_successes):
             if success_check is True:
-                test_weight = super_weights[idx] * self.increment
-                if test_weight < self.super_lower_bound:
-                    test_weight = self.super_lower_bound
+                w[idx] = w[idx] * incr if w[idx] * incr > lower else lower
             else:
+                w[idx] = w[idx] / incr if w[idx] / incr < upper else upper
 
-                test_weight = super_weights[idx] / self.increment
-                if test_weight > self.super_upper_bound:
-                    test_weight = self.super_upper_bound
-
-            super_weights[idx] = test_weight
-
-        self.attack.sess.run(self.super_weights.assign(super_weights))
+        self.attack.sess.run(self.super_weights.assign(w))
 
     def update_one(self, idx: int):
         raise Exception
 
     def update_many(self, batch_successes: list):
 
-        self.check_token_weights()
+        super().update_many(batch_successes)
         self.check_super_weights(batch_successes)
 
 
-class _KappableTokenWeights(_DoubleTokenWeights):
-    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
+class _KappaTokenWeights(_DoubleTokenWeights):
+    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         self.kappa = None
 
         super().__init__(
-            attack, weight_settings=weight_settings, updateable=updateable
+            attack,
+            custom_target=custom_target,
+            weight_settings=weight_settings,
+            updateable=updateable,
+            use_softmax=use_softmax,
         )
 
     def init_weights(self, attack, weight_settings):
@@ -396,6 +406,7 @@ class _KappableTokenWeights(_DoubleTokenWeights):
         for idx, (suc, k, l) in enumerate(z):
             if suc is False and l <= 0:
                 kaps[idx] += 1
+            print(idx, suc, l, kaps)
 
         self.attack.sess.run(self.kappa.assign(kaps))
 
@@ -403,8 +414,7 @@ class _KappableTokenWeights(_DoubleTokenWeights):
         raise Exception
 
     def update_many(self, batch_successes: list):
-        self.check_token_weights()
-        self.check_super_weights(batch_successes)
+        super().update_many(batch_successes)
         self.check_kappa(batch_successes)
 
 
@@ -416,7 +426,7 @@ class DoubleGreedySearchTokenWeights(_DoubleTokenWeights, _GreedySearchPath):
     pass
 
 
-class KappaGreedySearchTokenWeights(_KappableTokenWeights, _GreedySearchPath):
+class KappaGreedySearchTokenWeights(_KappaTokenWeights, _GreedySearchPath):
     pass
 
 
@@ -428,7 +438,7 @@ class DoubleBeamSearchTokenWeights(_DoubleTokenWeights, _BeamSearchPath):
     pass
 
 
-class KappaBeamSearchTokenWeights(_KappableTokenWeights, _BeamSearchPath):
+class KappaBeamSearchTokenWeights(_KappaTokenWeights, _BeamSearchPath):
     pass
 
 
@@ -457,7 +467,6 @@ class _InvertedSimpleTokenWeights(_BaseBinarySearches):
         self.upper_bound = 1.0
 
         # never be more than N checks away from initial value
-        n = 5
         self.lower_bound = self.initial * (self.increment ** n)
 
         shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]

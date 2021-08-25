@@ -14,11 +14,9 @@ def only_box_constraint_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    print(settings["loss"])
-    if "gradientpath" not in settings["loss"]:
-        attack.add_path_search(
-            graph.Paths.ALL_PATHS[settings["align"]]
-        )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -33,13 +31,13 @@ def only_box_constraint_graph(sess, batch, settings):
     )
     if settings["loss"] in KAPPA_LOSSES:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"]
         )
     else:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
         )
     attack.create_loss_fn()
@@ -61,10 +59,9 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    if "gradientpath" not in settings["loss"]:
-        attack.add_path_search(
-            graph.Paths.ALL_PATHS[settings["align"]]
-        )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -83,7 +80,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
 
     if settings["loss"] in KAPPA_LOSSES:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
             weight_settings=(1.0, 0.5),
@@ -91,7 +88,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         )
     else:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             weight_settings=(1.0, 0.5),
             updateable=True,
@@ -110,23 +107,21 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     return attack
 
 
-def carlini_and_wagner_stt_simple_graph(sess, batch, settings):
+def clipped_linf_with_l2_loss(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    print(settings["loss"])
-    if "gradientpath" not in settings["loss"]:
-        attack.add_path_search(
-            graph.Paths.ALL_PATHS[settings["align"]]
-        )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
     attack.add_perturbation_subgraph(
         graph.Perturbations.ClippedGradientDescent,
         random_scale=settings["delta_randomiser"],
-        constraint_cls=graph.Constraints.L2,
+        constraint_cls=graph.Constraints.Linf,
         r_constant=settings["rescale"],
         update_method=settings["constraint_update"],
     )
@@ -138,7 +133,7 @@ def carlini_and_wagner_stt_simple_graph(sess, batch, settings):
 
     if settings["loss"] in KAPPA_LOSSES:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
             weight_settings=(1e3, 0.5),
@@ -146,13 +141,13 @@ def carlini_and_wagner_stt_simple_graph(sess, batch, settings):
         )
     else:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             weight_settings=(1e3, 0.5),
             updateable=True,
         )
     attack.add_loss(
-        graph.Losses.LinfLoss,
+        graph.losses.Distance.L2CarliniLoss,
         weight_settings=(1.0e-3, 1),
         updateable=True,
     )
@@ -175,11 +170,9 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    print(settings["loss"])
-    if "gradientpath" not in settings["loss"]:
-        attack.add_path_search(
-            graph.Paths.ALL_PATHS[settings["align"]]
-        )
+    attack.add_path_search(
+        graph.Paths.ALL_PATHS[settings["align"]]
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -198,7 +191,7 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
 
     if settings["loss"] in KAPPA_LOSSES:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
             weight_settings=(1e3, 0.5),
@@ -206,13 +199,13 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
         )
     else:
         attack.add_loss(
-            graph.Losses.GREEDY_SEARCH_ADV_LOSSES[settings["loss"]],
+            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             weight_settings=(1e3, 0.5),
             updateable=True,
         )
     attack.add_loss(
-        graph.Losses.LinfLoss,
+        graph.losses.Distance.LinfLoss,
         weight_settings=(1.0e-3, 1),
         updateable=False,
     )
@@ -282,11 +275,11 @@ def attack_run(master_settings):
 ATTACK_GRAPHS = {
     "box": only_box_constraint_graph,
     "cgd": clipped_gradient_descent_graph,
-    "cw-simple": carlini_and_wagner_stt_simple_graph,
-    "l2_linf": clipped_l2_with_linf_loss
+    "linf_l2": clipped_linf_with_l2_loss,
+    "l2_linf": clipped_l2_with_linf_loss,
 }
 
-KAPPA_LOSSES = ["cw", "cw-toks", "weightedmaxmin", "adaptivekappa"]
+KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]
 
 
 def main():
@@ -294,7 +287,7 @@ def main():
 
     extra_args = {
         "attack_graph": [str, "box", True, ATTACK_GRAPHS.keys()],
-        "loss": [str, None, True, graph.Losses.GREEDY_SEARCH_ADV_LOSSES.keys()],
+        "loss": [str, None, True, graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
         "kappa": [float, None, False, None],
         'use_softmax': [int, 0, False, [0, 1]],
     }

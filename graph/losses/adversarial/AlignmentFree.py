@@ -1,21 +1,141 @@
 import tensorflow as tf
 from cleverspeech.graph.losses import Bases
 
-from tensorflow_core.python.framework import ops
-from tensorflow_core.python.ops.ctc_ops import (
+from tensorflow.python.framework import ops
+from tensorflow.python.ops.ctc_ops import (
     _ctc_state_trans,
     _get_dim,
     ctc_state_log_probs,
     _forward_backward_log,
     _state_to_olabel_unique,
-    _ilabel_to_state
+    _state_to_olabel,
+    _ilabel_to_state,
+    ctc_loss
 )
-from tensorflow_core.python.ops import (
+from tensorflow.python.ops import (
     nn_ops,
     array_ops,
     math_ops,
     custom_gradient
 )
+
+
+def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
+        unique=None, blank_index=None, name=None, apply_softmax=True):
+    """
+    Set everything up for CTC
+    """
+    if blank_index is None:
+        blank_index = -1
+
+    logits = ops.convert_to_tensor(logits, name="logits")
+    labels = ops.convert_to_tensor(labels, name="labels")
+    label_length = ops.convert_to_tensor(
+        label_length, name="label_length"
+    )
+    logit_length = ops.convert_to_tensor(
+        logit_length, name="logit_length"
+    )
+
+    if not logits_time_major:
+        logits = array_ops.transpose(logits, perm=[1, 0, 2])
+
+    if apply_softmax:
+        logits = nn_ops.softmax(logits)
+
+    if blank_index != 0:
+        if blank_index < 0:
+            blank_index += _get_dim(logits, 2)
+        logits = array_ops.concat([
+            logits[:, :, blank_index:blank_index + 1],
+            logits[:, :, :blank_index],
+            logits[:, :, blank_index + 1:],
+        ],
+            axis=2
+        )
+        labels = array_ops.where(
+            labels < blank_index, labels + 1, labels
+        )
+
+    args = [logits, labels, label_length, logit_length]
+
+    if unique:
+        unique_y, unique_idx = unique
+        args.extend([unique_y, unique_idx])
+
+    @custom_gradient.custom_gradient
+    def compute_ctc_loss(logits_t, labels_t, label_length_t, logit_length_t,
+            *unique_t):
+
+        """
+        Compute CTC loss.
+        """
+
+        logits_t.set_shape(logits.shape)
+        labels_t.set_shape(labels.shape)
+        label_length_t.set_shape(label_length.shape)
+        logit_length_t.set_shape(logit_length.shape)
+
+        kwargs = dict(
+            logits=logits_t,
+            labels=labels_t,
+            label_length=label_length_t,
+            logit_length=logit_length_t
+        )
+        if unique_t:
+            kwargs["unique"] = unique_t
+
+        result = ctc_loss_and_grad(**kwargs)
+
+        def grad(grad_loss):
+            grad = [
+                array_ops.reshape(grad_loss, [1, -1, 1]) * result[1]
+            ]
+            grad += [None] * (len(args) - len(grad))
+            return grad
+
+        return result[0], grad
+
+    return compute_ctc_loss(*args)
+
+
+def ctc_loss_and_grad(logits, labels, label_length, logit_length, unique=None):
+    """
+    Computes the actual loss and gradients.
+    """
+
+    num_labels = _get_dim(logits, 2)
+    max_label_seq_length = _get_dim(labels, 1)
+
+    # this line is what needed to be changed to be able to get softmax
+    ilabel_log_probs = tf.log(logits)
+
+    state_log_probs = _ilabel_to_state(labels, num_labels, ilabel_log_probs)
+    state_trans_probs = _ctc_state_trans(labels)
+
+    initial_state_log_probs, final_state_log_probs = ctc_state_log_probs(
+        label_length, max_label_seq_length
+    )
+
+    fwd_bwd_log_probs, log_likelihood = _forward_backward_log(
+        state_trans_log_probs=math_ops.log(state_trans_probs),
+        initial_state_log_probs=initial_state_log_probs,
+        final_state_log_probs=final_state_log_probs,
+        observed_log_probs=state_log_probs,
+        sequence_length=logit_length)
+
+    if unique:
+        olabel_log_probs = _state_to_olabel_unique(
+            labels, num_labels, fwd_bwd_log_probs, unique
+        )
+    else:
+        olabel_log_probs = _state_to_olabel(
+            labels, num_labels, fwd_bwd_log_probs
+        )
+
+    grad = math_ops.exp(ilabel_log_probs) - math_ops.exp(olabel_log_probs)
+    loss = -log_likelihood
+    return loss, grad
 
 
 class CTCLoss(Bases.SimpleWeightings):
@@ -37,7 +157,7 @@ class CTCLoss(Bases.SimpleWeightings):
             attack.placeholders.target_lengths
         )
 
-        self.loss_fn = tf.nn.ctc_loss(
+        self.loss_fn = ctc_loss(
             labels=tf.cast(self.ctc_target, tf.int32),
             inputs=attack.victim.raw_logits,
             sequence_length=attack.batch.audios["ds_feats"]
@@ -92,7 +212,7 @@ class SoftmaxCTCLoss(Bases.SimpleWeightings):
             attack.placeholders.target_lengths
         )
 
-        self.loss_fn = self.ctc(
+        self.loss_fn = ctc_mod(
             labels=attack.placeholders.targets,
             logits=attack.victim.raw_logits,
             label_length=attack.placeholders.target_lengths,
@@ -102,194 +222,44 @@ class SoftmaxCTCLoss(Bases.SimpleWeightings):
             logits_time_major=True,
         )
 
-    def ctc(self, labels, logits, label_length, logit_length, logits_time_major=True, unique=None, blank_index=None, name=None, apply_softmax=True):
-        """
-        Set everything up for CTC
-        """
-        if blank_index is None:
-            blank_index = -1
 
-        logits = ops.convert_to_tensor(logits, name="logits")
-        labels = ops.convert_to_tensor(labels, name="labels")
-        label_length = ops.convert_to_tensor(
-            label_length, name="label_length"
-        )
-        logit_length = ops.convert_to_tensor(
-            logit_length, name="logit_length"
-        )
-
-        if not logits_time_major:
-            logits = array_ops.transpose(logits, perm=[1, 0, 2])
-
-        if apply_softmax:
-            logits = nn_ops.softmax(logits)
-
-        if blank_index != 0:
-            if blank_index < 0:
-                blank_index += _get_dim(logits, 2)
-            logits = array_ops.concat([
-                logits[:, :, blank_index:blank_index + 1],
-                logits[:, :, :blank_index],
-                logits[:, :, blank_index + 1:],
-            ],
-                axis=2
-            )
-            labels = array_ops.where(
-                labels < blank_index, labels + 1, labels
-            )
-
-        args = [logits, labels, label_length, logit_length]
-
-        if unique:
-            unique_y, unique_idx = unique
-            args.extend([unique_y, unique_idx])
-
-        @custom_gradient.custom_gradient
-        def compute_ctc_loss(logits_t, labels_t, label_length_t, logit_length_t, *unique_t):
-
-            """
-            Compute CTC loss.
-            """
-
-            logits_t.set_shape(logits.shape)
-            labels_t.set_shape(labels.shape)
-            label_length_t.set_shape(label_length.shape)
-            logit_length_t.set_shape(logit_length.shape)
-
-            kwargs = dict(
-                logits=logits_t,
-                labels=labels_t,
-                label_length=label_length_t,
-                logit_length=logit_length_t
-            )
-            if unique_t:
-                kwargs["unique"] = unique_t
-
-            result = self.ctc_loss_and_grad(**kwargs)
-
-            def grad(grad_loss):
-                grad = [
-                    array_ops.reshape(grad_loss, [1, -1, 1]) * result[1]
-                ]
-                grad += [None] * (len(args) - len(grad))
-                return grad
-
-            return result[0], grad
-
-        return compute_ctc_loss(*args)
-
-    def ctc_loss_and_grad(self, logits, labels, label_length, logit_length, unique=None):
-
-        """
-        Computes the actual loss and gradients.
-        """
-
-        num_labels = _get_dim(logits, 2)
-        max_label_seq_length = _get_dim(labels, 1)
-
-        ilabel_log_probs = tf.log(logits)
-        state_log_probs = _ilabel_to_state(labels, num_labels, ilabel_log_probs)
-        state_trans_probs = _ctc_state_trans(labels)
-
-        initial_state_log_probs, final_state_log_probs = ctc_state_log_probs(
-            label_length, max_label_seq_length
-        )
-
-        fwd_bwd_log_probs, log_likelihood = _forward_backward_log(
-            state_trans_log_probs=math_ops.log(state_trans_probs),
-            initial_state_log_probs=initial_state_log_probs,
-            final_state_log_probs=final_state_log_probs,
-            observed_log_probs=state_log_probs,
-            sequence_length=logit_length)
-
-        if unique:
-            olabel_log_probs = _state_to_olabel_unique(
-                labels, num_labels, fwd_bwd_log_probs, unique
-            )
-        else:
-            # olabel_log_probs = _state_to_olabel(labels, num_labels,
-            #                                     fwd_bwd_log_probs)
-            olabel_log_probs = self.custom_state_to_olabel_max(
-                labels, num_labels, fwd_bwd_log_probs
-            )
-
-        grad = math_ops.exp(ilabel_log_probs) - math_ops.exp(olabel_log_probs)
-        loss = -log_likelihood
-        return loss, grad
-
+class _BaseCTCGradientsPath:
     @staticmethod
-    def custom_state_to_olabel_max(labels, num_labels, states):
-        """
-        Sum state log probs to ilabel log probs.
-        """
-
-        num_label_states = _get_dim(labels, 1) + 1
-        label_states = states[:, :, 1:num_label_states]
-        blank_states = states[:, :, num_label_states:]
-
-        one_hot = array_ops.one_hot(
-            labels - 1,
-            depth=(num_labels - 1),
-            on_value=0.0,
-            off_value=math_ops.log(0.0)
-        )
-        one_hot = array_ops.expand_dims(one_hot, axis=0)
-
-        label_states = array_ops.expand_dims(label_states, axis=3)
-
-        label_olabels = math_ops.reduce_logsumexp(
-            label_states + one_hot, axis=2
-        )
-        blank_olabels = math_ops.reduce_logsumexp(
-            blank_states, axis=2, keepdims=True
-        )
-
-        return array_ops.concat([blank_olabels, label_olabels], axis=-1)
-
-
-class AlignmentFreeCWMaxMin(Bases.BaseAlignmentLoss, Bases.KappaGreedySearchTokenWeights, SoftmaxCTCLoss):
-    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
-
-        assert k >= 0
-
-        if use_softmax is True:
-            watch_gradient_var = attack.victim.logits
-            time_major = False
-            apply_softmax = False
-
-        else:
-
-            watch_gradient_var = attack.victim.logits
-            time_major = False
-            apply_softmax = False
-
+    def get_argmin_softmax_gradient(attack):
         with tf.GradientTape() as tape:
+            tape.watch(attack.victim.logits)
 
-            tape.watch(watch_gradient_var)
-
-            path_gradient_loss = self.ctc(
+            path_gradient_loss = ctc_mod(
                 labels=attack.placeholders.targets,
-                logits=watch_gradient_var,
+                logits=attack.victim.logits,
                 label_length=attack.placeholders.target_lengths,
                 logit_length=attack.batch.audios["ds_feats"],
                 blank_index=-1,
-                logits_time_major=time_major,
-                apply_softmax=apply_softmax,
+                logits_time_major=False,
+                apply_softmax=False,
 
             )
 
         gradients = tape.gradient(
             path_gradient_loss,
-            watch_gradient_var
+            attack.victim.logits
         )
+
         argmin_grads = tf.argmin(gradients, axis=-1)
 
-        self.grad_logits = gradients
+        # your softmax tensor is not batch major
+        if argmin_grads.shape[0] != attack.batch.size:
+            argmin_grads = tf.transpose(argmin_grads, [1, 0])
 
-        if argmin_grads.shape[-1] == attack.batch.size:
-            self.gradient_argmin = tf.transpose(argmin_grads, [1, 0])
-        else:
-            self.gradient_argmin = argmin_grads
+        return argmin_grads
+
+
+class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+
+        assert k >= 0
+
+        self.gradient_argmin = self.get_argmin_softmax_gradient(attack)
 
         super().__init__(
             attack,
@@ -307,33 +277,14 @@ class AlignmentFreeCWMaxMin(Bases.BaseAlignmentLoss, Bases.KappaGreedySearchToke
         self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
 
 
-class AlignmentFreeSumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleBeamSearchTokenWeights, SoftmaxCTCLoss):
+class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights, _BaseCTCGradientsPath):
     def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
 
-        with tf.GradientTape() as tape:
-
-            tape.watch(attack.victim.logits)
-
-            path_gradient_loss = self.ctc(
-                labels=attack.placeholders.targets,
-                logits=attack.victim.logits,
-                label_length=attack.placeholders.target_lengths,
-                logit_length=attack.batch.audios["ds_feats"],
-                blank_index=-1,
-                logits_time_major=False,
-                apply_softmax=False,
-
-            )
-
-        gradients = tape.gradient(
-            path_gradient_loss,
-            attack.victim.logits
-        )
-        argmin_grads = tf.argmin(gradients, axis=-1)
+        self.gradient_argmin = self.get_argmin_softmax_gradient(attack)
 
         super().__init__(
             attack,
-            custom_target=argmin_grads,
+            custom_target=self.gradient_argmin,
             use_softmax=True,
             weight_settings=weight_settings,
             updateable=updateable,
@@ -351,3 +302,14 @@ class AlignmentFreeSumLogProbsForward(Bases.BaseAlignmentLoss, Bases.SimpleBeamS
 
         self.loss_fn = - self.fwd_target_log_probs
 
+
+GRADIENT_PATHS = {
+    "cw": CWMaxMin,
+    "sumlogprobs-fwd": SumLogProbsForward
+}
+
+CTC = {
+    "ctc": CTCLoss,
+    "ctc2": CTCLossV2,
+    "ctc-softmax": SoftmaxCTCLoss,
+}
