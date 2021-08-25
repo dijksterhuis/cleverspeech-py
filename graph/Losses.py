@@ -123,7 +123,7 @@ class L2CarliniLoss(SimpleWeightings):
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
-        l2delta = tf.reduce_mean(attack.perturbations ** 2, axis=1)
+        l2delta = tf.reduce_mean(attack.delta_graph.perturbations ** 2, axis=1)
         self.loss_fn = l2delta * self.weights
 
 
@@ -139,10 +139,46 @@ class L2SquaredLoss(SimpleWeightings):
             updateable=updateable,
         )
 
+        l2delta = tf.reduce_sum(attack.delta_graph.perturbations ** 2, axis=-1)
+        self.loss_fn = l2delta * self.weights
+
+
+class L2TanhSquaredLoss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
-        l2delta = tf.reduce_sum(attack.perturbations ** 2, axis=-1)
+        l2delta = tf.reduce_sum(
+            tf.tanh(attack.delta_graph.final_deltas / 2**15) ** 2, axis=-1
+        )
+        self.loss_fn = l2delta * self.weights
+
+
+class L2TanhCarliniLoss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        l2delta = tf.reduce_mean(
+            tf.tanh(attack.delta_graph.final_deltas / 2**15) ** 2, axis=-1
+        )
         self.loss_fn = l2delta * self.weights
 
 
@@ -162,9 +198,6 @@ class L2Log10Loss(SimpleWeightings):
             numerator = tf.log(x + 1e-8)
             denominator = tf.log(tf.constant(10.0, dtype=tf.float32))
             return tf.cast(tf.cast(numerator / denominator, dtype=tf.int32), dtype=tf.float32)
-
-        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
-        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
         l2delta = tf.reduce_sum(attack.perturbations ** 2, axis=-1)
         self.loss_fn = l2delta / tf.pow(10.0, log10(l2delta) + 1)
@@ -209,10 +242,26 @@ class LinfLoss(SimpleWeightings):
             updateable=updateable,
         )
 
-        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
-        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
+        l2delta = tf.reduce_max(tf.abs(attack.delta_graph.perturbations), axis=1)
+        self.loss_fn = l2delta * self.weights
 
-        l2delta = tf.reduce_max(tf.abs(attack.perturbations), axis=1)
+
+class LinfTanhLoss(SimpleWeightings):
+    """
+    L2 loss component from https://arxiv.org/abs/1801.01944
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        l2delta = tf.reduce_max(
+            tf.abs(tf.tanh(attack.delta_graph.final_deltas / 2**15)),
+            axis=1
+        )
         self.loss_fn = l2delta * self.weights
 
 
@@ -227,9 +276,6 @@ class RootMeanSquareLoss(SimpleWeightings):
             weight_settings=weight_settings,
             updateable=updateable,
         )
-
-        # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
-        # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
         l2delta = tf.sqrt(tf.reduce_mean(attack.perturbations ** 2, axis=-1))
         self.loss_fn = l2delta * self.weights
