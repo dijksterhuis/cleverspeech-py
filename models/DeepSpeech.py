@@ -169,18 +169,22 @@ class Model(ABC):
         batches and can lead to weird issues like low decoder confidence scores
         or misspellings in transcriptions.
         """
+        for name in list(tf.app.flags.FLAGS):
+            delattr(tf.app.flags.FLAGS, name)
         try:
             # does a flag value currently exist?
             assert tf.app.flags.FLAGS.train is not None
         except AttributeError:
             # no
-            self.__configure()
+            pass
 
         else:
             # yes -- see this comment:
             # https://github.com/abseil/abseil-py/issues/36#issuecomment-362367370
             for name in list(tf.app.flags.FLAGS):
                 delattr(tf.app.flags.FLAGS, name)
+
+        finally:
             self.__configure()
 
     def create_graph(self, input_tensor, seq_length, batch_size):
