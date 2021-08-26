@@ -83,14 +83,14 @@ def clipped_gradient_descent_graph(sess, batch, settings):
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
-            weight_settings=(1.0, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     else:
         attack.add_loss(
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
-            weight_settings=(1.0, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     attack.create_loss_fn()
@@ -136,14 +136,14 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
-            weight_settings=(1e3, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     else:
         attack.add_loss(
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
-            weight_settings=(1e3, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     attack.add_loss(
@@ -194,14 +194,14 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
             k=settings["kappa"],
-            weight_settings=(1e3, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     else:
         attack.add_loss(
             graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
             use_softmax=settings["use_softmax"],
-            weight_settings=(1e3, 0.5),
+            weight_settings=(1.0e3, 0.5),
             updateable=True,
         )
     attack.add_loss(

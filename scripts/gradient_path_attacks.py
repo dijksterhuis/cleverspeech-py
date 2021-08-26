@@ -29,7 +29,7 @@ def only_box_constraint_graph(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS[settings["loss"]],
-        weight_settings=(1.0, 0.5),
+        weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
     attack.create_loss_fn()
@@ -68,7 +68,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS[settings["loss"]],
-        weight_settings=(1.0, 0.5, 15),
+        weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
     attack.create_loss_fn()

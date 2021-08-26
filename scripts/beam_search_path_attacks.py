@@ -72,7 +72,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.NON_GREEDY[settings["loss"]],
-        weight_settings=(1.0, 0.5),
+        weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
     attack.create_loss_fn()
@@ -114,7 +114,7 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.NON_GREEDY[settings["loss"]],
-        weight_settings=(1.0, 0.5),
+        weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
     attack.add_loss(
@@ -161,7 +161,7 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.NON_GREEDY[settings["loss"]],
-        weight_settings=(1.0, 0.5),
+        weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
     attack.add_loss(
