@@ -44,9 +44,9 @@ class MaxOfMaxMin(Bases.SimpleGreedySearchTokenWeights):
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
-        self.loss_fn = tf.reduce_max(self.max_min, axis=1)
+        self.loss_fn = tf.reduce_max(self.max_min * self.weights, axis=1)
 
-        self.loss_fn = self.loss_fn * self.weights
+        self.loss_fn = self.loss_fn
 
 
 class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
@@ -63,9 +63,9 @@ class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
 
         self.max_diff_abs = - self.target_logit + self.max_other_logit
         self.max_diff = tf.maximum(self.max_diff_abs, -k) + k
-        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
+        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
 
-        self.loss_fn = self.loss_fn * self.weights
+        self.loss_fn = self.loss_fn
 
 
 class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
