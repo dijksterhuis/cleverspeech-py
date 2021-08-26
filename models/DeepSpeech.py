@@ -590,9 +590,10 @@ class Model(ABC):
         dense = [tf.sparse.to_dense(tf_decode[0])]
         tf_dense, probs = self.tf_run([dense, log_probs])
 
-        tf_outputs = [''.join([
-            tokens[int(x)] for x in tf_dense[0][i]
-        ]) for i in range(tf_dense[0].shape[0])]
+        tf_outputs = l_map(
+            lambda y: ''.join([tokens[int(x)] for x in y]),
+            tf_dense[0]
+        )
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
         probs = [prob[0] for prob in probs]
@@ -610,12 +611,12 @@ class Model(ABC):
 
         tf_dense, neg_sum_logits = self.tf_run([dense, log_probs])
 
-        tf_outputs = [''.join([
-            tokens[int(x)] for x in tf_dense[0][i]
-        ]) for i in range(tf_dense[0].shape[0])]
+        tf_outputs = l_map(
+            lambda y: ''.join([tokens[int(x)] for x in y]),
+            tf_dense[0]
+        )
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
-
-        neg_sum_logits = self.tf_run(log_probs)
         neg_sum_logits = [prob[0] for prob in neg_sum_logits]
+
         return tf_outputs, neg_sum_logits
