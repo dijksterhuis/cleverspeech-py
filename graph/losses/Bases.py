@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 from abc import ABC, abstractmethod
-from cleverspeech.utils.Utils import log
+from cleverspeech.utils.Utils import log, l_map
 
 
 class BaseLoss(ABC):
@@ -190,7 +190,7 @@ class _BasePathSearch(BaseAlignmentLoss):
 class _GreedySearchPath(_BasePathSearch):
     def get_most_likely_path_as_tf(self):
         return tf.cast(
-            tf.argmax(self.current, axis=-1), dtype=tf.int32
+            tf.argmax(self.attack.victim.logits, axis=-1), dtype=tf.int32
         )
 
 
@@ -247,24 +247,28 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         if len(weight_settings) == 2:
 
             self.initial, self.increment = weight_settings
-            self.upper_bound = self.initial
-            self.lower_bound = 1.0e-6
+            n = 6  # use a small default value!
 
         elif len(weight_settings) == 3:
             self.initial, self.increment, n = weight_settings
-            # never be more than N steps away from initial value
-            self.upper_bound = self.initial
-            self.lower_bound = self.safe_lower_bound(n)
 
         else:
             raise ValueError
 
-        # if we're using softmax then override user values for safety
-
         if self.use_softmax is True:
+
+            # if we're using softmax then override user values for safety
+
             self.upper_bound = 1.0
             self.lower_bound = 1.0e-6
             self.initial = 1.0e-6
+
+        else:
+
+            # never be more than N steps away from upper bound value
+
+            self.upper_bound = self.initial
+            self.lower_bound = self.safe_lower_bound(n)
 
         shape = [attack.batch.size, attack.batch.audios["ds_feats"][0]]
 
@@ -278,30 +282,49 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         initial_vals = self.initial * np.ones(shape, dtype=np.float32)
         attack.sess.run(self.weights.assign(initial_vals))
 
-    def check_token_weights(self):
+    def check_for_resets(self, successes, weights):
 
+        inits = self.initial * np.ones(weights.shape[1:], dtype=np.float32)
+
+        res = np.asarray(
+            l_map(
+                lambda x: inits if x[0] else x[1],  zip(successes, weights)
+            ),
+            dtype=np.float32
+        )
+
+        return res
+
+    def token_test(self):
         current_most_likely_path = self.get_most_likely_path_as_tf()
 
         target_argmax = tf.cast(
             self.target_argmax, dtype=tf.int32
         )
 
-        argmax_test = tf.where(
-            tf.equal(target_argmax, current_most_likely_path),
+        return tf.equal(target_argmax, current_most_likely_path)
+
+    def check_token_weights(self, batch_successes):
+
+        argmax_test = self.token_test()
+
+        updated = tf.where(
+            argmax_test,
             tf.multiply(self.increment, self.weights),
             tf.multiply(1 / self.increment, self.weights),
         )
+
         upper_bound = self.upper_bound * tf.ones_like(
-            argmax_test, dtype=tf.float32
+            updated, dtype=tf.float32
         )
         lower_bound = self.lower_bound * tf.ones_like(
-            argmax_test, dtype=tf.float32
+            updated, dtype=tf.float32
         )
 
         max_clamp = tf.where(
-            tf.greater(argmax_test, upper_bound),
+            tf.greater(updated, upper_bound),
             upper_bound,
-            argmax_test,
+            updated,
         )
         new_weights = tf.where(
             tf.less(max_clamp, lower_bound),
@@ -310,6 +333,7 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         )
 
         new_weights = self.attack.procedure.tf_run(new_weights)
+        new_weights = self.check_for_resets(batch_successes, new_weights)
 
         self.attack.sess.run(self.weights.assign(new_weights))
 
@@ -317,7 +341,7 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         raise Exception
 
     def update_many(self, batch_successes: list):
-        self.check_token_weights()
+        self.check_token_weights(batch_successes)
 
 
 class _DoubleTokenWeights(_SimpleTokenWeights):
@@ -377,7 +401,7 @@ class _DoubleTokenWeights(_SimpleTokenWeights):
         self.check_super_weights(batch_successes)
 
 
-class _KappaTokenWeights(_DoubleTokenWeights):
+class _KappaTokenWeights(_SimpleTokenWeights):
     def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         self.kappa = None
@@ -397,23 +421,55 @@ class _KappaTokenWeights(_DoubleTokenWeights):
         self.kappa = tf.Variable(
             tf.zeros(attack.batch.size, dtype=tf.float32),
         )
+        kappa_init = (self.increment ** 5) * np.ones(attack.batch.size, dtype=np.float32)
+
         self.attack.sess.run(
-            self.kappa.assign(0.0 * np.zeros(attack.batch.size))
+            self.kappa.assign(kappa_init)
         )
 
     def check_kappa(self, batch_successes):
 
-        kaps, losses, = self.attack.procedure.tf_run(
-            [self.kappa, self.attack.loss[0].loss_fn]
+        tf_vars = [
+            self.kappa, self.weights, tf.reduce_all(self.token_test(), axis=-1)
+        ]
+
+        kaps, weights, kap_test = self.attack.procedure.tf_run(tf_vars)
+
+        z = zip(batch_successes, kaps, weights, kap_test)
+
+        for idx, (suc, k, w, t) in enumerate(z):
+
+            # N.B. `t` is a numpy.bool, which is not a real bool so `t is True`
+            # actually evaluates to False when t really is True... one of the
+            # joys of dynamically typed languages:
+            # https://stackoverflow.com/a/37744300/5945794
+
+            if suc is False and bool(t) is True:
+
+                # increment kappa upwards so the perturbation can become more
+                # confident
+                kaps[idx] *= 1/self.increment
+
+                # reset the token weights, otherwise token weight updates may
+                # take a while to react to changes
+                weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
+
+            elif suc is True and bool(t) is True:
+
+                # this should map to successful adversarial examples with greedy
+                # decoding. awesome, let's try and find a smaller value of kappa
+                kaps[idx] *= 1 - (self.increment * self.increment)
+
+                # reset the token weights, otherwise token weight updates may
+                # take a while to react to changes
+                weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
+
+            else:
+                pass
+
+        self.attack.sess.run(
+            [self.kappa.assign(kaps), self.weights.assign(weights)]
         )
-
-        z = zip(batch_successes, kaps, losses)
-
-        for idx, (suc, k, l) in enumerate(z):
-            if suc is False and l <= 0:
-                kaps[idx] += 0.01 if self.use_softmax is True else 1.0
-
-        self.attack.sess.run(self.kappa.assign(kaps))
 
     def update_one(self, idx: int):
         raise Exception
