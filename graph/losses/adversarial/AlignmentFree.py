@@ -84,7 +84,7 @@ def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
         if unique_t:
             kwargs["unique"] = unique_t
 
-        result = ctc_loss_and_grad(**kwargs)
+        result = ctc_loss_and_grad(apply_softmax=apply_softmax, **kwargs)
 
         def grad(grad_loss):
             grad = [
@@ -98,7 +98,7 @@ def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
     return compute_ctc_loss(*args)
 
 
-def ctc_loss_and_grad(logits, labels, label_length, logit_length, unique=None):
+def ctc_loss_and_grad(logits, labels, label_length, logit_length, apply_softmax=False, unique=None):
     """
     Computes the actual loss and gradients.
     """
@@ -106,7 +106,7 @@ def ctc_loss_and_grad(logits, labels, label_length, logit_length, unique=None):
     num_labels = _get_dim(logits, 2)
     max_label_seq_length = _get_dim(labels, 1)
 
-    # this line is what needed to be changed to be able to get softmax
+    # this line is what needed to change from tf implementation to use softmax
     ilabel_log_probs = tf.log(logits)
 
     state_log_probs = _ilabel_to_state(labels, num_labels, ilabel_log_probs)
@@ -133,7 +133,18 @@ def ctc_loss_and_grad(logits, labels, label_length, logit_length, unique=None):
         )
 
     grad = math_ops.exp(ilabel_log_probs) - math_ops.exp(olabel_log_probs)
+
+    # revert gradient calculations back to softmax if required
+    if not apply_softmax:
+        # TODO: the equations in the below references do not match up. need time
+        #       to work through them.
+        #       -
+        #       http://www.cs.toronto.edu/%7Egraves/icml_2006.pdf
+        #       http://www.cs.toronto.edu/~graves/preprint.pdf
+        pass
+
     loss = -log_likelihood
+
     return loss, grad
 
 
@@ -193,9 +204,9 @@ class CTCLossV2(Bases.SimpleWeightings):
 
 class SoftmaxCTCLoss(Bases.SimpleWeightings):
     """
-    Tensorflow implementatons of CTC Loss take the activations/logits as input and
-    convert them to time major softmax values for us... but this means we can't take a
-    partial derivative w.r.t. the softmax outputs (only the logits).
+    Tensorflow implementatons of CTC Loss take the activations/logits as input
+    and convert them to time major softmax values for us... but this means we
+    can't take a partial derivative w.r.t. softmax outputs (only the logits).
     This class fixes that problem.
     """
 
@@ -204,76 +215,101 @@ class SoftmaxCTCLoss(Bases.SimpleWeightings):
             attack, weight_settings=weight_settings, updateable=updateable
         )
 
-        self.attack = attack
-
-        self.ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-            attack.placeholders.targets,
-            attack.placeholders.target_lengths
-        )
-
         self.loss_fn = ctc_mod(
             labels=attack.placeholders.targets,
-            logits=attack.victim.raw_logits,
+            logits=attack.victim.logits,
             label_length=attack.placeholders.target_lengths,
             logit_length=attack.batch.audios["ds_feats"],
             blank_index=-1,
-            apply_softmax=True,
-            logits_time_major=True,
+            apply_softmax=False,
+            logits_time_major=False,
         )
+        self.loss_fn *= self.weights
 
 
 class _BaseCTCGradientsPath:
     @staticmethod
     def get_argmin_softmax_gradient(attack):
 
-        # -- DO NOT USE LOGITS OR VANILLA CTC LOSS V1 --
-        # it doesn't work cos gradient stuff and things.
-
-        grad_var = attack.victim.raw_logits
-
         with tf.GradientTape() as tape:
 
-            tape.watch(grad_var)
+            tape.watch(attack.victim.logits)
 
-            ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-                attack.placeholders.targets,
-                attack.placeholders.target_lengths
-            )
-
-            loss_fn = ctc_loss(
-                labels=tf.cast(ctc_target, tf.int32),
-                inputs=grad_var,
-                sequence_length=attack.batch.audios["ds_feats"]
-            )
-
-            # loss_fn = ctc_mod(
-            #     labels=attack.placeholders.targets,
-            #     logits=grad_var,
-            #     label_length=attack.placeholders.target_lengths,
-            #     logit_length=attack.batch.audios["ds_feats"],
-            #     blank_index=-1,
-            #     logits_time_major=True,
-            #     apply_softmax=True,
+            # ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            #     attack.placeholders.targets,
+            #     attack.placeholders.target_lengths
             # )
+            #
+            # loss_fn = ctc_loss(
+            #     labels=tf.cast(ctc_target, tf.int32),
+            #     inputs=grad_var,
+            #     sequence_length=attack.batch.audios["ds_feats"]
+            # )
+
+            loss_fn = ctc_mod(
+                labels=attack.placeholders.targets,
+                logits=attack.victim.logits,
+                label_length=attack.placeholders.target_lengths,
+                logit_length=attack.batch.audios["ds_feats"],
+                blank_index=-1,
+                logits_time_major=False,
+                apply_softmax=False,
+            )
 
         gradients = tape.gradient(
             loss_fn,
-            grad_var
+            attack.victim.logits
+        )
+
+        # your tensor is not batch major
+        if gradients.shape[0] != attack.batch.size:
+            gradients = tf.transpose(gradients, [1, 0, 2])
+
+        return tf.argmin(gradients, axis=-1), gradients
+
+    @staticmethod
+    def get_argmin_activations_gradient(attack):
+
+        with tf.GradientTape() as tape:
+
+            tape.watch(attack.victim.raw_logits)
+
+            # ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+            #     attack.placeholders.targets,
+            #     attack.placeholders.target_lengths
+            # )
+            #
+            # loss_fn = ctc_loss(
+            #     labels=tf.cast(ctc_target, tf.int32),
+            #     inputs=grad_var,
+            #     sequence_length=attack.batch.audios["ds_feats"]
+            # )
+
+            loss_fn = ctc_mod(
+                labels=attack.placeholders.targets,
+                logits=attack.victim.raw_logits,
+                label_length=attack.placeholders.target_lengths,
+                logit_length=attack.batch.audios["ds_feats"],
+                blank_index=-1,
+                logits_time_major=True,
+                apply_softmax=True,
+            )
+
+        gradients = tape.gradient(
+            loss_fn,
+            attack.victim.raw_logits
         )
         # your tensor is not batch major
         if gradients.shape[0] != attack.batch.size:
             gradients = tf.transpose(gradients, [1, 0, 2])
 
-        softmax_gradients = gradients - attack.victim.logits
-        argmin_grads = tf.argmin(gradients, axis=-1)
-
-        return argmin_grads, gradients, softmax_gradients
+        return tf.argmin(gradients, axis=-1), gradients
 
 
 class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
-        self.gradient_argmin, _, _ = self.get_argmin_softmax_gradient(attack)
+        self.gradient_argmin, self.gradients = self.get_argmin_activations_gradient(attack)
 
         super().__init__(
             attack,
@@ -301,7 +337,7 @@ class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights, _BaseCTCGradientsPa
         weight_settings[1] = 1 / weight_settings[1]
         weight_settings = tuple(weight_settings)
 
-        self.gradient_argmin, _, _ = self.get_argmin_softmax_gradient(attack)
+        self.gradient_argmin, _ = self.get_argmin_activations_gradient(attack)
 
         super().__init__(
             attack,
