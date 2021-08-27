@@ -104,6 +104,7 @@ def attack_run(master_settings):
     decoder = master_settings["decoder"]
     outdir = master_settings["outdir"]
 
+    outdir = os.path.join(outdir, "gradient_path")
     outdir = os.path.join(outdir, attack_type)
     outdir = os.path.join(outdir, "{}/".format(loss))
     outdir = os.path.join(outdir, "{}/".format(decoder))
