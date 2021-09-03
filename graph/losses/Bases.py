@@ -197,14 +197,22 @@ class _GreedySearchPath(_BasePathSearch):
 class _BeamSearchPath(_BasePathSearch):
     def get_most_likely_path_as_tf(self):
 
+        # TODO: This method is no longer called on every update step as it's
+        #       assumed that it's used to allocate a static graph of TF
+        #       variables to avoid memory leakage -- this means the tests
+        #       against decoder alignment won't work correctly.
+
         smax = self.attack.procedure.tf_run(self.attack.victim.logits)
         lengths = self.attack.batch.audios["ds_feats"]
 
         _, _, toks, times = self.attack.victim.ds_decode_batch_no_lm(
             smax, lengths, top_five=False, with_metadata=True
         )
-
-        blanks = np.ones(self.target_argmax.shape, dtype=np.int32) * 28
+        shape = [
+            self.attack.batch.size,
+            self.attack.batch.audios["max_feats"]
+        ]
+        blanks = np.ones(shape, dtype=np.int32) * 28
 
         for idx, (tok, time) in enumerate(zip(toks, times)):
             blanks[idx, time] = tok

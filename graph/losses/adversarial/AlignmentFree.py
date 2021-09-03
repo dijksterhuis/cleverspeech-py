@@ -327,7 +327,7 @@ class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
         self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
 
 
-class SumLogProbsForward(Bases.SimpleBeamSearchTokenWeights, _BaseCTCGradientsPath):
+class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradientsPath):
     def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
 
         # flip the increment round so it's actually doing the opposite but don't
