@@ -4,7 +4,7 @@ import random
 import numpy as np
 
 from cleverspeech.utils.Utils import np_arr, np_zero, lcomp, l_map, log
-from cleverspeech.data.utils import WavFile
+from cleverspeech.data.utils import wav_file
 
 TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
 
@@ -90,7 +90,7 @@ class Audios(IterableETL):
         audio_fps = l_map(lambda x: x[1], batched_file_path_data)
         basenames = l_map(lambda x: x[2], batched_file_path_data)
 
-        audios = lcomp([WavFile.load(f, dtype) for f in audio_fps])
+        audios = lcomp([wav_file.load(f, dtype) for f in audio_fps])
 
         # N.B. ==> If audios is 0 at any point then the perturbation will always
         # be zero for that sample due to a zero gradient. so add 1 to zero

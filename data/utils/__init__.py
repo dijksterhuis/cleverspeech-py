@@ -1,1 +1,1 @@
-from cleverspeech.data.utils import WavFile
+from cleverspeech.data.utils import wav_file

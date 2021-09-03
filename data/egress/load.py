@@ -5,7 +5,7 @@ import numpy as np
 
 from bz2 import compress as bz2_compress
 from os import path, makedirs
-from cleverspeech.data.utils import WavFile
+from cleverspeech.data.utils import wav_file
 
 
 def convert_types_for_json(results):
@@ -80,7 +80,7 @@ def write_latest_audio_to_local_wav_file(outdir, data, bit_depth=16, sample_rate
 
         file_path = path.join(outdir, file_name)
 
-        WavFile.write(
+        wav_file.write(
             file_path,
             data[wav_file],
             sample_rate=sample_rate,
