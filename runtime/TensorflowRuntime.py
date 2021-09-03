@@ -1,6 +1,32 @@
 import tensorflow as tf
 
 
+class OOMEnabledSession(tf.Session):
+    def run(self, fetches, feed_dict=None, options=None, run_metadata=None):
+
+        # note that oom reports can slow down the sess.run calls, so only use it
+        # when something bad has definitely happened... see:
+        # https://github.com/tensorflow/tensorflow/blob/v2.6.0/tensorflow/core/protobuf/config.proto#L718
+
+        try:
+            return super().run(
+                fetches,
+                feed_dict=feed_dict,
+                options=options,
+                run_metadata=run_metadata
+            )
+
+        except tf.errors.ResourceExhaustedError:
+            return super().run(
+                fetches,
+                feed_dict=feed_dict,
+                options=tf.RunOptions(
+                    report_tensor_allocations_upon_oom=True
+                ),
+                run_metadata=run_metadata
+            )
+
+
 class TFRuntime:
     def __init__(self, device_id=None):
 
@@ -15,7 +41,7 @@ class TFRuntime:
         else:
             device = "/device:GPU:{}".format(device_id)
 
-        self.session = tf.Session(config=self.config)
+        self.session = OOMEnabledSession(config=self.config)
 
         self.device = tf.device(device)
 
