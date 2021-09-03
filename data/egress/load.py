@@ -73,16 +73,16 @@ def s3_pseudo_make_dirs(bucket, file_path):
 
 def write_latest_audio_to_local_wav_file(outdir, data, bit_depth=16, sample_rate=16000):
 
-    for wav_file in ["audio", "deltas", "advs"]:
+    for file_name_type in ["audio", "deltas", "advs"]:
 
         file_name = data['basenames'].rstrip(".wav")
-        file_name = file_name + "_{}.wav".format(wav_file)
+        file_name = file_name + "_{}.wav".format(file_name_type)
 
         file_path = path.join(outdir, file_name)
 
         wav_file.write(
             file_path,
-            data[wav_file],
+            data[file_name_type],
             sample_rate=sample_rate,
             bit_depth=bit_depth
         )
