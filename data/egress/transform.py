@@ -2,10 +2,10 @@ import numpy as np
 
 from collections import OrderedDict
 
-from cleverspeech.data.egress.metrics.ErrorRates import character_error_rate
-from cleverspeech.data.egress.metrics.ErrorRates import word_error_rate
-from cleverspeech.data.egress.metrics.DetectionMetrics import lnorm
-from cleverspeech.data.egress.metrics.DetectionMetrics import peak_to_peak
+from cleverspeech.data.metrics.transcription_error import character_error_rate
+from cleverspeech.data.metrics.transcription_error import word_error_rate
+from cleverspeech.data.metrics.dsp_metrics import lnorm
+from cleverspeech.data.metrics.dsp_metrics import peak_to_peak
 from cleverspeech.utils.Utils import log
 
 

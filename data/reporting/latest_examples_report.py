@@ -12,8 +12,8 @@ import multiprocessing as mp
 from collections import OrderedDict
 from cleverspeech.utils.Utils import log, l_map
 
-from cleverspeech.dsp import metrics
-from cleverspeech.dsp import weighting_curves
+from cleverspeech.data.metrics import dsp_metrics
+from cleverspeech.data.metrics import weighting_curves
 
 from deepspeech import Model
 
@@ -239,14 +239,14 @@ def get_snr_stats(audios: dict):
 
     snr_analysis_fns = OrderedDict(
         [
-            ("snr_energy_db", metrics.snr_energy_db),
+            ("snr_energy_db", dsp_metrics.snr_energy_db),
             # ("snr_energy", metrics.snr_energy),
-            ("snr_pow_db", metrics.snr_power_db),
+            ("snr_pow_db", dsp_metrics.snr_power_db),
             # ("snr_pow", metrics.snr_power),
-            ("snr_seg_db", metrics.snr_segmented),
-            ("snr_loudness_k_db", metrics.snr_loudness_k_weighted_db),
-            ("snr_loudness_deman_db", metrics.snr_loudness_deman_db),
-            ("snr_rms_amplitude_db", metrics.snr_rms_amplitude),
+            ("snr_seg_db", dsp_metrics.snr_segmented),
+            ("snr_loudness_k_db", dsp_metrics.snr_loudness_k_weighted_db),
+            ("snr_loudness_deman_db", dsp_metrics.snr_loudness_deman_db),
+            ("snr_rms_amplitude_db", dsp_metrics.snr_rms_amplitude),
         ]
     )
 
@@ -279,7 +279,7 @@ def get_lnorm_stats(audios: dict):
     prod = itertools.product(l_norm_keys, fnames, weights)
     res = {
         "{l_s}.{f}.{w}".format(l_s=l_s, f=f, w=w):
-            metrics.lnorm(audios[f][w], norm=l_t) for (l_s, l_t), f, w in prod
+            dsp_metrics.lnorm(audios[f][w], norm=l_t) for (l_s, l_t), f, w in prod
     }
 
     return OrderedDict(res)
@@ -289,16 +289,16 @@ def get_dsp_stats(audios: dict):
 
     dsp_analysis_fns = OrderedDict(
         [
-            ("rms_amp_db", metrics.rms_amplitude_db),
+            ("rms_amp_db", dsp_metrics.rms_amplitude_db),
             # ("rms_amp", metrics.rms_amplitude),
-            ("energy_db", metrics.energy_db),
+            ("energy_db", dsp_metrics.energy_db),
             # ("energy", metrics.energy),
-            ("power_db", metrics.power_db),
+            ("power_db", dsp_metrics.power_db),
             # ("power", metrics.power),
-            ("k_loudness_db", metrics.loudness_k_weighted_db),
-            ("deman_loudness_db", metrics.loudness_deman_db),
-            ("crest_factor_db", metrics.crest_factor_db),
-            ("thdn_db", metrics.thdn_db),
+            ("k_loudness_db", dsp_metrics.loudness_k_weighted_db),
+            ("deman_loudness_db", dsp_metrics.loudness_deman_db),
+            ("crest_factor_db", dsp_metrics.crest_factor_db),
+            ("thdn_db", dsp_metrics.thdn_db),
         ]
     )
 

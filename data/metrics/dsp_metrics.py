@@ -1,6 +1,19 @@
 import numpy as np
+import pyloudnorm as pyln
 import python_speech_features as psf
 from math import sqrt
+
+import waveform_analysis.thd
+
+
+def to_db(x):
+    """
+    db(x) = 10.log10(x)
+
+    :param x: audio signal vector of values over time
+    :return: audio signal converted to decibels relative to full scale
+    """
+    return 10 * np.log10(x)
 
 
 def lnorm(x, norm=2):
@@ -10,6 +23,10 @@ def lnorm(x, norm=2):
         return np.count_nonzero(x != 0)
     else:
         return np.power(np.sum(np.power(np.abs(x), norm)), 1 / norm)
+
+
+def lnorm_db(x, norm=2):
+    return to_db(lnorm(x, norm=norm))
 
 
 def peak_to_peak(x):
@@ -29,7 +46,7 @@ def energy(x):
     :param x: audio signal vector of amplitudes over time
     :return: energy of the signal
     """
-    return sum([i**2 for i in np.abs(x)])
+    return np.sum(np.square(np.abs(x)))
 
 
 def energy_db(x):
@@ -69,7 +86,7 @@ def rms_amplitude(x):
     :param x: audio signal vector of amplitudes over time
     :return: rms amplitude of audio signal
     """
-    return sqrt(power(x))
+    return sqrt(np.mean(np.square(x)))
 
 
 def rms_amplitude_db(x):
@@ -78,16 +95,6 @@ def rms_amplitude_db(x):
     :return: rms amplitude of signal in decibels relative to full scale
     """
     return to_db(rms_amplitude(x))
-
-
-def to_db(x):
-    """
-    db(x) = 10.log10(x)
-
-    :param x: audio signal vector of values over time
-    :return: audio signal converted to decibels relative to full scale
-    """
-    return 10 * np.log10(x)
 
 
 def snr_power(error_signal, original_signal):
@@ -136,7 +143,7 @@ def snr_energy_db(error_signal, original_signal):
 
 def snr_rms_amplitude(error_signal, original_signal):
     """
-    SNR_db = 10.log10[ (A_s / A_n) ^2] = 20.log10(A_s/A_n)
+    SNR_db = 20.log10[ (A_s / A_n) ^2] = 20.log10(A_s/A_n)
 
     :param error_signal: adversarial example signal
     :param original_signal: original example signal
@@ -179,7 +186,7 @@ def nsr_energy(error_signal, original_signal):
 
 def nsr_rms_amplitude(error_signal, original_signal):
     """
-    NSR_rms = 10.log10[ (A(e) / A(x)) ^2] = 20.log10(A(e)/A(x))
+    NSR_rms = 20.log10[ (A(e) / A(x)) ^2] = 20.log10(A(e)/A(x))
 
     :param error_signal: adversarial example signal adversarial example signal
     :param original_signal: original example signal
@@ -205,10 +212,58 @@ def snr_segmented(error_signal, original_signal, frame_size=512):
 
     original_frame = psf.sigproc.framesig(error_signal, frame_size, frame_size)
     error_frame = psf.sigproc.framesig(original_signal, frame_size, frame_size)
-
-    logged = to_db(snr_energy(original_frame, error_frame))
-
-    return sum(logged) / frame_size
-
+    segmented_energy = snr_energy(original_frame, error_frame)
+    segmented_power = np.sum(segmented_energy / frame_size)
+    return to_db(segmented_power)
 
 
+def loudness_k_weighted_db(signal, sample_rate=16000, block_size=0.200):
+    """
+    https://csteinmetz1.github.io/pyloudnorm-eval/paper/pyloudnorm_preprint.pdf
+    """
+    meter = pyln.Meter(sample_rate, block_size=block_size)
+    return meter.integrated_loudness(signal)
+
+
+def snr_loudness_k_weighted_db(error_signal, original_signal, sample_rate=16000, block_size=0.200):
+    error = loudness_k_weighted_db(
+        error_signal, sample_rate=sample_rate, block_size=block_size
+    )
+    original = loudness_k_weighted_db(
+        original_signal, sample_rate=sample_rate, block_size=block_size
+    )
+    return original - error
+
+
+def loudness_deman_db(signal, sample_rate=16000, block_size=0.200):
+    """
+    https://csteinmetz1.github.io/pyloudnorm-eval/paper/pyloudnorm_preprint.pdf
+    """
+    meter = pyln.Meter(sample_rate, block_size=block_size,  filter_class="DeMan")
+    return meter.integrated_loudness(signal)
+
+
+def snr_loudness_deman_db(error_signal, original_signal, sample_rate=16000, block_size=0.200):
+    error = loudness_deman_db(
+        error_signal, sample_rate=sample_rate, block_size=block_size
+    )
+    original = loudness_deman_db(
+        original_signal, sample_rate=sample_rate, block_size=block_size
+    )
+    return original - error
+
+
+def thdn(signal, sample_rate=16000):
+    return waveform_analysis.thd.THDN(signal, sample_rate)
+
+
+def thdn_db(signal, sample_rate=16000):
+    return to_db(waveform_analysis.thd.THDN(signal, sample_rate))
+
+
+def crest_factor(signal):
+    return np.max(np.abs(signal)) / rms_amplitude(signal)
+
+
+def crest_factor_db(signal):
+    return to_db(np.max(np.abs(signal)) / rms_amplitude(signal))
