@@ -274,26 +274,26 @@ class _BaseCTCGradientsPath:
 
             tape.watch(attack.victim.raw_logits)
 
-            # ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
-            #     attack.placeholders.targets,
-            #     attack.placeholders.target_lengths
-            # )
-            #
-            # loss_fn = ctc_loss(
-            #     labels=tf.cast(ctc_target, tf.int32),
-            #     inputs=grad_var,
-            #     sequence_length=attack.batch.audios["ds_feats"]
-            # )
-
-            loss_fn = ctc_mod(
-                labels=attack.placeholders.targets,
-                logits=attack.victim.raw_logits,
-                label_length=attack.placeholders.target_lengths,
-                logit_length=attack.batch.audios["ds_feats"],
-                blank_index=-1,
-                logits_time_major=True,
-                apply_softmax=True,
+            ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
+                attack.placeholders.targets,
+                attack.placeholders.target_lengths
             )
+
+            loss_fn = ctc_loss(
+                labels=tf.cast(ctc_target, tf.int32),
+                inputs=attack.victim.raw_logits,
+                sequence_length=attack.batch.audios["ds_feats"]
+            )
+
+            # loss_fn = ctc_mod(
+            #     labels=attack.placeholders.targets,
+            #     logits=attack.victim.raw_logits,
+            #     label_length=attack.placeholders.target_lengths,
+            #     logit_length=attack.batch.audios["ds_feats"],
+            #     blank_index=-1,
+            #     logits_time_major=True,
+            #     apply_softmax=True,
+            # )
 
         gradients = tape.gradient(
             loss_fn,
