@@ -5,7 +5,7 @@ from cleverspeech import data
 from cleverspeech import graph
 from cleverspeech import models
 
-from cleverspeech.config.ExperimentArguments import args
+from cleverspeech.config.arguments_parser import args
 from cleverspeech.runtime.Execution import default_manager
 from cleverspeech.utils.Utils import log
 

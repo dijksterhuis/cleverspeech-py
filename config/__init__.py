@@ -1,2 +1,2 @@
-from cleverspeech.config import ExperimentArguments
+from cleverspeech.config import arguments_parser
 
