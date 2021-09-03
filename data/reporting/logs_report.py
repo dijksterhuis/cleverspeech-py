@@ -154,7 +154,7 @@ def main(log_file_path, outpath):
 
         bname, step = row["basenames"], row["step"]
         basename_ordered[bname] = {step: row}
-        row["l2_n"] = row["l2"] / row["l0"]
+        row["l2_n"] = row["l2"] / row["l0"] if row["l0"] > 0 else row["l2"]
 
         if step not in step_ordered.keys():
             step_ordered[step] = [row]
