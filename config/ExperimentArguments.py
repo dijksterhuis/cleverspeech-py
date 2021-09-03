@@ -1,3 +1,4 @@
+import os
 import sys
 import random
 import argparse
@@ -28,7 +29,7 @@ def args(attack_run, additional_args: dict = None):
         "pgd_rounding": [int, 0, False, [0, 1]],
         "delta_randomiser": [float, 0.0, False, None],
         "beam_width": [int, 500, False, None],
-        # 4568 is the random seed used by DeepSpeech v0.4.1 in utils/flags.py
+        # 4568 is the random seed used by DeepSpeech
         "random_seed": [int, 4568, False, None],
         "align": [
             str, list(ALL_PATHS.keys())[0], False, ALL_PATHS.keys()
