@@ -240,6 +240,18 @@ class _BaseBinarySearches(_BasePathSearch):
 
 class _SimpleTokenWeights(_BaseBinarySearches):
 
+    def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
+
+        self.tf_new_weights = None
+
+        super().__init__(
+            attack,
+            custom_target=custom_target,
+            weight_settings=weight_settings,
+            updateable=updateable,
+            use_softmax=use_softmax,
+        )
+
     def init_weights(self, attack, weight_settings):
 
         weight_settings = [float(s) for s in weight_settings]
@@ -282,6 +294,8 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         initial_vals = self.initial * np.ones(shape, dtype=np.float32)
         attack.sess.run(self.weights.assign(initial_vals))
 
+        self.tf_new_weights = self.create_tf_tokens_test_graph()
+
     def check_for_resets(self, successes, weights):
 
         inits = self.initial * np.ones(weights.shape[1:], dtype=np.float32)
@@ -295,7 +309,7 @@ class _SimpleTokenWeights(_BaseBinarySearches):
 
         return res
 
-    def token_test(self):
+    def create_tf_token_test_bool_graph(self):
         current_most_likely_path = self.get_most_likely_path_as_tf()
 
         target_argmax = tf.cast(
@@ -304,9 +318,8 @@ class _SimpleTokenWeights(_BaseBinarySearches):
 
         return tf.equal(target_argmax, current_most_likely_path)
 
-    def check_token_weights(self, batch_successes):
-
-        argmax_test = self.token_test()
+    def create_tf_tokens_test_graph(self):
+        argmax_test = self.create_tf_token_test_bool_graph()
 
         updated = tf.where(
             argmax_test,
@@ -326,13 +339,15 @@ class _SimpleTokenWeights(_BaseBinarySearches):
             upper_bound,
             updated,
         )
-        new_weights = tf.where(
+        return tf.where(
             tf.less(max_clamp, lower_bound),
             lower_bound,
             max_clamp,
         )
 
-        new_weights = self.attack.procedure.tf_run(new_weights)
+    def check_token_weights(self, batch_successes):
+
+        new_weights = self.attack.procedure.tf_run(self.tf_new_weights)
         new_weights = self.check_for_resets(batch_successes, new_weights)
 
         self.attack.sess.run(self.weights.assign(new_weights))
@@ -414,12 +429,16 @@ class _KappaTokenWeights(_SimpleTokenWeights):
             use_softmax=use_softmax,
         )
 
+        self.tf_tokens_test_check = tf.reduce_all(
+            self.create_tf_token_test_bool_graph(), axis=-1
+        )
+
     def init_weights(self, attack, weight_settings):
 
         super().init_weights(attack, weight_settings)
 
         self.kappa = tf.Variable(
-            tf.zeros(attack.batch.size, dtype=tf.float32),
+            tf.zeros(attack.batch.size, dtype=tf.float32), name="qq_kappa"
         )
         kappa_init = (self.increment ** 5) * np.ones(attack.batch.size, dtype=np.float32)
 
@@ -430,7 +449,7 @@ class _KappaTokenWeights(_SimpleTokenWeights):
     def check_kappa(self, batch_successes):
 
         tf_vars = [
-            self.kappa, self.weights, tf.reduce_all(self.token_test(), axis=-1)
+            self.kappa, self.weights, self.tf_tokens_test_check
         ]
 
         kaps, weights, kap_test = self.attack.procedure.tf_run(tf_vars)
@@ -467,9 +486,11 @@ class _KappaTokenWeights(_SimpleTokenWeights):
             else:
                 pass
 
-        self.attack.sess.run(
-            [self.kappa.assign(kaps), self.weights.assign(weights)]
-        )
+        self.attack.sess.run(self.kappa.assign(kaps))
+
+        # self.attack.sess.run(
+        #     [self.kappa.assign(kaps), self.weights.assign(weights)]
+        # )
 
     def update_one(self, idx: int):
         raise Exception
