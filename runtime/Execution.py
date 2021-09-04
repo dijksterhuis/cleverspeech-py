@@ -124,6 +124,11 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
         from cleverspeech.data.egress.transform import transforms_gen
         results_transform_fn = transforms_gen
 
+    # modify this as late as possible to catch any added directories in exp defs
+    settings["outdir"] = os.path.join(
+        settings["outdir"], str(settings["unique_run_id"])
+    )
+
     results_queue = mp.JoinableQueue()
     log("Initialised the results queue.")
 
