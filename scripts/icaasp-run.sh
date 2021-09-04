@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 BASE_IMAGE=dijksterhuis/cleverspeech:latest
+docker pull ${BASE_IMAGE}
 docker tag ${BASE_IMAGE} dijksterhuis/cleverspeech:icaasp
 # ./build.sh
 #docker push dijksterhuis/cleverspeech:icaasp
@@ -22,14 +23,14 @@ for RANDOM in 4567 3 3248 62977 99999
 do
   NAME=icaasp-${GPU_DEVICE}-${EXP_SET}-${RANDOM}
   ${DOCKER_CMD} --name "${NAME}" ${BASE_IMAGE} \
-    python3 ./icaasp.py \
+    python3 ./cleverspeech/scripts/icaasp.py \
       --set "${EXP_SET}" \
       --max_examples ${EXAMPLES} \
       --batch_size ${BTC} \
       --nsteps ${STEPS} \
       --decode_step ${DECODE_STEP} \
       --random_seed ${RANDOM} \
-      --outdir ./icaasp/${RANDOM} \
+      --outdir ./adv/icaasp/${RANDOM} \
       --delta_randomiser 0.01 \
       --rescale 0.9 \
       --learning_rate 10.0 2>&1 | tee -a "${NAME}.log"
