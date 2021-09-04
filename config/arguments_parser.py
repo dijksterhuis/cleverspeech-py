@@ -126,13 +126,7 @@ def args(attack_run, additional_args: dict = None):
                 master_settings, k, arguments.__getattribute__(k)[0]
             )
 
-    # set up a unique hash for this run
-    run_hash_id = random.getrandbits(32)
-
-    master_settings["unique_run_id"] = run_hash_id
-    master_settings["outdir"] = os.path.join(
-        master_settings["outdir"], str(run_hash_id)
-    )
+    master_settings["unique_run_id"] = random.getrandbits(32)
 
     if arguments.random_seed[0] is not None:
         seed = arguments.random_seed[0]
