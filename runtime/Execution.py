@@ -89,7 +89,7 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
         log(funcs=tf_runtime.log_attack_tensors)
 
         s = "Beginning attack run...\nMonitor progress in: {}".format(
-            settings["outdir"] + "log.txt"
+            os.path.join(settings["outdir"], "log.txt")
         )
         log(s)
 
@@ -137,7 +137,7 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
 
     # modify this as late as possible to catch any added directories in exp defs
     settings["outdir"] = os.path.join(
-        settings["outdir"], settings["unique_run_id"]
+        settings["outdir"], str(settings["unique_run_id"])
     )
 
     try:
