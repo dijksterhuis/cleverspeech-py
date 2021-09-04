@@ -140,11 +140,6 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
     writer_process.start()
     log("Started a writer subprocess.")
 
-    # modify this as late as possible to catch any added directories in exp defs
-    settings["outdir"] = os.path.join(
-        settings["outdir"], str(settings["unique_run_id"])
-    )
-
     try:
 
         for b_id, batch in batch_gen:
