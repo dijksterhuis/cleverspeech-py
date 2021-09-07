@@ -29,7 +29,7 @@ def cgd_ctc_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder=settings["decoder"],
+        decoder="tf_greedy",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.CTCLoss,
@@ -66,7 +66,7 @@ def cgd_ctc_beam_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder=settings["decoder"],
+        decoder="batch_no_lm",
         beam_width=500,
     )
     attack.add_loss(
@@ -814,30 +814,32 @@ def attack_run(master_settings):
 
 ATTACK_GRAPHS = {
   0: {
-    "cw-grad": cgd_cw_gradient_path_greedy_search_graph,
     "cw-sparse": cgd_cw_sparse_align_greedy_search_graph,
     "cw-mid": cgd_cw_mid_align_greedy_search_graph,
     "cw-dense": cgd_cw_dense_align_greedy_search_graph,
     "cw-ctcalign": cgd_cw_ctcalign_greedy_search_graph,
   },
   1: {
-    "ctc-greedy": cgd_ctc_greedy_search_graph,
+    "cw-grad": cgd_cw_gradient_path_greedy_search_graph,
     "cw-patchstart": cgd_cw_patchstart_align_greedy_search_graph,
     "cw-patchmid": cgd_cw_patchmid_align_greedy_search_graph,
     "cw-patchend": cgd_cw_patchend_align_greedy_search_graph,
   },
   2: {
-    "lprobs-grad": cgd_logprobs_gradient_path_beam_search_graph,
     "lprobs-sparse": cgd_logprobs_sparse_align_greedy_search_graph,
     "lprobs-mid": cgd_logprobs_mid_align_greedy_search_graph,
     "lprobs-dense": cgd_logprobs_dense_align_greedy_search_graph,
     "lprobs-ctcalign": cgd_logprobs_ctcalign_greedy_search_graph,
   },
   3: {
-    "ctc-beam": cgd_ctc_beam_search_graph,
+    "lprobs-grad": cgd_logprobs_gradient_path_beam_search_graph,
     "lprobs-patchstart": cgd_logprobs_patchstart_align_greedy_search_graph,
     "lprobs-patchmid": cgd_logprobs_patchmid_align_greedy_search_graph,
     "lprobs-patchend": cgd_logprobs_patchend_align_greedy_search_graph,
+  },
+  4: {
+    "ctc-greedy": cgd_ctc_greedy_search_graph,
+    "ctc-beam": cgd_ctc_beam_search_graph,
   }
 }
 
