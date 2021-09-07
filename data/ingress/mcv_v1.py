@@ -255,6 +255,141 @@ class Targets(IterableETL):
         return indices
 
 
+class SecondStageTargets(IterableETL):
+
+    def __init__(self, indir):
+
+        self.pool = list(
+            filter(
+                lambda x: ".json" in x and "sample" in x,
+                l_map(lambda i: os.path.join(indir, i), os.listdir(indir))
+           )
+        )
+        self.indir = indir
+
+    def __next__(self, *args):
+        return self.create_batch(*args)
+
+    def create_batch(self, batch_size, trues_batch, audios_batch):
+
+        jsonified_basenames = l_map(
+            lambda x: x.replace(".wav", ".json"), audios_batch["basenames"]
+        )
+
+        ordered_target_file_paths = l_map(
+            lambda x: self.pool.pop(
+                self.pool.index(os.path.join(self.indir, x))
+            ),
+            jsonified_basenames
+        )
+
+        def open_json(fpath):
+            with open(fpath, 'r') as f:
+                data = json.load(f)[0]
+            return data
+
+        batched_json_data = l_map(
+            lambda x: open_json(x), ordered_target_file_paths
+        )
+
+        target_phrases = l_map(
+            lambda x: x["phrases"][0], batched_json_data
+        )
+        row_ids = l_map(
+            lambda x: x["row_ids"][0], batched_json_data
+        )
+        tokens = batched_json_data[0]["tokens"][0]
+        lengths = l_map(
+            lambda x: int(x["lengths"][0]), batched_json_data
+        )
+        original_indices = l_map(
+            lambda x: x["original_indices"], batched_json_data
+        )
+        indices = l_map(
+            lambda x: np.argmax(x["softmax_logits"], axis=-1),
+            batched_json_data
+        )
+
+        def validate(argmaxed, original):
+            merged_argmax = []
+            prev = None
+
+            for entry in argmaxed:
+
+                if prev is None and entry != 28:
+                    merged_argmax.append(entry)
+
+                elif prev is None:
+                    merged_argmax.append(entry)
+
+                elif prev == entry:
+                    pass
+
+                else:
+                    merged_argmax.append(entry)
+
+                prev = entry
+
+            reduced_argmax = list(filter(lambda x: x != 28, merged_argmax))
+
+            return all(x == y for x, y in zip(reduced_argmax, original))
+
+        validate_merge_reduce = l_map(
+            lambda x: validate(*x),
+            zip(indices, original_indices)
+        )
+        try:
+            assert all(x is True for x in validate_merge_reduce)
+
+        except AssertionError as e:
+
+            s = "\033[1;31mERROR:\033[1;0m "
+            s += "Not all target alignments match the intended target phrase!"
+            s += "\n\nCheck your input data located in {}".format(self.indir)
+            s += "\n==> Make sure that argmax(softmax, axis=-1) "
+            s += "matches the target phrases"
+
+            errors = l_map(
+                lambda x: (x[0], x[1]),
+                enumerate(validate_merge_reduce)
+            )
+
+            filtered_errors = l_map(
+                lambda x: x[0],
+                list(filter(lambda x: x[1] is False, errors))
+            )
+
+            error_basenames = l_map(
+                lambda i: jsonified_basenames[i],
+                filtered_errors
+            )
+
+            s += "\n\nThe following files are causing errors:\n"
+            s += "\n".join(error_basenames)
+
+            log(s)
+            raise
+
+        maxlen = audios_batch["max_feats"]
+
+        padded_indices = np_arr(
+            l_map(
+                lambda x: np.concatenate([x, np.zeros(maxlen - len(x))]),
+                indices
+            ),
+            np.int32
+        )
+
+        return {
+            "tokens": tokens,
+            "phrases": target_phrases,
+            "row_ids": row_ids,
+            "indices": padded_indices,
+            "original_indices": original_indices,  # may modify for alignments
+            "lengths": lengths,
+        }
+
+
 def create_true_batch(audio_batch, tokens=TOKENS):
     metadata_fps = l_map(
         lambda fp: fp.replace(".wav", ".json"), audio_batch["file_paths"]
