@@ -450,6 +450,47 @@ def cgd_cw_ctcalign_greedy_search_graph(sess, batch, settings):
     return attack
 
 
+def cgd_cw_monosparse_greedy_search_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    attack.add_path_search(
+      graph.Paths.RandomMonotonicSparse
+    )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.ClippedGradientDescent,
+        random_scale=settings["delta_randomiser"],
+        constraint_cls=graph.Constraints.L2,
+        r_constant=settings["rescale"],
+        update_method="geom",
+    )
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder="tf_greedy",
+    )
+    attack.add_loss(
+        graph.losses.adversarial.AlignmentBased.CWMaxMin,
+        weight_settings=(1.0e3, 0.5),
+        updateable=True,
+    )
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"],
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"],
+    )
+
+    return attack
+
+
 def cgd_logprobs_gradient_path_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
@@ -818,6 +859,7 @@ ATTACK_GRAPHS = {
     "cw-mid": cgd_cw_mid_align_greedy_search_graph,
     "cw-dense": cgd_cw_dense_align_greedy_search_graph,
     "cw-ctcalign": cgd_cw_ctcalign_greedy_search_graph,
+    "cw-monosparse": cgd_cw_monosparse_greedy_search_graph,
   },
   1: {
     "cw-grad": cgd_cw_gradient_path_greedy_search_graph,
