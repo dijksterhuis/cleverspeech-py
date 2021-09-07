@@ -788,7 +788,21 @@ def attack_run(master_settings):
         settings["attack_graph"] = run
         settings["outdir"] = os.path.join(settings["outdir"], run)
 
-        batch_gen = data.ingress.mcv_v1.BatchIterator(master_settings)
+        audios = data.ingress.mcv_v1.Audios(
+            settings["audio_indir"],
+            settings["max_examples"],
+            filter_term=".wav",
+            max_file_size=settings["max_audio_file_bytes"]
+        )
+
+        transcriptions = data.ingress.mcv_v1.Targets(
+            settings["targets_path"],
+            settings["max_targets"],
+        )
+
+        batch_gen = data.ingress.mcv_v1.BatchIterator(
+            settings, audios, transcriptions
+        )
 
         default_manager(
             settings,

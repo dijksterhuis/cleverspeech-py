@@ -227,7 +227,7 @@ class Targets(IterableETL):
             "phrases": target_phrases,
             "row_ids": row_ids,
             "indices": padded_indices,
-            "original_indices": original_indices ,  # we may modify for alignments
+            "original_indices": original_indices,  # we may modify for alignments
             "lengths": lengths,
         }
 
@@ -312,23 +312,11 @@ class Batch:
 
 
 class BatchIterator:
-    def __init__(self, settings):
-
-        # get N samples of all the data. alsp make sure to limit example length,
-        # otherwise we'd have to do adaptive batch sizes.
+    def __init__(self, settings, audios, targets):
 
         self.current_idx = 0
-
-        self.audios = Audios(
-            settings["audio_indir"],
-            settings["max_examples"],
-            filter_term=".wav",
-            max_file_size=settings["max_audio_file_bytes"]
-        )
-
-        self.targets = Targets(
-            settings["targets_path"], settings["max_targets"],
-        )
+        self.audios = audios
+        self.targets = targets
 
         # Generate the batches in turn, rather than all in one go ...
         # to save resources by only running the final ETLs on a batch of data
@@ -365,6 +353,7 @@ class BatchIterator:
 
         # get n files paths and create the audio batch data
         audios_batch = self.audios.next(batch_size)
+
         # load a valid target transcription for the audio files (must not match
         # original true transcription)
         trues_batch = create_true_batch(audios_batch)
@@ -377,7 +366,7 @@ class BatchIterator:
             trues_batch,
         )
 
-        return self.current_idx, batch
+        return batch
 
     def __iter__(self):
         return self
