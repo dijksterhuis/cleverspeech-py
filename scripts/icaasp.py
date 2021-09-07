@@ -508,7 +508,7 @@ def cgd_logprobs_gradient_path_beam_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.SumLogProbsForward,
@@ -529,7 +529,7 @@ def cgd_logprobs_gradient_path_beam_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_sparse_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_sparse_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -549,7 +549,7 @@ def cgd_logprobs_sparse_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -570,7 +570,7 @@ def cgd_logprobs_sparse_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_mid_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_mid_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -590,7 +590,7 @@ def cgd_logprobs_mid_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -611,7 +611,7 @@ def cgd_logprobs_mid_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_dense_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_dense_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -631,7 +631,7 @@ def cgd_logprobs_dense_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -652,7 +652,7 @@ def cgd_logprobs_dense_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_patchstart_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_patchstart_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -672,7 +672,7 @@ def cgd_logprobs_patchstart_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -693,7 +693,7 @@ def cgd_logprobs_patchstart_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_patchend_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_patchend_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -713,7 +713,7 @@ def cgd_logprobs_patchend_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -734,7 +734,7 @@ def cgd_logprobs_patchend_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_patchmid_align_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_patchmid_align_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -754,7 +754,7 @@ def cgd_logprobs_patchmid_align_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -775,7 +775,7 @@ def cgd_logprobs_patchmid_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
-def cgd_logprobs_ctcalign_greedy_search_graph(sess, batch, settings):
+def cgd_logprobs_ctcalign_beam_search_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
@@ -795,7 +795,48 @@ def cgd_logprobs_ctcalign_greedy_search_graph(sess, batch, settings):
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder="batch_no_lm",
+    )
+    attack.add_loss(
+        graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
+        weight_settings=(1.0e3, 0.5),
+        updateable=True,
+    )
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"],
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"],
+    )
+
+    return attack
+
+
+def cgd_logprobs_monosparse_beam_search_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    attack.add_path_search(
+      graph.Paths.CTC
+    )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.ClippedGradientDescent,
+        random_scale=settings["delta_randomiser"],
+        constraint_cls=graph.Constraints.L2,
+        r_constant=settings["rescale"],
+        update_method="geom",
+    )
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder="batch_no_lm",
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.SumLogProbsForward,
@@ -868,16 +909,17 @@ ATTACK_GRAPHS = {
     "cw-patchend": cgd_cw_patchend_align_greedy_search_graph,
   },
   2: {
-    "lprobs-sparse": cgd_logprobs_sparse_align_greedy_search_graph,
-    "lprobs-mid": cgd_logprobs_mid_align_greedy_search_graph,
-    "lprobs-dense": cgd_logprobs_dense_align_greedy_search_graph,
-    "lprobs-ctcalign": cgd_logprobs_ctcalign_greedy_search_graph,
+    "lprobs-sparse": cgd_logprobs_sparse_align_beam_search_graph,
+    "lprobs-mid": cgd_logprobs_mid_align_beam_search_graph,
+    "lprobs-dense": cgd_logprobs_dense_align_beam_search_graph,
+    "lprobs-ctcalign": cgd_logprobs_ctcalign_beam_search_graph,
+    "lprobs-monosparse": cgd_logprobs_ctcalign_beam_search_graph,
   },
   3: {
     "lprobs-grad": cgd_logprobs_gradient_path_beam_search_graph,
-    "lprobs-patchstart": cgd_logprobs_patchstart_align_greedy_search_graph,
-    "lprobs-patchmid": cgd_logprobs_patchmid_align_greedy_search_graph,
-    "lprobs-patchend": cgd_logprobs_patchend_align_greedy_search_graph,
+    "lprobs-patchstart": cgd_logprobs_patchstart_align_beam_search_graph,
+    "lprobs-patchmid": cgd_logprobs_patchmid_align_beam_search_graph,
+    "lprobs-patchend": cgd_logprobs_patchend_align_beam_search_graph,
   },
   4: {
     "ctc-greedy": cgd_ctc_greedy_search_graph,
