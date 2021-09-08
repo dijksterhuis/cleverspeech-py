@@ -293,7 +293,7 @@ class SecondStageTargets(IterableETL):
         )
 
         target_phrases = l_map(
-            lambda x: x["phrases"][0], batched_json_data
+            lambda x: x["phrases"][0].replace("=", " "), batched_json_data
         )
         row_ids = l_map(
             lambda x: x["row_ids"][0], batched_json_data
