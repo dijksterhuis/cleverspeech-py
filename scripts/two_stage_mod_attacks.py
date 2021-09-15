@@ -14,9 +14,6 @@ def only_box_constraint_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
-    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
@@ -58,9 +55,6 @@ def clipped_gradient_descent_graph(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
-    )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -111,9 +105,6 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
-    )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -169,9 +160,6 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
 
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
-    )
-    attack.add_path_search(
-        graph.Paths.ALL_PATHS[settings["align"]]
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -269,9 +257,8 @@ def attack_run(master_settings):
         max_file_size=master_settings["max_audio_file_bytes"]
     )
 
-    transcriptions = data.ingress.mcv_v1.Targets(
+    transcriptions = data.ingress.mcv_v1.SecondStageTargets(
         master_settings["targets_path"],
-        master_settings["max_targets"],
     )
 
     batch_gen = data.ingress.mcv_v1.BatchIterator(

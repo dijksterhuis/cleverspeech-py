@@ -142,19 +142,27 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
 
     try:
 
-        for b_id, batch in batch_gen:
+        for batch in batch_gen:
 
             # we *must* call the tensorflow session within the batch loop so the
             # graph gets reset: the maximum example length in a batch affects
             # the size of most graph elements.
 
-            log("Running for Batch Number: {}".format(b_id), wrap=True)
+            s = "Running for Batch Number: {b} of {n}".format(
+                b=batch_gen.current_idx, n=batch_gen.n_batches
+            )
+            log(s, wrap=True)
+
             executor_boilerplate_fn(
                 results_extract_fn,
                 results_queue,
                 settings, batch,
                 attack_fn
             )
+            s = "Finished Batch Number: {b} of {n}".format(
+                b=batch_gen.current_idx, n=batch_gen.n_batches
+            )
+            log(s, wrap=True)
 
     except BaseException as e:
 
@@ -163,6 +171,10 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
             "\033[1;31mERROR TRACEBACK:\033[1;0m\n{e}".format(e=tb),
             wrap=True
         )
+
+    else:
+
+        log("Finished processing all batches, run complete.", wrap=True)
 
     finally:
 
