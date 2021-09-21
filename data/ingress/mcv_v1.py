@@ -280,7 +280,7 @@ class SecondStageAudios(Audios):
             if "audio.wav" in absolute_file_path:
                 yield (file_size, absolute_file_path, basename)
 
-    def create_batch(self, batched_file_path_data, dtype="int16"):
+    def create_batch(self, batched_file_path_data, dtype="float32"):
 
         batch_data = super().create_batch(batched_file_path_data, dtype="int16")
 
@@ -289,7 +289,7 @@ class SecondStageAudios(Audios):
         audio_fps = l_map(lambda x: x[1], batched_file_path_data)
 
         def grab_json_data(fp):
-            print(fp)
+
             with open(fp.replace("_audio.wav", ".json"), "r") as f:
                 data = json.load(f)[0]
             return data
