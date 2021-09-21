@@ -255,6 +255,53 @@ class Targets(IterableETL):
         return indices
 
 
+class SecondStageAudios(Audios):
+
+    def __init__(self, indir, file_size_sort=True, filter_term=None, max_file_size=None, min_file_size=None):
+
+        if not os.path.exists(indir):
+            raise Exception("Path does not exist: {}".format(indir))
+
+        fps = [x for x in self.get_file_paths(indir)]
+
+        if filter_term:
+            fps = list(
+                filter(lambda x: filter_term in x[1], fps)
+            )
+
+        self.pool = fps
+
+    @staticmethod
+    def get_file_paths(x):
+        for fp in os.listdir(x):
+            absolute_file_path = os.path.join(x, fp)
+            basename = os.path.basename(fp)
+            file_size = os.path.getsize(absolute_file_path)
+            if "audio.wav" in absolute_file_path:
+                yield (file_size, absolute_file_path, basename)
+
+    def create_batch(self, batched_file_path_data, dtype="int16"):
+
+        batch_data = super().create_batch(batched_file_path_data, dtype="int16")
+
+        batch_data["second_file_paths"] = batch_data["file_paths"]
+
+        audio_fps = l_map(lambda x: x[1], batched_file_path_data)
+
+        def grab_json_data(fp):
+            print(fp)
+            with open(fp.replace("_audio.wav", ".json"), "r") as f:
+                data = json.load(f)[0]
+            return data
+
+        batch_data["file_paths"] = l_map(
+            lambda x: grab_json_data(x)["file_paths"][0],
+            audio_fps
+        )
+
+        return batch_data
+
+
 class SecondStageTargets(IterableETL):
 
     def __init__(self, indir):
@@ -273,7 +320,7 @@ class SecondStageTargets(IterableETL):
     def create_batch(self, batch_size, trues_batch, audios_batch):
 
         jsonified_basenames = l_map(
-            lambda x: x.replace(".wav", ".json"), audios_batch["basenames"]
+            lambda x: x.replace("_audio.wav", ".json"), audios_batch["basenames"]
         )
 
         ordered_target_file_paths = l_map(
@@ -391,8 +438,15 @@ class SecondStageTargets(IterableETL):
 
 
 def create_true_batch(audio_batch, tokens=TOKENS):
+
     metadata_fps = l_map(
-        lambda fp: fp.replace(".wav", ".json"), audio_batch["file_paths"]
+        lambda fp: fp.replace(".wav", ".json"),
+        audio_batch["file_paths"]
+    )
+
+    metadata_fps = l_map(
+        lambda fp: fp.replace("_audio", ""),
+        metadata_fps
     )
 
     metadatas = l_map(
