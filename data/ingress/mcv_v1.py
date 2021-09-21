@@ -255,6 +255,9 @@ class Targets(IterableETL):
         return indices
 
 
+# TODO: Second stage should be a separate ETL class.
+
+
 class SecondStageAudios(Audios):
 
     def __init__(self, indir, file_size_sort=True, filter_term=None, max_file_size=None, min_file_size=None):
@@ -278,15 +281,53 @@ class SecondStageAudios(Audios):
             basename = os.path.basename(fp)
             file_size = os.path.getsize(absolute_file_path)
             if "audio.wav" in absolute_file_path:
-                yield (file_size, absolute_file_path, basename)
+                yield file_size, absolute_file_path, basename
 
     def create_batch(self, batched_file_path_data, dtype="float32"):
 
-        batch_data = super().create_batch(batched_file_path_data, dtype="int16")
-
-        batch_data["second_file_paths"] = batch_data["file_paths"]
-
         audio_fps = l_map(lambda x: x[1], batched_file_path_data)
+        basenames = l_map(lambda x: x[2], batched_file_path_data)
+
+        audios = lcomp([wav_file.load(f, dtype) for f in audio_fps])
+
+        # N.B. ==> If audios is 0 at any point then the perturbation will always
+        # be zero for that sample due to a zero gradient. so add 1 to zero
+        # samples make  backpropogation work for all samples (1/2**15 is small
+        # so side-effects should be minimal).
+        for audio in audios:
+            # set everything to 16 bit int range as we shift it later anyway
+            audio[audio > 0] = audio[audio > 0] * (2 ** 15 - 1)
+            audio[audio < 0] = audio[audio < 0] * 2 ** 15
+            audio[audio == 0] = 1.0
+
+        maxlen = max(map(len, audios))
+        maximum_length = maxlen + self.padding(maxlen)
+
+        padded_audio = np_arr(
+            lcomp(self.gen_padded_audio(audios, maximum_length)),
+            np.float32
+        )
+        actual_lengths = np_arr(
+            l_map(lambda x: x.size, audios),
+            np.int32
+        )
+
+        # N.B. Remember to use round instead of integer division here!
+        maximum_feature_lengths = np_arr(
+            l_map(
+                lambda _: np.round((maximum_length - 320) / 320),
+                audios
+            ),
+            np.int32
+        )
+
+        actual_feature_lengths = np_arr(
+            l_map(
+                lambda x: np.round((x.size - 320) / 320),
+                audios
+            ),
+            np.int32
+        )
 
         def grab_json_data(fp):
 
@@ -294,12 +335,23 @@ class SecondStageAudios(Audios):
                 data = json.load(f)[0]
             return data
 
-        batch_data["file_paths"] = l_map(
+        first_file_paths = l_map(
             lambda x: grab_json_data(x)["file_paths"][0],
             audio_fps
         )
 
-        return batch_data
+        return {
+            "file_paths": first_file_paths,
+            "second_file_paths": audio_fps,
+            "max_samples": maximum_length,
+            "max_feats": maximum_feature_lengths[0],
+            "audio": audios,
+            "padded_audio": padded_audio,
+            "basenames": basenames,
+            "n_samples": actual_lengths,
+            "ds_feats": maximum_feature_lengths,
+            "real_feats": actual_feature_lengths,
+        }
 
 
 class SecondStageTargets(IterableETL):
