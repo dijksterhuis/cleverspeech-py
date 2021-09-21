@@ -258,7 +258,7 @@ def attack_run(master_settings):
     )
 
     transcriptions = data.ingress.mcv_v1.SecondStageTargets(
-        master_settings["targets_path"],
+        master_settings["audio_indir"],
     )
 
     batch_gen = data.ingress.mcv_v1.BatchIterator(
