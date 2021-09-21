@@ -923,7 +923,7 @@ ATTACK_GRAPHS = {
   },
   4: {
     "ctc-greedy": cgd_ctc_greedy_search_graph,
-    "ctc-beam": cgd_ctc_beam_search_graph,
+    # "ctc-beam": cgd_ctc_beam_search_graph,
   }
 }
 
