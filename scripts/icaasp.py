@@ -387,7 +387,7 @@ def main():
 
     log("", wrap=True)
     extra_args = {
-        "set": [int, "ctc-greedy", False, list(ATTACK_GRAPHS.keys())]
+        "set": [str, "ctc-greedy", False, list(ATTACK_GRAPHS.keys())]
     }
     args(attack_run, additional_args=extra_args)
 
