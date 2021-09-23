@@ -72,6 +72,10 @@ def metadata_transforms(batched_results):
 
     for idx, example in examples.items():
 
+        example["success"] = example["successes"][0]
+        example["decodings"] = example["successes"][1]
+        example["phrases"] = example["successes"][2]
+
         example["argmax"] = get_argmax_alignment(
             example["tokens"], example["raw_logits"]
         )
@@ -100,7 +104,7 @@ def logging_transforms(example_data, additional_logging_keys=None):
         "l2",
         "linf",
         "p2p",
-        "probs",
+        # "probs",
     ]
 
     if additional_logging_keys is not None:

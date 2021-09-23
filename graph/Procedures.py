@@ -74,8 +74,8 @@ class AbstractProcedure(ABC):
         """
         pass
 
-    def results_hook(self):
-        return self.current_step, True
+    def results_hook(self, successes):
+        return self.current_step, True, successes
 
     def pre_optimisation_updates_hook(self, successes):
 
@@ -107,7 +107,10 @@ class AbstractProcedure(ABC):
         a = self.attack
 
         # write out initial step 0 data
-        yield self.results_hook()
+        successes = l_map(
+            lambda x: x, self.check_for_successful_examples()
+        )
+        yield self.results_hook(successes)
 
         log("Initial state written, starting optimisation....")
 
@@ -132,7 +135,7 @@ class AbstractProcedure(ABC):
                 # doing any updates (e.g. hard constraint bounds) to attack
                 # variables.
 
-                yield self.results_hook()
+                yield self.results_hook(successes)
                 # perform updates that will affect the success of perturbations.
                 # e.g. CGD clipping etc. These ops must be run *after* results
                 # call else we'll never show anything as successful in the logs
@@ -166,7 +169,7 @@ class SuccessOnDecoding(AbstractProcedure):
         phrases = self.attack.batch.targets["phrases"]
 
         return l_map(
-            lambda x: x[0] == x[1], zip(decodings, phrases)
+            lambda x: (x[0] == x[1], x[0], x[1]), zip(decodings, phrases)
         )
 
 

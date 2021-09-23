@@ -93,7 +93,7 @@ def convert_to_epsilon(value, reference):
     )
 
 
-def get_attack_state(attack):
+def get_attack_state(attack, successes):
     """
     Get the current values of a bunch of attack graph variables -- for unbounded
     attacks only.
@@ -108,7 +108,7 @@ def get_attack_state(attack):
         attack.batch.size
     )
 
-    decodings = get_decodings(attack)
+    # decodings = get_decodings(attack)
 
     each_graph_loss_transposed = get_batched_losses(attack)
 
@@ -169,13 +169,14 @@ def get_attack_state(attack):
         # "gradients": gradients,
         "softmax_logits": softmax_logits,
         "raw_logits": raw_logits,
-        "success": get_success_bools(attack.batch, decodings["decodings"]),
+        # "success": get_success_bools(attack.batch, decodings["decodings"]),
         "bounds_raw": bounds_raw,
         "initial_taus": initial_taus,
     }
     batched_results.update(get_audio_batch(attack.batch))
     batched_results.update(get_target_batch(attack.batch))
-    batched_results.update(decodings)
+    # batched_results.update(decodings)
+    batched_results.update({"successes": successes})
 
     return batched_results
 
