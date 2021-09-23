@@ -125,11 +125,15 @@ class AbstractProcedure(ABC):
                     lambda x: x, self.check_for_successful_examples()
                 )
 
+                bool_success = l_map(
+                    lambda x: x[0], successes
+                )
+
                 # perform some rounding regardless of success or not.
                 # currently uses PGD to round/floor perturbations to integers
                 # prior to the results call (otherwise we might tag examples
                 # as successful when rounding would make them unsuccessesful)
-                self.post_optimisation_hook(successes)
+                self.post_optimisation_hook(bool_success)
 
                 # signal that we've finished optimisation for now **BEFORE**
                 # doing any updates (e.g. hard constraint bounds) to attack
@@ -140,7 +144,7 @@ class AbstractProcedure(ABC):
                 # e.g. CGD clipping etc. These ops must be run *after* results
                 # call else we'll never show anything as successful in the logs
 
-                self.pre_optimisation_updates_hook(successes)
+                self.pre_optimisation_updates_hook(bool_success)
 
             # Do the actual optimisation
             a.optimiser.optimise(a.feeds.attack)
