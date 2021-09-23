@@ -335,40 +335,37 @@ def cgd_cw_patchmid_align_greedy_search_graph(sess, batch, settings):
 
 def attack_run(master_settings):
 
-    exp_graphs = ATTACK_GRAPHS[master_settings["set"]]
+    run = master_settings["set"]
+    settings = deepcopy(master_settings)
 
-    for run in exp_graphs.keys():
+    log("Starting {} run.".format(run))
 
-        settings = deepcopy(master_settings)
+    settings["attack_graph"] = run
+    settings["outdir"] = os.path.join(settings["outdir"], run)
 
-        log("Starting {} run.".format(run))
+    audios = data.ingress.mcv_v1.Audios(
+        settings["audio_indir"],
+        settings["max_examples"],
+        filter_term=".wav",
+        max_file_size=settings["max_audio_file_bytes"],
+        file_size_sort="shuffle,"
+    )
 
-        settings["attack_graph"] = run
-        settings["outdir"] = os.path.join(settings["outdir"], run)
+    transcriptions = data.ingress.mcv_v1.Targets(
+        settings["targets_path"],
+        settings["max_targets"],
+    )
 
-        audios = data.ingress.mcv_v1.Audios(
-            settings["audio_indir"],
-            settings["max_examples"],
-            filter_term=".wav",
-            max_file_size=settings["max_audio_file_bytes"],
-            file_size_sort="shuffle,"
-        )
+    batch_gen = data.ingress.mcv_v1.BatchIterator(
+        settings, audios, transcriptions
+    )
 
-        transcriptions = data.ingress.mcv_v1.Targets(
-            settings["targets_path"],
-            settings["max_targets"],
-        )
-
-        batch_gen = data.ingress.mcv_v1.BatchIterator(
-            settings, audios, transcriptions
-        )
-
-        default_manager(
-            settings,
-            exp_graphs[run],
-            batch_gen,
-        )
-        log("Finished {} run.".format(run))
+    default_manager(
+        settings,
+        ATTACK_GRAPHS[run],
+        batch_gen,
+    )
+    log("Finished {} run.".format(run))
 
 
 ATTACK_GRAPHS = {
