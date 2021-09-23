@@ -131,10 +131,10 @@ class Audios(IterableETL):
         # )
 
         # trim any start or end silence (or just quiet periods)
-        audios = l_map(
-            lambda x: librosa.effects.trim(x, ref=np.mean, top_db=20)[0],
-            audios
-        )
+        # audios = l_map(
+        #     lambda x: librosa.effects.trim(x, ref=np.mean, top_db=20)[0],
+        #     audios
+        # )
 
         for audio in audios:
             audio[audio == 0] = 1.0
