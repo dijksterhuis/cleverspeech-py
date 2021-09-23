@@ -28,7 +28,7 @@ class IterableETL:
 
 class Audios(IterableETL):
 
-    def __init__(self, indir, numb_examples, file_size_sort=True, filter_term=None, max_file_size=None, min_file_size=None):
+    def __init__(self, indir, numb_examples, file_size_sort=None, filter_term=None, max_file_size=None, min_file_size=None):
 
         if not os.path.exists(indir):
             raise Exception("Path does not exist: {}".format(indir))
@@ -40,9 +40,11 @@ class Audios(IterableETL):
                 fps = self.get_size_sorted_file_paths(fps, reverse=True)
             elif file_size_sort == 'asc':
                 fps = self.get_size_sorted_file_paths(fps, reverse=False)
+            elif file_size_sort == 'shuffle':
+                random.shuffle(fps)
             else:
-                # otherwise we'll sort anyway as it can affect optimisation
-                fps = self.get_size_sorted_file_paths(fps, reverse=True)
+                # otherwise we'll sort by ascending file sizes for memory
+                fps = self.get_size_sorted_file_paths(fps, reverse=False)
 
         if filter_term:
             fps = list(
