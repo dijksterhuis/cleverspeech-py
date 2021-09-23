@@ -74,56 +74,15 @@ class AbstractConstraint(ABC):
         """
         pass
 
-    def get_new_bound(self, bound, distance):
+    def get_new_bound(self, distance):
         """
-        Get a new bound using the method defined by the `update_method`
-        attribute.
+        Get a new bound with geometric progression.
         """
-
-        if self.update_method == "lin":
-            return self.get_new_linear(bound)
-        elif self.update_method == "log":
-            return self.get_new_log(bound)
-        elif self.update_method == "geom":
-            return self.get_new_geometric(bound, distance)
-
-    def get_new_geometric(self, bound, distance):
-        """
-        Get a new rescale constant with geometric progression.
-        """
-        rc = self.r_constant
-        new = distance * rc if bound > distance else bound * rc
-
-        return np.ceil(new)
-
-    def get_new_linear(self, bound):
-        """
-        Get a new rescale constant linearly.
-        """
-        new_bound = np.round(bound - bound * self.r_constant, 6)
-
-        # there's some weird rounding things that happen between tf and numpy
-        # floats... the rescale can actually be something like 0.1000000002572
-        # so we have to perform a check to make sure the new value is sensible
-        # and set it to the minimum if not.
-        if bound - new_bound <= self.r_constant:
-            new_bound = self.r_constant
-
-        precision = int(np.ceil(np.log10(1 / self.r_constant)))
-        new_bound = np.round(new_bound, precision)
-
-        return np.ceil(new_bound)
-
-    def get_new_log(self, bound):
-        """
-        Get a new rescale constant according to a log scale.
-
-        Note -- make sure to set rescale to something like 0.1 so it doesn't
-        become a geometric progression.
-        """
-        new_bound = np.round(bound, 8) * self.r_constant
-
-        return np.ceil(new_bound)
+        new = distance * self.r_constant
+        if new < 1.0:
+            return new
+        else:
+            return np.ceil(new)
 
     def update(self, deltas, successes):
         """
@@ -135,7 +94,7 @@ class AbstractConstraint(ABC):
 
         for b, d, s in zip(current_bounds, current_distances, successes):
             if s is True:
-                b[0] = self.get_new_bound(b[0], d)
+                b[0] = self.get_new_bound(d)
 
         self.tf_run(self.bounds.assign(current_bounds))
 
