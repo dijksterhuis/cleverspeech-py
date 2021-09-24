@@ -216,7 +216,7 @@ def cgd_cw_patchstart_align_greedy_search_graph(sess, batch, settings):
         sess, batch, settings
     )
     attack.add_path_search(
-      graph.Paths.Sparse
+      graph.Paths.StartPatch
     )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
@@ -348,7 +348,7 @@ def attack_run(master_settings):
         settings["max_examples"],
         filter_term=".wav",
         max_file_size=settings["max_audio_file_bytes"],
-        file_size_sort="shuffle,"
+        file_size_sort="shuffle"
     )
 
     transcriptions = data.ingress.mcv_v1.Targets(
