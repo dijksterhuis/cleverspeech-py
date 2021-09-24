@@ -78,11 +78,7 @@ class AbstractConstraint(ABC):
         """
         Get a new bound with geometric progression.
         """
-        new = distance * self.r_constant
-        if new < 1.0:
-            return new
-        else:
-            return np.ceil(new)
+        return distance * self.r_constant
 
     def update(self, deltas, successes):
         """
