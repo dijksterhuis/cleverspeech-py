@@ -123,9 +123,9 @@ class Audios(IterableETL):
                 )
 
         # simple peak normalisation to 0.5 of full scale
-        audios = l_map(
-            lambda x: (x * 0.5 * 2**15) / np.max(np.abs(x)), audios
-        )
+        # audios = l_map(
+        #     lambda x: (x * 0.5 * 2**15) / np.max(np.abs(x)), audios
+        # )
         # audios = l_map(
         #     lambda x: normalize_audio_ds(x), audios
         # )
