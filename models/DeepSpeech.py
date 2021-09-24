@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import os
-
+import multiprocessing as mp
 import ds_ctcdecoder
 
 from abc import ABC
@@ -373,6 +373,26 @@ class Model(ABC):
                 self.tokens,
             )
             return decodings
+        elif decoder == "hotfix_greedy":
+
+            if top_five is True:
+                raise NotImplementedError(
+                    "top_five is not implemented for greedy decoders"
+                )
+
+            if logits is None:
+                logits = self.get_logits(self.logits, feed)
+
+            if type(logits) == np.ndarray and logits.shape[0] != batch.size:
+                # time major but hotfix greedy search wants batch major
+                logits = np.transpose(logits, [1, 0, 2])
+
+            elif type(logits) == tf.Tensor and logits.get_shape().as_list()[0] != batch.size:
+                # time major but hotfix greedy search wants batch major
+                logits = tf.transpose(logits, [1, 0, 2])
+
+            decodings = self.hotfix_greedy_decode(logits, self.tokens)
+            return decodings
 
         else:
             raise Exception(
@@ -618,5 +638,41 @@ class Model(ABC):
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
         neg_sum_logits = [prob[0] for prob in neg_sum_logits]
+
+        return tf_outputs, neg_sum_logits
+
+    @staticmethod
+    def reduce(argmax):
+        indexes = []
+        previous = None
+        for current in argmax:
+
+            if current == previous:
+                pass
+            else:
+                indexes.append(current)
+
+            previous = current
+
+        return np.asarray(indexes)
+
+    @staticmethod
+    def merge(reduced):
+        return reduced[reduced != 28]
+
+    def hotfix_greedy_decode(self, logits, tokens):
+
+        argmaxes = self.tf_run(tf.argmax(logits, axis=-1)).tolist()
+
+        with mp.Pool(cpu_count()) as pool:
+            r = pool.map(self.reduce, argmaxes)
+            m = pool.map(self.merge, r)
+
+        tf_outputs = l_map(
+            lambda y: ''.join([tokens[int(x)] for x in y]).rstrip(" "),
+            m
+        )
+
+        neg_sum_logits = [0] * logits.shape[0]
 
         return tf_outputs, neg_sum_logits

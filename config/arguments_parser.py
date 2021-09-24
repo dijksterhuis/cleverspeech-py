@@ -44,6 +44,7 @@ def args(attack_run, additional_args: dict = None):
                 "greedy_no_lm",
                 "tf_beam",
                 "tf_greedy",
+                "hotfix_greedy",
             ]
         ],
         "writer": [str, "local_latest", False, [
