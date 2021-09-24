@@ -232,8 +232,8 @@ class Targets(IterableETL):
         target_data = []
         for i in range(batch_size):
             p = self.pop_target_phrase(
-                trues_batch["true_targets"],
-                min(audios_batch["real_feats"]) - 4
+                trues_batch["true_targets"][i],
+                audios_batch["real_feats"][i],
             )
             target_data.append(p)
 
@@ -274,8 +274,8 @@ class Targets(IterableETL):
     def pop_target_phrase(self, true_targets, min_feats, idx=0):
         candidate_target = random.choice(self.pool)
 
-        length_test = len(candidate_target[0]) > min_feats
-        matches_true_test = candidate_target[0] in true_targets
+        length_test = len(candidate_target[0]) > min_feats // 4
+        matches_true_test = candidate_target[0] == true_targets
 
         if length_test or matches_true_test:
             return self.pop_target_phrase(
