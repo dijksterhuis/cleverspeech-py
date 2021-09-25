@@ -72,9 +72,8 @@ def fix_padding(delta, original, advex):
 
 
 def normalise(array):
-    if max(array) > 1.0 or min(array) < -1.0:
-        array[array > 0] = array[array > 0] / (2 ** 15 - 1)
-        array[array < 0] = array[array < 0] / (2 ** 15)
+    array[array > 0] = array[array > 0] / (2 ** 15 - 1)
+    array[array < 0] = array[array < 0] / (2 ** 15)
     return array
 
 
@@ -113,7 +112,7 @@ def get_misc_data(json_file_path):
                  [
                      ("decoding", data["decodings"][0]),
                      ("target", data["phrases"][0]),
-                     ("log_probs", data["probs"][0]),
+                     # ("log_probs", data["probs"][0]),
                  ]
              )
              )
@@ -164,8 +163,8 @@ def preprocess_audio_data(audio_as_list: list):
 
     return {
         "none": aud,
-        "a": a_w,
-        "itu": itu
+        # "a": a_w,
+        # "itu": itu
     }
 
 
@@ -244,8 +243,8 @@ def get_snr_stats(audios: dict):
             ("snr_pow_db", dsp_metrics.snr_power_db),
             # ("snr_pow", metrics.snr_power),
             ("snr_seg_db", dsp_metrics.snr_segmented),
-            ("snr_loudness_k_db", dsp_metrics.snr_loudness_k_weighted_db),
-            ("snr_loudness_deman_db", dsp_metrics.snr_loudness_deman_db),
+            # ("snr_loudness_k_db", dsp_metrics.snr_loudness_k_weighted_db),
+            # ("snr_loudness_deman_db", dsp_metrics.snr_loudness_deman_db),
             ("snr_rms_amplitude_db", dsp_metrics.snr_rms_amplitude),
         ]
     )
@@ -274,7 +273,7 @@ def get_lnorm_stats(audios: dict):
         ("linf", np.inf),
     ]
     fnames = ["deltas", "audio", "advs"]
-    weights = ["itu", "a", "none"]
+    weights = ["none"]
 
     prod = itertools.product(l_norm_keys, fnames, weights)
     res = {
@@ -295,10 +294,10 @@ def get_dsp_stats(audios: dict):
             # ("energy", metrics.energy),
             ("power_db", dsp_metrics.power_db),
             # ("power", metrics.power),
-            ("k_loudness_db", dsp_metrics.loudness_k_weighted_db),
-            ("deman_loudness_db", dsp_metrics.loudness_deman_db),
-            ("crest_factor_db", dsp_metrics.crest_factor_db),
-            ("thdn_db", dsp_metrics.thdn_db),
+            # ("k_loudness_db", dsp_metrics.loudness_k_weighted_db),
+            # ("deman_loudness_db", dsp_metrics.loudness_deman_db),
+            # ("crest_factor_db", dsp_metrics.crest_factor_db),
+            # ("thdn_db", dsp_metrics.thdn_db),
         ]
     )
 
@@ -335,7 +334,7 @@ def main():
         indir, outdir = sys.argv[1:]
 
     example_json_results_file_paths = [
-        fp for fp in get_fps(indir) if "sample" in fp and ".json" in fp
+        fp for fp in get_fps(indir) if "settings" not in fp and ".json" in fp
     ]
     s = "Found {n} results files in directory: {d}".format(
         n=len(example_json_results_file_paths), d=indir
