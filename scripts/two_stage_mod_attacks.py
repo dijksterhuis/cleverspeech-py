@@ -250,12 +250,12 @@ def attack_run(master_settings):
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type
 
-    audios = data.ingress.mcv_v1.SecondStageAudios(
+    audios = data.ingress.two_stage.Audios(
         master_settings["audio_indir"],
         filter_term="audio.wav"
     )
 
-    transcriptions = data.ingress.mcv_v1.SecondStageTargets(
+    transcriptions = data.ingress.two_stage.Targets(
         master_settings["audio_indir"],
     )
 
