@@ -377,13 +377,39 @@ class Targets(IterableETL):
 
     def create_batch(self, batch_size, trues_batch, audios_batch, tokens=TOKENS):
 
+        # TODO: list, for, append pattern is super dirty glue code.
         target_data = []
         for i in range(batch_size):
-            p = self.pop_target_phrase(
-                trues_batch["true_targets"][i],
-                audios_batch["real_feats"][i],
-            )
-            target_data.append(p)
+            try:
+                p = self.pop_target_phrase(
+                    trues_batch["true_targets"][i],
+                    audios_batch["real_feats"][i],
+                )
+                target_data.append(p)
+
+            # we can hit maximum python recursion depth if we're not careful
+            # in that case we just grab a random word from the pool of full
+            # transcriptions
+
+            # TODO: MASSIVE glue code hack
+            except RecursionError:
+                safety_limit = 0
+
+                # test 10000 words, unless your data is broken there should be
+                # something suitable...
+
+                while safety_limit <= 10000:
+                    candidates = random.choice(self.pool)[0].split(" ")
+                    candidate = random.choice(candidates)
+                    if len(candidate) < audios_batch["real_feats"][i] // 4:
+                        target_data.append(candidate)
+                        break
+                    else:
+                        safety_limit += 1
+
+                # if nothing is found then raise an exception.
+                if safety_limit == 10000:
+                    raise Exception("No suitable target transcription found!")
 
         target_phrases = l_map(lambda x: x[0], target_data)
 
