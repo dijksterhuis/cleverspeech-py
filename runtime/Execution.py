@@ -144,6 +144,13 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
 
         for batch in batch_gen:
 
+            # the skip_n_batch argument can be used to skip a specified number
+            # of batches -- useful if things break in the second batch but not
+            # the first!
+
+            if batch_gen.current_idx <= settings["skip_n_batch"]:
+                continue
+
             # we *must* call the tensorflow session within the batch loop so the
             # graph gets reset: the maximum example length in a batch affects
             # the size of most graph elements.
