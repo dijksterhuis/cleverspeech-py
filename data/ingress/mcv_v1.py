@@ -118,8 +118,8 @@ class Audios(IterableETL):
                 np.minimum(
                     sample_data * gain_db_to_ratio(
                         dbfs - max_dbfs(sample_data)
-                        ), 2 ** 15 - 1
-                    ), -2 ** 15
+                        ), 1.0
+                    ), -1.0
                 )
 
         # simple peak normalisation to 0.5 of full scale
@@ -132,11 +132,197 @@ class Audios(IterableETL):
 
         # trim any start or end silence (or just quiet periods)
         # audios = l_map(
-        #     lambda x: librosa.effects.trim(x, ref=np.mean, top_db=20)[0],
+        #     lambda x: librosa.effects.trim(x, ref=np.max, top_db=24)[0],
         #     audios
         # )
 
         for audio in audios:
+            # audio[audio > 0] = audio[audio > 0] * (2 ** 15 - 1)
+            # audio[audio < 0] = audio[audio < 0] * (2 ** 15)
+            audio[audio == 0] = 1.0
+
+        maxlen = max(map(len, audios))
+        maximum_length = maxlen + self.padding(maxlen)
+
+        padded_audio = np_arr(
+            lcomp(self.gen_padded_audio(audios, maximum_length)),
+            np.float32
+        )
+        actual_lengths = np_arr(
+            l_map(lambda x: x.size, audios),
+            np.int32
+        )
+
+        # N.B. Remember to use round instead of integer division here!
+        maximum_feature_lengths = np_arr(
+            l_map(
+                lambda _: np.round((maximum_length - 320) / 320),
+                audios
+            ),
+            np.int32
+        )
+
+        actual_feature_lengths = np_arr(
+            l_map(
+                lambda x: np.round((x.size - 320) / 320),
+                audios
+            ),
+            np.int32
+        )
+
+        return {
+            "file_paths": audio_fps,
+            "max_samples": maximum_length,
+            "max_feats": maximum_feature_lengths[0],
+            "audio": audios,
+            "padded_audio": padded_audio,
+            "basenames": basenames,
+            "n_samples": actual_lengths,
+            "ds_feats": maximum_feature_lengths,
+            "real_feats": actual_feature_lengths,
+        }
+
+    def padding(self, max_len):
+        """
+        Pad the audio samples to ensure that the CW mfcc framing doesn't break.
+        Frame length of 512, split by frame step size 320.
+        Recursively calculates padding again when pad length is > 512.
+
+        :param max_len: maximum length of all samples in a batch
+        :yield: size of additional pad
+        """
+
+        extra = max_len - (((max_len - 320) // 320) * 320)
+        if extra > 512:
+            return self.padding(max_len + ((extra // 512) * 512))
+        else:
+            return 512 - extra
+
+    @staticmethod
+    def gen_padded_audio(audios, max_len):
+        """
+        Add the required padding to each example.
+        :param audios: the batch of audio examples
+        :param max_len: the length of the longest audio example in the batch
+        :return: audio array padded to length max_len
+        """
+        for audio in audios:
+            b = np_zero(max_len - audio.size, np.float32)
+            yield np.concatenate([audio, b])
+
+
+class NormalisedAndTrimmedAudios(IterableETL):
+
+    def __init__(self, indir, numb_examples, file_size_sort=None, filter_term=None, max_file_size=None, min_file_size=None):
+
+        if not os.path.exists(indir):
+            raise Exception("Path does not exist: {}".format(indir))
+
+        fps = [x for x in self.get_file_paths(indir)]
+
+        if file_size_sort is not None:
+            if file_size_sort == 'desc':
+                fps = self.get_size_sorted_file_paths(fps, reverse=True)
+            elif file_size_sort == 'asc':
+                fps = self.get_size_sorted_file_paths(fps, reverse=False)
+            elif file_size_sort == 'shuffle':
+                random.shuffle(fps)
+            else:
+                # otherwise we'll sort by ascending file sizes for memory
+                fps = self.get_size_sorted_file_paths(fps, reverse=False)
+
+        if filter_term:
+            fps = list(
+                filter(lambda x: filter_term in x[1], fps)
+            )
+
+        # bigger examples require more gpu memory and potentially smaller batch
+        if max_file_size:
+            fps = list(
+                filter(lambda x: x[0] <= max_file_size, fps)
+            )
+
+        if min_file_size:
+            fps = list(
+                filter(lambda x: x[0] >= min_file_size, fps)
+            )
+
+        self.pool = fps[:numb_examples]
+
+    @staticmethod
+    def get_file_paths(x):
+        for fp in os.listdir(x):
+            absolute_file_path = os.path.join(x, fp)
+            basename = os.path.basename(fp)
+            file_size = os.path.getsize(absolute_file_path)
+            yield (file_size, absolute_file_path, basename)
+
+    @staticmethod
+    def get_size_sorted_file_paths(fps, reverse=False):
+        fps = [x for x in fps]
+        fps.sort(key=lambda x: x[0], reverse=reverse)
+        return fps
+
+    def __next__(self, batch_size):
+        return self.create_batch(self.popper(self.pool, batch_size))
+
+    @staticmethod
+    def popper(data, size):
+        return l_map(
+            lambda x: data.pop(x-1), range(size, 0, -1)
+        )
+
+    def create_batch(self, batched_file_path_data, dtype="int16"):
+
+        audio_fps = l_map(lambda x: x[1], batched_file_path_data)
+        basenames = l_map(lambda x: x[2], batched_file_path_data)
+
+        audios = lcomp([wav_file.load(f, dtype) for f in audio_fps])
+
+        # N.B. ==> If audios is 0 at any point then the perturbation will always
+        # be zero for that sample due to a zero gradient. so add 1 to zero
+        # samples make  backpropogation work for all samples (1/2**15 is small
+        # so side-effects should be minimal).
+
+        def rms_to_dbfs(rms):
+            return 20.0 * np.log10(max(1e-16, rms)) + 3.0103
+
+        def max_dbfs(sample_data):
+            # Peak dBFS based on the maximum energy sample.
+            # Will prevent overdrive if used for normalization.
+            return rms_to_dbfs(
+                    max(abs(np.min(sample_data)), abs(np.max(sample_data)))
+                )
+
+        def gain_db_to_ratio(gain_db):
+            return np.power(10.0, gain_db / 20.0)
+
+        def normalize_audio_ds(sample_data, dbfs=3.0103):
+            return np.maximum(
+                np.minimum(
+                    sample_data * gain_db_to_ratio(
+                        dbfs - max_dbfs(sample_data)
+                        ), 1.0
+                    ), -1.0
+                )
+
+        # simple peak normalisation to 0.5 of full scale
+        # audios = l_map(
+        #     lambda x: (x * 0.5 * 2**15) / np.max(np.abs(x)), audios
+        # )
+        audios = l_map(
+            lambda x: normalize_audio_ds(x), audios
+        )
+
+        # trim any start or end silence (or just quiet periods)
+        audios = l_map(
+            lambda x: librosa.effects.trim(x, ref=np.max, top_db=24)[0],
+            audios
+        )
+
+        for audio in audios:
+            audio[audio > 0] = audio[audio > 0] * (2 ** 15 - 1)
+            audio[audio < 0] = audio[audio < 0] * (2 ** 15)
             audio[audio == 0] = 1.0
 
         maxlen = max(map(len, audios))
