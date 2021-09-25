@@ -399,10 +399,12 @@ class Targets(IterableETL):
                 # something suitable...
 
                 while safety_limit <= 10000:
-                    candidates = random.choice(self.pool)[0].split(" ")
-                    candidate = random.choice(candidates)
+
+                    candidates = random.choice(self.pool)
+                    candidate = random.choice(candidates[0].split(" "))
+
                     if len(candidate) < audios_batch["real_feats"][i] // 4:
-                        target_data.append(candidate)
+                        target_data.append((candidate, candidates[1]))
                         break
                     else:
                         safety_limit += 1
