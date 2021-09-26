@@ -13,7 +13,7 @@ def to_db(x):
     :param x: audio signal vector of values over time
     :return: audio signal converted to decibels relative to full scale
     """
-    return 10 * np.log10(x)
+    return 20 * np.log10(x)
 
 
 def lnorm(x, norm=2):
@@ -149,7 +149,7 @@ def snr_rms_amplitude(error_signal, original_signal):
     :param original_signal: original example signal
     :return: SNR of the rms amplitudes of input signals
     """
-    return 2 * to_db(rms_amplitude(original_signal) / rms_amplitude(error_signal))
+    return to_db(rms_amplitude(original_signal) / rms_amplitude(error_signal))
 
 
 def nsr_power(error_signal, original_signal):
