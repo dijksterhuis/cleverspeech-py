@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 
-plt.style.use(["science"])
+plt.style.use(["science", "muted"])
 
 
 def custom_bool(x):
@@ -105,7 +105,7 @@ def plot_per_measure(data, title, y_max=None, x_label=None, y_label=None, stddev
     x = np.asarray(list(data.keys()))
     y = np.asarray(list(data.values()))
 
-    plt.plot(x, y, ls="-", marker="x")
+    plt.plot(x, y, ls="-", marker="")
     plt.title(title)
 
     if stddevs is not None:
@@ -197,7 +197,7 @@ def main(log_file_path, outpath):
 
     xes = np.asarray(list(step_ordered.keys()))
 
-    plt.plot(xes, cumulative_success_rates, ls="-", marker="x")
+    plt.plot(xes, cumulative_success_rates, ls="-", marker="")
     plt.ylim([0, 1])
     plt.title("Cumulative Success Rate Per Step")
 
@@ -205,21 +205,21 @@ def main(log_file_path, outpath):
 
     xes = np.asarray(list(step_ordered.keys()))
 
-    plt.plot(xes, success_rates, ls="-", marker="x")
+    plt.plot(xes, success_rates, ls="-", marker="")
     plt.ylim([0, 1])
     plt.title("Success Rate Per Step")
 
     plt.subplot(2, 2, 3)
 
     xes = np.asarray(list(step_ordered.keys()))
-    plt.plot(xes, mean_wers, ls="-", marker="x")
+    plt.plot(xes, mean_wers, ls="-", marker="")
     plt.ylim([0, np.ceil(max(mean_wers))])
     plt.title("Mean Word-Error-Rate Rate Per Step")
 
     plt.subplot(2, 2, 4)
 
     xes = np.asarray(list(step_ordered.keys()))
-    plt.plot(xes, mean_cers, ls="-", marker="x")
+    plt.plot(xes, mean_cers, ls="-", marker="")
     plt.ylim([0, np.ceil(max(mean_cers)/10)*10])
     plt.title("Mean Character-Error-Rate Rate Per Step")
 
@@ -278,8 +278,8 @@ def main(log_file_path, outpath):
 
     results = {
         "loss": aggd_loss_per_step,
-        # "l0": aggd_l0_per_step,
-        "l2_n": aggd_l2_normed_per_step,
+        "l0": aggd_l0_per_step,
+        # "l2_n": aggd_l2_normed_per_step,
         "l2": aggd_l2_per_step,
         "linf": aggd_linf_per_step,
         "p2p": aggd_p2p_per_step,
@@ -287,9 +287,9 @@ def main(log_file_path, outpath):
 
     res_labels_map = {
         "loss": "Loss",
-        # "l0": "$\|\delta\|_0$",
+        "l0": "$\|\delta\|_0$",
         "l2": "$\|\delta\|_2$",
-        "l2_n": "$\\frac{{\|\delta\|_2}}{{N}}$",
+        # "l2_n": "$\\frac{{\|\delta\|_2}}{{N}}$",
         "linf": "$\|\delta\|_\infty$",
         "p2p": "Peak-to-Peak",
     }
@@ -317,7 +317,7 @@ def main(log_file_path, outpath):
             y_label="{ref} {res}".format(
                 ref=ref.capitalize(), res=res_labels_map[res]
             ),
-            stddevs=results[res]["std"] if ref == "mean" else None,
+            stddevs=None, # results[res]["std"] if ref == "mean" else None,
             y_max=ceiled_maxmax
         )
     plt.savefig(
@@ -331,7 +331,6 @@ def main(log_file_path, outpath):
     #     os.path.join(outpath, "success_rate.png")
     # )
     #     plt.pause(10)
-    plt.show()
         # plt.figure(1)
         # plt.clf()
         # plt.figure(2)
@@ -339,6 +338,16 @@ def main(log_file_path, outpath):
 
 
 if __name__ == '__main__':
-    log_file_path, outdir = sys.argv[1:]
-    main(log_file_path, outdir)
+    outdir = sys.argv[1]
+    log_file_paths = sys.argv[2:]
+    if len(log_file_paths) > 1:
+        for log_file_path in log_file_paths:
+            main(log_file_path, outdir)
+        plt.legend([l.replace("_", "-") for l in log_file_paths])
+    elif len(log_file_paths) == 1:
+        main(log_file_paths[0], outdir)
+
+    else:
+        pass
+    plt.show()
 
