@@ -25,11 +25,11 @@ def cgd_ctc_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.CTCLoss,
@@ -62,11 +62,11 @@ def cgd_cw_gradient_path_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.CWMaxMin,
@@ -103,11 +103,11 @@ def cgd_cw_sparse_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -144,11 +144,11 @@ def cgd_cw_mid_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -185,11 +185,11 @@ def cgd_cw_dense_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -226,11 +226,11 @@ def cgd_cw_patchstart_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -267,11 +267,11 @@ def cgd_cw_patchend_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -308,11 +308,11 @@ def cgd_cw_patchmid_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -349,11 +349,11 @@ def cgd_cw_dist_minnergy_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -390,11 +390,11 @@ def cgd_cw_patch_minnergy_align_greedy_search_graph(sess, batch, settings):
         random_scale=settings["delta_randomiser"],
         constraint_cls=graph.Constraints.L2,
         r_constant=settings["rescale"],
-        update_method="geom",
+        update_method=settings["constraint_update"],
     )
     attack.add_victim(
         models.DeepSpeech.Model,
-        decoder="tf_greedy",
+        decoder=settings["decoder"],
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentBased.CWMaxMin,
@@ -423,6 +423,21 @@ def attack_run(master_settings):
     log("Starting {} run.".format(run))
 
     settings["attack_graph"] = run
+    settings["audio_indir"] = "./samples/all/"
+    settings["targets_path"] = "./samples/cv-valid-test.csv"
+    settings["attack_graph"] = run
+    settings["decoder"] = "tf_greedy"
+    settings["learning_rate"] = 10.0
+    settings["delta_randomiser"] = 0.01
+    settings["rescale"] = 0.8
+    settings["max_examples"] = 50
+    settings["max_targets"] = 3992
+    settings["batch_size"] = 50
+    settings["decode_step"] = 25
+    settings["max_audio_file_bytes"] = 106028
+    settings["nsteps"] = 15000
+    settings["constraint_update"] = "geom"
+    settings["writer"] = "local_latest"
     settings["outdir"] = os.path.join(settings["outdir"], run)
 
     audios = data.ingress.mcv_v1.Audios(
