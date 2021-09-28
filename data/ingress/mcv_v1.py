@@ -108,12 +108,40 @@ class Audios(IterableETL):
 
         audios = lcomp([wav_file.load(f, dtype) for f in audio_fps])
 
+        def rms_to_dbfs(rms):
+            return 20.0 * np.log10(max(1e-16, rms)) + 3.0103
+
+        def max_dbfs(sample_data):
+            # Peak dBFS based on the maximum energy sample.
+            # Will prevent overdrive if used for normalization.
+            return rms_to_dbfs(
+                    max(abs(np.min(sample_data)), abs(np.max(sample_data)))
+                )
+
+        def gain_db_to_ratio(gain_db):
+            return np.power(10.0, gain_db / 20.0)
+
+        def normalize_audio_ds(sample_data, dbfs=3.0103):
+            return np.maximum(
+                np.minimum(
+                    sample_data * gain_db_to_ratio(
+                        dbfs - max_dbfs(sample_data)
+                        ), 1.0
+                    ), -1.0
+                )
+
+        audios = l_map(
+            lambda x: normalize_audio_ds(x), audios
+        )
+
         # N.B. ==> If audios is 0 at any point then the perturbation will always
         # be zero for that sample due to a zero gradient. so add 1 to zero
         # samples make  backpropogation work for all samples (1/2**15 is small
         # so side-effects should be minimal).
 
         for audio in audios:
+            audio[audio > 0] = audio[audio > 0] * (2 ** 15 - 1)
+            audio[audio < 0] = audio[audio < 0] * (2 ** 15)
             audio[audio == 0] = 1.0
 
         maxlen = max(map(len, audios))
