@@ -42,6 +42,10 @@ class Audios(IterableETL):
             elif file_size_sort == 'asc':
                 fps = self.get_size_sorted_file_paths(fps, reverse=False)
             elif file_size_sort == 'shuffle':
+                # os.listdir returns filenames in an **arbitrary** ordering
+                # determined by the *OS*. Sort first *then* shuffle otherwise
+                # you will get load different examples on different machines/OSs
+                fps = self.get_size_sorted_file_paths(fps, reverse=True)
                 random.shuffle(fps)
             else:
                 # otherwise we'll sort by ascending file sizes for memory
