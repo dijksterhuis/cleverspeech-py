@@ -137,6 +137,6 @@ def args(attack_run, additional_args: dict = None):
 
     random.seed(seed)
     np.random.seed(seed)
-    tf.set_random_seed(seed)
+    tf.set_random_seed(seed)  # also set per batch in ../runtime/Execution.py
 
     attack_run(master_settings)

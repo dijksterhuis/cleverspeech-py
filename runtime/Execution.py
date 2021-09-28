@@ -74,7 +74,7 @@ def writer_boilerplate_fn(results_transforms, queue, settings):
 def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_fn):
 
     # tensorflow sessions can't be passed between processes
-    tf_runtime = TFRuntime(settings["gpu_device"])
+    tf_runtime = TFRuntime(settings["gpu_device"], seed=settings["random_seed"])
 
     with tf_runtime.session as sess, tf_runtime.device as tf_device:
 

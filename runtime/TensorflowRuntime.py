@@ -28,7 +28,7 @@ class OOMEnabledSession(tf.Session):
 
 
 class TFRuntime:
-    def __init__(self, device_id=None):
+    def __init__(self, device_id=None, seed=None):
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -45,7 +45,13 @@ class TFRuntime:
 
         self.device = tf.device(device)
 
+        # set the graph seed after resetting the graph...
+        # https://stackoverflow.com/a/36289575/5945794
+
         tf.reset_default_graph()
+
+        if seed:
+            tf.set_random_seed(seed)
 
     @staticmethod
     def log_attack_tensors():
