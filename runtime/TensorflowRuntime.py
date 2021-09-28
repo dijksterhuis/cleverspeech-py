@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tfdeterminism
 
 
 class OOMEnabledSession(tf.Session):
@@ -45,13 +46,16 @@ class TFRuntime:
 
         self.device = tf.device(device)
 
+        tf.reset_default_graph()
+
         # set the graph seed after resetting the graph...
         # https://stackoverflow.com/a/36289575/5945794
 
-        tf.reset_default_graph()
-
-        if seed:
+        if seed is not None:
             tf.set_random_seed(seed)
+
+        # 1.15.5 deterministic GPU ops
+        tfdeterminism.patch()
 
     @staticmethod
     def log_attack_tensors():
