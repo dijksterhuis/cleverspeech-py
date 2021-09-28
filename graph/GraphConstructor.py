@@ -195,16 +195,33 @@ class Constructor:
             feed=self.feeds.examples,
             decoder="batch"
         )
-        z = zip(self.batch.audios["basenames"], probs, decodings)
-        s = ["{}\t{:.3f}\t{}".format(b, p, d) for b, p, d in z]
-        log("Initial decodings:", '\n'.join(s), wrap=True)
 
-        s = ["{:.0f}".format(x) for x in self.batch.audios["real_feats"]]
-        log("Real Features: ", "\n".join(s), wrap=True)
+        probs_rounded = [round(p, 2) for p in probs]
 
-        s = ["{:.0f}".format(x) for x in self.batch.audios["ds_feats"]]
-        log("DS Features: ", "\n".join(s), wrap=True)
+        headers = "BASENAME|FEATS|BATCH_FEATS|LEN|PROBS|DECODING|TARGET_ID|TARGET|N_CHARS"
 
-        s = ["{:.0f}".format(x) for x in self.batch.audios["n_samples"]]
-        log("Real Samples: ", "\n".join(s), wrap=True)
+        z = zip(
+            self.batch.audios["basenames"],
+            self.batch.audios["real_feats"],
+            self.batch.audios["ds_feats"],
+            self.batch.audios["n_samples"],
+            probs_rounded,
+            decodings,
+            self.batch.targets["row_ids"],
+            self.batch.targets["phrases"],
+            self.batch.targets["lengths"],
+        )
+        s = ["|".join("{}".format(y) for y in x) for x in z]
+
+        log("Running attack for this data:", wrap=False)
+
+        log(
+            headers,
+            '\n'.join(s),
+            wrap=False,
+            outdir=self.settings["outdir"],
+            fname="batch.psv"
+        )
+
+        log("Wrote batch data to psv file", wrap=True)
 
