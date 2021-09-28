@@ -62,6 +62,10 @@ def args(attack_run, additional_args: dict = None):
         full_args = standard_non_required_args
 
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('--dry_run', dest='dry_run', action='store_true')
+    parser.set_defaults(dry_run=False)
+
     # parser.add_argument(
     #     "experiment",
     #     nargs=1,
@@ -115,7 +119,9 @@ def args(attack_run, additional_args: dict = None):
         if v is not None:
             d.update({k: v})
 
-    master_settings = {}
+    master_settings = {
+        "dry_run": arguments.dry_run
+    }
 
     for k in standard_non_required_args.keys():
         update_master_settings(

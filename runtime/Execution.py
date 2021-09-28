@@ -93,6 +93,9 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
         )
         log(s)
 
+        if settings["dry_run"] is True:
+            return None
+
         try:
 
             with ProgressBar(min_value=1, max_value=settings["nsteps"]) as p:
