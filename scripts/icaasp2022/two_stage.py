@@ -61,11 +61,11 @@ def attack_run(master_settings):
     settings["decoder"] = "tf_greedy"
     settings["learning_rate"] = 10.0
     settings["rescale"] = 0.8
-    settings["max_examples"] = 50
-    settings["max_targets"] = 3992
+    # settings["max_examples"] = 50
+    # settings["max_targets"] = 3992
     settings["batch_size"] = 50
     settings["decode_step"] = 25
-    settings["delta_randomiser"] = 0.01
+    # settings["delta_randomiser"] = 0.01  set this manually using cli arguments
     settings["nsteps"] = 15000
     settings["constraint_update"] = "geom"
     settings["writer"] = "local_latest"
