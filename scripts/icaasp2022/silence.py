@@ -432,6 +432,7 @@ def attack_run(master_settings):
     settings["max_targets"] = 3992
     settings["batch_size"] = 50
     settings["decode_step"] = 25
+    settings["delta_randomiser"] = 0.001
     settings["max_audio_file_bytes"] = 94674
     settings["nsteps"] = 15000
     settings["constraint_update"] = "geom"
