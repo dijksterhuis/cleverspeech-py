@@ -41,6 +41,15 @@ class Audios(IterableETL):
 
         self.pool = fps
 
+    def __next__(self, batch_size):
+        return self.create_batch(self.popper(self.pool, batch_size))
+
+    @staticmethod
+    def popper(data, size):
+        return l_map(
+            lambda x: data.pop(x-1), range(size, 0, -1)
+        )
+
     @staticmethod
     def get_file_paths(x):
         for fp in os.listdir(x):
@@ -155,7 +164,7 @@ class Targets(IterableETL):
 
         self.pool = list(
             filter(
-                lambda x: ".json" in x and "sample" in x,
+                lambda x: ".json" in x and "setting" not in x,
                 l_map(lambda i: os.path.join(indir, i), os.listdir(indir))
            )
         )
@@ -185,6 +194,7 @@ class Targets(IterableETL):
         batched_json_data = l_map(
             lambda x: open_json(x), ordered_target_file_paths
         )
+        tokens = batched_json_data[0]["tokens"][0]
 
         target_phrases = l_map(
             lambda x: x["phrases"][0].replace("=", " "), batched_json_data
@@ -192,7 +202,6 @@ class Targets(IterableETL):
         row_ids = l_map(
             lambda x: x["row_ids"][0], batched_json_data
         )
-        tokens = batched_json_data[0]["tokens"][0]
         lengths = l_map(
             lambda x: int(x["lengths"][0]), batched_json_data
         )

@@ -32,7 +32,7 @@ def cgd_cw_graph(sess, batch, settings):
         decoder=settings["decoder"],
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.CWMaxMin,
+        graph.losses.adversarial.AlignmentBased.CWMaxMin,
         weight_settings=(1.0e3, 0.5),
         updateable=True,
     )
@@ -79,7 +79,7 @@ def attack_run(master_settings):
         settings["targets_path"],
     )
 
-    batch_gen = data.ingress.mcv_v1.BatchIterator(
+    batch_gen = data.ingress.two_stage.BatchIterator(
         settings, audios, transcriptions
     )
 
