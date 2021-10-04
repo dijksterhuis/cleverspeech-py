@@ -132,6 +132,51 @@ def cgd_cw_patchstart_align_greedy_search_graph(sess, batch, settings):
     return attack
 
 
+def get_trimmed_data(settings):
+    audios = data.ingress.from_csv.TrimmedAudios(
+        settings["csv_file_path"],
+        filter_term=settings["set"],
+    )
+
+    transcriptions = data.ingress.from_csv.Targets(
+        settings["csv_file_path"]
+    )
+
+    batch_gen = data.ingress.from_csv.BatchIterator(
+        settings, audios, transcriptions
+    )
+    return batch_gen
+
+
+def get_batchgen(dataset, settings):
+    if dataset == "untrimmed":
+        audios = data.ingress.from_csv.Audios(
+            settings["csv_file_path"],
+            filter_term=settings["set"],
+        )
+    elif dataset == "trimmed":
+        audios = data.ingress.from_csv.TrimmedAudios(
+            settings["csv_file_path"],
+            filter_term=settings["set"],
+        )
+    elif dataset == "silence":
+        audios = data.ingress.from_csv.Silence(
+            settings["csv_file_path"],
+            filter_term=settings["set"],
+        )
+    else:
+        raise NotImplementedError
+
+    transcriptions = data.ingress.from_csv.Targets(
+        settings["csv_file_path"]
+    )
+
+    batch_gen = data.ingress.from_csv.BatchIterator(
+        settings, audios, transcriptions
+    )
+    return batch_gen
+
+
 def attack_run(master_settings):
 
     run = master_settings["set"]
@@ -158,18 +203,8 @@ def attack_run(master_settings):
 
     # initial run without any random warm up
 
-    audios = data.ingress.from_csv.Audios(
-        settings["csv_file_path"],
-        filter_term=settings["set"],
-    )
+    batch_gen = get_batchgen(dataset, settings)
 
-    transcriptions = data.ingress.from_csv.Targets(
-        settings["csv_file_path"]
-    )
-
-    batch_gen = data.ingress.from_csv.BatchIterator(
-        settings, audios, transcriptions
-    )
     log("Minimal settings run", wrap=False)
     settings["learning_rate"] = 10.0
     settings["delta_randomiser"] = 0.0
@@ -201,18 +236,7 @@ def attack_run(master_settings):
 
     for idx in range(9):
 
-        audios = data.ingress.from_csv.Audios(
-            settings["csv_file_path"],
-            filter_term=settings["set"],
-        )
-
-        transcriptions = data.ingress.from_csv.Targets(
-            settings["csv_file_path"]
-        )
-
-        batch_gen = data.ingress.from_csv.BatchIterator(
-            settings, audios, transcriptions
-        )
+        batch_gen = get_batchgen(dataset, settings)
 
         log("Randomised settings run: {}".format(idx), wrap=False)
         settings["learning_rate"] = random.randint(10, 1000)
