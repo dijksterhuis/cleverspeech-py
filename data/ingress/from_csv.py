@@ -359,6 +359,9 @@ class Silence(IterableETL):
 
         audios = lcomp([wav_file.load(f, dtype) for f in audio_fps])
 
+        for audio in audios:
+            audio[audio == 0] = 1.0
+
         maxlen = max(map(len, audios))
         maximum_length = maxlen + self.padding(maxlen)
 
