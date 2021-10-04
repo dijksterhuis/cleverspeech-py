@@ -2,7 +2,7 @@
 import os
 import traceback
 import tensorflow as tf
-import multiprocessing as mp
+import numpy as np
 
 from cleverspeech import data
 from cleverspeech import graph
@@ -13,61 +13,78 @@ from cleverspeech.runtime.TensorflowRuntime import TFRuntime
 from cleverspeech.utils.Utils import log
 
 
-def custom_executor(settings, batch, model_fn):
+def custom_manager(settings, model_fn, batch_gen):
 
-    tf_runtime = TFRuntime(settings["gpu_device"])
-    with tf_runtime.session as sess, tf_runtime.device as tf_device:
-
-        model = model_fn(sess, batch, settings)
-
-        decodings, probs = model.inference(
-            batch,
-            feed=model.feeds.examples,
-            top_five=False
-        )
-
-        logits, softmax = sess.run(
-            [tf.transpose(model.raw_logits, [1, 0, 2]), model.logits],
-            feed_dict=model.feeds.examples,
-        )
-
-        outdir = os.path.join(settings["outdir"], "validation")
-        if not os.path.exists(outdir):
-            os.makedirs(outdir, exist_ok=True)
-
-        for idx, basename in enumerate(batch.audios["basenames"]):
-            outpath = os.path.join(outdir, basename.rstrip(".wav") + ".json")
-
-            res = {
-                "decoding": decodings[idx],
-                "probs": probs[idx],
-                "logits": logits[idx],
-                "softmax": softmax[idx],
-            }
-
-            json_res = data.egress.load.prepare_json_data(res)
-
-            with open(outpath, "w+") as f:
-                f.write(json_res)
-
-            s = "Sample {i}\t Basename {b}\tProbs {p:.3f}\tdecoding: {d}".format(
-                i=idx, b=basename, p=probs[idx], d=decodings[idx]
-            )
-            log(s, wrap=False)
-
-
-def custom_manager(settings, attack_fn, batch_gen):
-
-    for b_id, batch in batch_gen:
-
-        attack_process = mp.Process(
-            target=custom_executor,
-            args=(settings, batch, attack_fn)
-        )
-
+    n_examples, n_frames = 0, 0
+    token_probs, cers, wers = np.asarray([0.0]*29), 0, 0
+    tokens = None
+    for batch in batch_gen:
+        tokens = batch.targets["tokens"]
         try:
-            attack_process.start()
-            attack_process.join()
+            tf_runtime = TFRuntime(settings["gpu_device"])
+            with tf_runtime.session as sess, tf_runtime.device as tf_device:
+
+                model = model_fn(sess, batch, settings)
+
+                decodings, probs = model.inference(
+                    batch,
+                    feed=model.feeds.examples,
+                    top_five=False
+                )
+
+                logits, softmax = sess.run(
+                    [tf.transpose(model.raw_logits, [1, 0, 2]), model.logits],
+                    feed_dict=model.feeds.examples,
+                )
+
+                outdir = os.path.join(settings["outdir"], "validation")
+                if not os.path.exists(outdir):
+                    os.makedirs(outdir, exist_ok=True)
+
+                for idx, basename in enumerate(batch.audios["basenames"]):
+
+                    n_examples += 1
+                    n_frames += len(softmax[idx])
+
+                    token_probs += np.sum(softmax[idx], axis=0)
+
+                    outpath = os.path.join(
+                        outdir, basename.rstrip(".wav") + ".json"
+                    )
+
+                    cer = data.metrics.transcription_error.character_error_rate(
+                        decodings[idx],
+                        batch.trues["true_targets"][idx],
+                    )
+
+                    cers += cer
+
+                    wer = data.metrics.transcription_error.word_error_rate(
+                        decodings[idx],
+                        batch.trues["true_targets"][idx],
+                    )
+
+                    wer += wer
+
+                    res = {
+                        "decoding": decodings[idx],
+                        "probs": probs[idx],
+                        "logits": logits[idx],
+                        "softmax": softmax[idx],
+                        "wer": wer,
+                        "cer": cer,
+                    }
+
+                    json_res = data.egress.load.prepare_json_data(res)
+
+                    with open(outpath, "w+") as f:
+                        f.write(json_res)
+
+                    s = "Sample {i}\t Basename {b}\tProbs {p:.3f}\tWER: {w:.3f}\tCER: {c:.3f}\tdecoding: {d}".format(
+                        i=idx, b=basename, p=probs[idx], w=wer, c=cer,
+                        d=decodings[idx]
+                    )
+                    log(s, wrap=False)
 
         except Exception as e:
             tb = "".join(traceback.format_exception(None, e, e.__traceback__))
@@ -77,8 +94,18 @@ def custom_manager(settings, attack_fn, batch_gen):
             s += "\n\nError Traceback:\n{e}".format(e=tb)
 
             log(s, wrap=True)
-            attack_process.terminate()
             raise
+
+    log("", wrap=True)
+    log("Final Summary:", wrap=False)
+    s = "Examples: {e}\tFrames: {f}\t Mean WER: {w}\tMean CER: {c}".format(
+        e=n_examples, f=n_frames, w=wers/n_examples, c=cers/n_examples
+    )
+    log(s, wrap=True)
+    log("Mean per token probabilities:", wrap=True)
+    mean_token_probs = token_probs / n_frames
+    for idx, token in enumerate(tokens):
+        log("{t} = {s}".format(t=token, s=mean_token_probs[idx]), wrap=False)
 
 
 def create_validation_graph(sess, batch, settings):
