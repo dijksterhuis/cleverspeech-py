@@ -8,25 +8,25 @@ file_path,run,row_id,phrase
 ./samples/all/sample-003052.wav,cw-dense_trimmed,7,so you can kill me too
 ./samples/all/sample-002916.wav,cw-dense_trimmed,8,with a bag of marshmallows
 ./samples/all/sample-000055.wav,cw-dense_trimmed,9,who gets your vote
-./samples/all/sample-001037.wav,cw-start_trimmed,1,like an old fire horse
-./samples/all/sample-000959.wav,cw-start_trimmed,2,and so do i
-./samples/all/sample-002788.wav,cw-start_trimmed,3,i'm going with you the boy said
-./samples/all/sample-001287.wav,cw-start_trimmed,4,i can see that
-./samples/all/sample-003346.wav,cw-start_trimmed,5,i'll take mine now
-./samples/all/sample-001994.wav,cw-start_trimmed,6,you know where i live
-./samples/all/sample-003722.wav,cw-start_trimmed,7,i forgot my hat
-./samples/all/sample-001393.wav,cw-start_trimmed,8,i am proud of you he said
-./samples/all/sample-000231.wav,cw-start_trimmed,9,it means my job
-./samples/all/sample-001516.wav,cw-start_trimmed,10,it means my job
-./samples/all/sample-001882.wav,cw-start_trimmed,11,that sobered him a little
-./samples/all/sample-000395.wav,cw-start_trimmed,12,a boy came running towards me
-./samples/all/sample-000499.wav,cw-start_trimmed,13,i could have helped her
-./samples/all/sample-003052.wav,cw-start_trimmed,14,so you can kill me too
-./samples/all/sample-002050.wav,cw-start_trimmed,15,it drew a droplet of blood
-./samples/all/sample-002556.wav,cw-start_trimmed,16,amy's a genius at research
-./samples/all/sample-002916.wav,cw-start_trimmed,17,with a bag of marshmallows
-./samples/all/sample-000055.wav,cw-start_trimmed,18,who gets your vote
-./samples/all/sample-000758.wav,cw-start_trimmed,19,is it all right
-./samples/all/sample-003328.wav,cw-start_untrimmed,1,i'll have ned write it up
+./samples/all/sample-001037.wav,cw-patchstart_trimmed,1,like an old fire horse
+./samples/all/sample-000959.wav,cw-patchstart_trimmed,2,and so do i
+./samples/all/sample-002788.wav,cw-patchstart_trimmed,3,i'm going with you the boy said
+./samples/all/sample-001287.wav,cw-patchstart_trimmed,4,i can see that
+./samples/all/sample-003346.wav,cw-patchstart_trimmed,5,i'll take mine now
+./samples/all/sample-001994.wav,cw-patchstart_trimmed,6,you know where i live
+./samples/all/sample-003722.wav,cw-patchstart_trimmed,7,i forgot my hat
+./samples/all/sample-001393.wav,cw-patchstart_trimmed,8,i am proud of you he said
+./samples/all/sample-000231.wav,cw-patchstart_trimmed,9,it means my job
+./samples/all/sample-001516.wav,cw-patchstart_trimmed,10,it means my job
+./samples/all/sample-001882.wav,cw-patchstart_trimmed,11,that sobered him a little
+./samples/all/sample-000395.wav,cw-patchstart_trimmed,12,a boy came running towards me
+./samples/all/sample-000499.wav,cw-patchstart_trimmed,13,i could have helped her
+./samples/all/sample-003052.wav,cw-patchstart_trimmed,14,so you can kill me too
+./samples/all/sample-002050.wav,cw-patchstart_trimmed,15,it drew a droplet of blood
+./samples/all/sample-002556.wav,cw-patchstart_trimmed,16,amy's a genius at research
+./samples/all/sample-002916.wav,cw-patchstart_trimmed,17,with a bag of marshmallows
+./samples/all/sample-000055.wav,cw-patchstart_trimmed,18,who gets your vote
+./samples/all/sample-000758.wav,cw-patchstart_trimmed,19,is it all right
+./samples/all/sample-003328.wav,cw-patchstart_untrimmed,1,i'll have ned write it up
 ./silence/all/silence_621.wav,ctc-greedy_silence,1,never mind those guys
 ./samples/all/sample-001295.wav,ctc-greedy_trimmed,1,sheep
