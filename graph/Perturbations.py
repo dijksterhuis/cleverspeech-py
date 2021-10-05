@@ -299,9 +299,6 @@ class ClippedGradientDescent(IndependentVariables):
         # zero value padded in the original audio
         deltas *= masks
 
-        # Restrict delta to valid space before applying constraints
-        self.final_deltas = self.apply_box_constraint(deltas)
-
         self.hard_constraint = constraint_cls(
             self.sess,
             self.batch,
@@ -312,6 +309,9 @@ class ClippedGradientDescent(IndependentVariables):
         self.perturbations = self.hard_constraint.clip(
             self.final_deltas
         )
+
+        # Restrict delta to valid space after applying constraints
+        self.perturbations = self.apply_box_constraint(self.perturbations)
 
         # clip example to valid range
         self.adversarial_examples = tf.clip_by_value(
