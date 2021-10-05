@@ -299,6 +299,8 @@ class ClippedGradientDescent(IndependentVariables):
         # zero value padded in the original audio
         deltas *= masks
 
+        self.final_deltas = deltas
+
         self.hard_constraint = constraint_cls(
             self.sess,
             self.batch,
