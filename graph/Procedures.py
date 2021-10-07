@@ -79,12 +79,14 @@ class AbstractProcedure(ABC):
 
     def pre_optimisation_updates_hook(self, successes):
 
-        self.attack.delta_graph.pre_optimisation_updates(
-            successes
-        )
+        if self.attack.size_constraint is not None and any(successes):
+            self.attack.size_constraint.update(
+                self.tf_run(self.attack.perturbations),
+                successes
+            )
 
         for loss in self.attack.loss:
-            if loss.updateable is True:
+            if loss.updateable is True and any(successes):
                 loss.update_many(successes)
 
     def post_optimisation_hook(self, successes):
@@ -94,10 +96,7 @@ class AbstractProcedure(ABC):
         N.B. This method is not abstract as it is *not* required to run an
         attack, but feel free to override it.
         """
-
-        self.attack.delta_graph.post_optimisation_updates(
-            successes
-        )
+        pass
 
     def run(self):
         """

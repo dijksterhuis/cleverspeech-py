@@ -20,10 +20,14 @@ def only_box_constraint_graph(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.BoxConstraintOnly,
+        graph.Perturbations.IndependentVariables,
         random_scale=settings["delta_randomiser"]
     )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
@@ -65,13 +69,19 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
-        random_scale=settings["delta_randomiser"],
-        constraint_cls=graph.Constraints.L2,
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_size_constraint(
+        graph.constraints.size.L2,
         r_constant=settings["rescale"],
         update_method=settings["constraint_update"],
     )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
@@ -118,13 +128,19 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
-        random_scale=settings["delta_randomiser"],
-        constraint_cls=graph.Constraints.Linf,
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_size_constraint(
+        graph.constraints.size.Linf,
         r_constant=settings["rescale"],
         update_method=settings["constraint_update"],
     )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
@@ -176,13 +192,19 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.ClippedGradientDescent,
-        random_scale=settings["delta_randomiser"],
-        constraint_cls=graph.Constraints.L2,
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_size_constraint(
+        graph.constraints.size.Linf,
         r_constant=settings["rescale"],
         update_method=settings["constraint_update"],
     )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
@@ -245,6 +267,8 @@ def attack_run(master_settings):
             assert 0 <= master_settings["kappa"] < 1
         else:
             assert master_settings["kappa"] >= 0
+    else:
+        master_settings["kappa"] = None
 
     attack_type = master_settings["attack_graph"]
     align = master_settings["align"]

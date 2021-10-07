@@ -27,7 +27,8 @@ class Constructor:
         self.path_search = None
         self.feeds = Feeds()
         self.placeholders = None
-        self.hard_constraint = None
+        self.box_constraint = None
+        self.size_constraint = None
         self.delta_graph = None
         self.perturbations = None
         self.adversarial_examples = None
@@ -58,37 +59,41 @@ class Constructor:
         self.feeds.examples = self.placeholders.examples_feed
         self.feeds.attack = self.placeholders.attacks_feed
 
-    def add_hard_constraint(self, constraint, *args, **kwargs):
-        """
-        Override this method to in child classes if needed.
+    def add_box_constraint(self, box_constraint, *args, **kwargs):
+        self.box_constraint = box_constraint(*args, **kwargs)
 
-        :param constraint: reference to the **uninitialised**
-            cleverspeech.graph.Constraints class
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-
-        pass
+    def add_size_constraint(self, size_constraint, *args, **kwargs):
+        self.size_constraint = size_constraint(
+            self.sess, self.batch, *args, **kwargs
+        )
 
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
-        """
-        Add a perturbation graph.
-
-        :param graph: an uninitialised reference to a
-            cleverspeech.graph.VariableGraphs class, i.e. BatchwiseVariableGraph
-        :param args: any args with which are required to initialise the class
-        :param kwargs: any optional args with which to initialise the class
-        :return: None
-        """
-
         self.delta_graph = graph(
             self.sess,
             self.batch,
-            self.placeholders,
             *args,
             **kwargs,
         )
+
+    def create_adversarial_examples(self):
+
+        self.perturbations = self.delta_graph.deltas
+
+        if self.size_constraint is not None:
+            self.perturbations = self.size_constraint.clip(
+                self.perturbations
+            )
+
+        if self.box_constraint is not None:
+            self.perturbations = self.box_constraint.clip(
+                self.perturbations
+            )
+            self.adversarial_examples = self.box_constraint.clip(
+                self.perturbations + self.placeholders.audios
+            )
+
+        else:
+            self.adversarial_examples = self.perturbations + self.placeholders.audios
 
     def add_victim(self, model, *args, **kwargs):
         """
@@ -102,7 +107,7 @@ class Constructor:
         """
         self.victim = model(
             self.sess,
-            self.delta_graph.adversarial_examples,
+            self.adversarial_examples,
             self.batch,
             *args,
             **kwargs

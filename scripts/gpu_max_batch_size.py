@@ -85,17 +85,21 @@ def ctc_only_box_constraint_graph(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.BoxConstraintOnly,
+        graph.Perturbations.IndependentVariables,
         random_scale=settings["delta_randomiser"]
     )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.CTCLoss,
+        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -119,10 +123,19 @@ def cw_gradient_path_box_constraint_graph(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_size_constraint(
+        graph.constraints.size.L2,
+        r_constant=settings["rescale"],
+        update_method=settings["constraint_update"],
+    )
     attack.add_perturbation_subgraph(
-        graph.Perturbations.BoxConstraintOnly,
+        graph.Perturbations.IndependentVariables,
         random_scale=settings["delta_randomiser"]
     )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
@@ -158,10 +171,15 @@ def cw_only_box_constraint_graph(sess, batch, settings):
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.BoxConstraintOnly,
-        random_scale=settings["delta_randomiser"],
+
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
     )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
     attack.add_victim(
         models.DeepSpeech.Model,
         decoder=settings["decoder"],
