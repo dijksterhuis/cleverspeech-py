@@ -133,6 +133,66 @@ class IndependentVariables(AbstractPerturbationsGraph):
         pass
 
 
+class Unconstrained(IndependentVariables):
+
+    def __init__(
+            self,
+            sess,
+            batch,
+            placeholders,
+            bit_depth=1.0,
+            random_scale=0.002
+    ):
+
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            random_scale=random_scale,
+        )
+        self.create_graph(sess, batch, placeholders)
+
+    def create_graph(self, sess, batch, placeholders):
+
+        batch_size = batch.size
+        max_len = batch.audios["max_samples"]
+        act_lengths = batch.audios["n_samples"]
+
+        masks = tf.Variable(
+            tf.zeros([batch_size, max_len]),
+            trainable=False,
+            validate_shape=True,
+            dtype=tf.float32,
+            name='qq_masks'
+        )
+
+        # Generate a batch of delta variables which will be optimised as a batch
+
+        deltas = self.create_perturbations(batch_size, max_len)
+
+        # Mask deltas first so we zero value *any part of the signal* that is
+        # zero value padded in the original audio
+        deltas *= masks
+
+        self.perturbations = deltas
+
+        self.adversarial_examples = self.perturbations + placeholders.audios
+
+        # initialise static variables
+        initial_masks = np_arr(
+            lcomp(self._gen_mask(act_lengths, max_len)),
+            np.float32
+        )
+
+        sess.run(masks.assign(initial_masks))
+
+    def pre_optimisation_updates(self, successess: list):
+        pass
+
+    def post_optimisation_updates(self, successess: list):
+        pass
+
+
 class BoxConstraintOnly(IndependentVariables):
 
     def __init__(
