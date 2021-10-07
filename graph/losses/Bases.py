@@ -184,41 +184,74 @@ class BaseAlignmentLoss(BaseLoss):
 
 
 class _BasePathSearch(BaseAlignmentLoss):
+
+    def __init__(self, attack, *args, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+        self.requires_update = False
+        self.most_likely_path = None
+        self.get_most_likely_path_as_tf()
+
     def get_most_likely_path_as_tf(self):
         pass
 
 
 class _GreedySearchPath(_BasePathSearch):
+
     def get_most_likely_path_as_tf(self):
-        return tf.cast(
+        self.most_likely_path = tf.cast(
             tf.argmax(self.attack.victim.logits, axis=-1), dtype=tf.int32
         )
 
 
 class _BeamSearchPath(_BasePathSearch):
+
+    def __init__(self, attack, *args, **kwargs):
+        super().__init__(attack, *args, **kwargs)
+
+        self.requires_update = True
+
+    def init(self):
+        self.most_likely_path = tf.cast(
+            tf.argmax(self.attack.victim.logits, axis=-1), dtype=tf.int32
+        )
+
     def get_most_likely_path_as_tf(self):
 
-        # TODO: This method is no longer called on every update step as it's
-        #       assumed that it's used to allocate a static graph of TF
-        #       variables to avoid memory leakage -- this means the tests
-        #       against decoder alignment won't work correctly.
+        # check if we've got a graph with tf variables initialised
 
-        smax = self.attack.procedure.tf_run(self.attack.victim.logits)
-        lengths = self.attack.batch.audios["ds_feats"]
+        if self.attack.procedure is None:
+            # graph not loaded, we can't get values from sess.run so initialise
+            # with greedy tokens for now
+            self.most_likely_path = tf.cast(
+                tf.argmax(self.attack.victim.logits, axis=-1), dtype=tf.int32
+            )
 
-        _, _, toks, times = self.attack.victim.ds_decode_batch_no_lm(
-            smax, lengths, top_five=False, with_metadata=True
-        )
-        shape = [
-            self.attack.batch.size,
-            self.attack.batch.audios["max_feats"]
-        ]
-        blanks = np.ones(shape, dtype=np.int32) * 28
+        else:
+            # we have a graph! now we can query for the logits
+            smax = self.attack.sess.run(
+                self.attack.victim.logits,
+                feed_dict=self.attack.feeds.attack
+            )
 
-        for idx, (tok, time) in enumerate(zip(toks, times)):
-            blanks[idx, time] = tok
+            lengths = self.attack.batch.audios["ds_feats"]
 
-        return tf.cast(blanks, dtype=tf.int32)
+            _, _, toks, times = self.attack.victim.ds_decode_batch(
+                smax, lengths, top_five=False, with_metadata=True
+            )
+            shape = [
+                self.attack.batch.size,
+                self.attack.batch.audios["max_feats"]
+            ]
+            blanks = np.ones(shape, dtype=np.int32) * 28
+
+            for idx, (tok, time) in enumerate(zip(toks, times)):
+                blanks[idx, time] = tok
+
+            print(blanks)
+
+            self.most_likely_path = tf.cast(blanks, dtype=tf.int32)
 
 
 class _BaseBinarySearches(_BasePathSearch):
@@ -252,6 +285,7 @@ class _SimpleTokenWeights(_BaseBinarySearches):
     def __init__(self, attack, custom_target=None, use_softmax=False, weight_settings=(None, None), updateable: bool = False):
 
         self.tf_new_weights = None
+        self.test = None
 
         super().__init__(
             attack,
@@ -319,19 +353,19 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         return res
 
     def create_tf_token_test_bool_graph(self):
-        current_most_likely_path = self.get_most_likely_path_as_tf()
 
         target_argmax = tf.cast(
             self.target_argmax, dtype=tf.int32
         )
 
-        return tf.equal(target_argmax, current_most_likely_path)
+        self.test = tf.equal(target_argmax, self.most_likely_path)
 
     def create_tf_tokens_test_graph(self):
-        argmax_test = self.create_tf_token_test_bool_graph()
+
+        self.create_tf_token_test_bool_graph()
 
         updated = tf.where(
-            argmax_test,
+            self.test,
             tf.multiply(self.increment, self.weights),
             tf.multiply(1 / self.increment, self.weights),
         )
@@ -355,6 +389,9 @@ class _SimpleTokenWeights(_BaseBinarySearches):
         )
 
     def check_token_weights(self, batch_successes):
+
+        if self.requires_update is True:
+            self.get_most_likely_path_as_tf()
 
         new_weights = self.attack.procedure.tf_run(self.tf_new_weights)
         new_weights = self.check_for_resets(batch_successes, new_weights)
@@ -439,7 +476,7 @@ class _KappaTokenWeights(_SimpleTokenWeights):
         )
 
         self.tf_tokens_test_check = tf.reduce_all(
-            self.create_tf_token_test_bool_graph(), axis=-1
+            self.test, axis=-1
         )
 
     def init_weights(self, attack, weight_settings):
@@ -482,10 +519,10 @@ class _KappaTokenWeights(_SimpleTokenWeights):
                 # take a while to react to changes
                 weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
 
-            elif suc is True and bool(t) is True:
+            elif suc is True:
 
-                # this should map to successful adversarial examples with greedy
-                # decoding. awesome, let's try and find a smaller value of kappa
+                # we've found successful adversarial examples, awesome.
+                # let's try and find a smaller value of kappa
                 kaps[idx] *= 1 - (self.increment * self.increment)
 
                 # reset the token weights, otherwise token weight updates may
