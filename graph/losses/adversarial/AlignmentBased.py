@@ -17,7 +17,7 @@ class TargetClassesFramewise(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn *= self.weights
 
 
-class BiggioMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class BiggioMaxMin(Bases.SimpleGreedySearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -28,12 +28,12 @@ class BiggioMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         )
 
         self.max_min = - self.target_logit + self.max_other_logit
-        self.loss_fn = tf.reduce_sum(self.max_min, axis=1)
+        self.loss_fn = tf.reduce_sum(self.max_min * self.weights, axis=1)
 
-        self.loss_fn = self.loss_fn * self.weights
+        self.loss_fn = self.loss_fn
 
 
-class MaxOfMaxMin(Bases.SimpleGreedySearchTokenWeights):
+class MaxOfMaxMin(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -49,7 +49,7 @@ class MaxOfMaxMin(Bases.SimpleGreedySearchTokenWeights):
         self.loss_fn = self.loss_fn
 
 
-class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
+class CWMaxMin(Bases.SimpleBeamSearchTokenWeights):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
@@ -68,8 +68,10 @@ class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
         self.loss_fn = self.loss_fn
 
 
-class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
-    def __init__(self, attack, k=0.0, ref_fn=tf.reduce_min, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+class AdaptiveKappaMaxMin(Bases.KappaGreedySearchTokenWeights):
+    def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
+
+        assert k >= 0
 
         super().__init__(
             attack,
@@ -78,26 +80,11 @@ class AdaptiveKappaMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
             updateable=updateable,
         )
 
-        # We have to set k > 0 for this loss function because k = 0 will only
-        # cause the probability of the target character to exactly match the
-        # next most likely character...
-        assert type(k) is float
-        assert ref_fn in [tf.reduce_max, tf.reduce_min, tf.reduce_mean]
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -self.kappa) + self.kappa
+        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
 
-        self.kappa_distrib = self.max_other_logit - ref_fn(self.others, axis=2)
-
-        # each target logit frame must be at least k * other logits difference
-        # for loss to minimise.
-        self.kappas = self.kappa_distrib * k
-
-        # If target logit is most likely, then the optimiser has done a good job
-        # and loss will become negative.
-        # Add kappa on the end so that loss is zero when minimised
-        self.max_diff_abs = self.max_other_logit - self.target_logit
-        self.max_diff = tf.maximum(self.max_diff_abs, -self.kappas) + self.kappas
-        self.loss_fn = tf.reduce_sum(self.max_diff, axis=1)
-
-        self.loss_fn = self.loss_fn * self.weights
+        self.loss_fn = self.loss_fn
 
 
 class WeightedMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
