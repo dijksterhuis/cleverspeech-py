@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-from copy import deepcopy
 
 from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import np_arr, lcomp
@@ -49,11 +48,12 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
             name='qq_masks'
         )
 
-        self.bounds = np_arr(
+        self.initial_taus = np_arr(
             lcomp(self._gen_tau(batch.audios["n_samples"])),
             np.float32
         )
-        self.initial_taus = deepcopy(self.bounds)
+
+        sess.run(self.bounds.assign(self.initial_taus))
 
     def _gen_tau(self, act_lengths):
         """
@@ -88,13 +88,12 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
         """
         Update bounds for all perturbations in a batch, if they've found success
         """
-
-        current_bounds = self.bounds
+        current_bounds = self.tf_run(self.bounds)
         current_distances = self.analyse(deltas)[0]
 
-        for b, d, s in zip(self.bounds, current_distances, successes):
+        z = zip(current_bounds, current_distances, successes)
+        for idx, (b, d, s) in enumerate(z):
             if s is True:
                 b[0] = self.get_new_bound(d)
 
-        self.bounds = current_bounds
-        # self.tf_run(self.bounds.assign(current_bounds))
+        self.tf_run(self.bounds.assign(current_bounds))

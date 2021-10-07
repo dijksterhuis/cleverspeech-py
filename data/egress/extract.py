@@ -121,28 +121,44 @@ def get_attack_state(attack, successes):
         # attack.optimiser.gradients,
     ]
 
-    np_vars = get_tf_graph_variables(
-        tf_graph_variables, attack.procedure.tf_run
-    )
-
-    [
-        total_losses,
-        deltas,
-        adv_audio,
-        softmax_logits,
-        raw_logits,
-        # gradients,
-    ] = np_vars
-
     if attack.size_constraint is not None:
 
         initial_taus = attack.size_constraint.initial_taus
         bounds_raw = attack.size_constraint.bounds
 
+        tf_graph_variables.append(bounds_raw)
+
+        np_vars = get_tf_graph_variables(
+            tf_graph_variables, attack.procedure.tf_run
+        )
+
+        [
+            total_losses,
+            deltas,
+            adv_audio,
+            softmax_logits,
+            raw_logits,
+            # gradients,
+            bounds_raw,
+        ] = np_vars
+
     else:
 
         initial_taus = [[None] for _ in range(attack.batch.size)]
         bounds_raw = [[None] for _ in range(attack.batch.size)]
+
+        np_vars = get_tf_graph_variables(
+            tf_graph_variables, attack.procedure.tf_run
+        )
+
+        [
+            total_losses,
+            deltas,
+            adv_audio,
+            softmax_logits,
+            raw_logits,
+            # gradients,
+        ] = np_vars
 
     batched_results = {
         "step": batched_steps,
