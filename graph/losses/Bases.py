@@ -542,8 +542,8 @@ class _KappaTokenWeights(_SimpleTokenWeights):
         raise Exception
 
     def update_many(self, batch_successes: list):
-        super().update_many(batch_successes)
         self.check_kappa(batch_successes)
+        super().update_many(batch_successes)
 
 
 class SimpleGreedySearchTokenWeights(_SimpleTokenWeights, _GreedySearchPath):
