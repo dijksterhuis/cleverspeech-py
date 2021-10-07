@@ -86,7 +86,7 @@ class AbstractProcedure(ABC):
             )
 
         for loss in self.attack.loss:
-            if loss.updateable is True and any(successes):
+            if loss.updateable is True:
                 loss.update_many(successes)
 
     def post_optimisation_hook(self, successes):
