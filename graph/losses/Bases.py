@@ -55,6 +55,7 @@ class SimpleWeightings(BaseLoss):
 
             self.initial, self.increment = weight_settings
             self.upper_bound = self.initial
+            self.lower_bound = 1e-10
 
         elif len(weight_settings) == 3:
             self.initial, self.increment, n = weight_settings
