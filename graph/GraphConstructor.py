@@ -17,7 +17,7 @@ class Feeds:
 
 
 class Constructor:
-    def __init__(self, sess, batch, settings, bit_depth=2**15):
+    def __init__(self, sess, batch, settings, bit_depth=1.0):
 
         self.batch = batch
         self.sess = sess

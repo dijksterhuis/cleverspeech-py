@@ -98,10 +98,7 @@ class Audios(IterableETL):
         )
 
         for audio in audios:
-            # set everything to 16 bit int range as we shift it later anyway
-            audio[audio > 0] = audio[audio > 0] * (2 ** 15 - 1)
-            audio[audio < 0] = audio[audio < 0] * 2 ** 15
-            audio[audio == 0] = 1.0
+            audio[audio == 0] = 1e-10
 
         maxlen = max(map(len, audios))
         maximum_length = maxlen + self.padding(maxlen)

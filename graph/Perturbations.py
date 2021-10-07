@@ -38,7 +38,7 @@ class AbstractPerturbationsGraph(ABC):
             self,
             sess,
             batch,
-            bit_depth=2**15,
+            bit_depth=1.0,
             random_scale=0.002,
             updateable=False
     ):
@@ -67,8 +67,8 @@ class AbstractPerturbationsGraph(ABC):
 
     def initial_delta_values(self, shape):
 
-        upper = (self.bit_depth - 1) * self.random_scale
-        lower = -self.bit_depth * self.random_scale
+        upper = self.bit_depth * self.random_scale
+        lower = self.bit_depth * self.random_scale
 
         return tf.random.uniform(
             shape,
@@ -89,7 +89,9 @@ class AbstractPerturbationsGraph(ABC):
     def apply_box_constraint(self, deltas):
 
         lower = -self.bit_depth
-        upper = self.bit_depth - 1
+        upper = self.bit_depth
+
+        # return tf.tanh(deltas)
 
         return tf.clip_by_value(
             deltas,
@@ -138,7 +140,7 @@ class BoxConstraintOnly(IndependentVariables):
             sess,
             batch,
             placeholders,
-            bit_depth=2 ** 15,
+            bit_depth=1.0,
             random_scale=0.002
     ):
 
@@ -174,13 +176,12 @@ class BoxConstraintOnly(IndependentVariables):
 
         # Restrict delta to valid space before applying constraints
         self.perturbations = self.final_deltas = self.apply_box_constraint(
-            deltas)
+            deltas
+        )
 
-        # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.perturbations + placeholders.audios,
-            clip_value_min=-self.bit_depth,
-            clip_value_max=self.bit_depth - 1
+        # Restrict delta to valid space before applying constraints
+        self.adversarial_examples = self.apply_box_constraint(
+            self.perturbations + placeholders.audios
         )
 
         # initialise static variables
@@ -204,7 +205,7 @@ class ProjectedGradientDescentRounding(BoxConstraintOnly):
             sess,
             batch,
             placeholders,
-            bit_depth=2 ** 15,
+            bit_depth=1.0,
             random_scale=0.002,
     ):
 
@@ -246,7 +247,7 @@ class ClippedGradientDescent(IndependentVariables):
             batch,
             placeholders,
             constraint_cls=None,
-            bit_depth=2 ** 15,
+            bit_depth=1.0,
             random_scale=0.002,
             r_constant=0.95,
             update_method="geom",
@@ -316,10 +317,8 @@ class ClippedGradientDescent(IndependentVariables):
         self.perturbations = self.apply_box_constraint(self.perturbations)
 
         # clip example to valid range
-        self.adversarial_examples = tf.clip_by_value(
-            self.perturbations + placeholders.audios,
-            clip_value_min=-self.bit_depth,
-            clip_value_max=self.bit_depth - 1
+        self.adversarial_examples = self.apply_box_constraint(
+            self.perturbations + placeholders.audios
         )
 
         # initialise static variables
@@ -348,7 +347,7 @@ class ClippedGradientDescentWithProjectedRounding(ClippedGradientDescent):
             batch,
             placeholders,
             constraint_cls=None,
-            bit_depth=2 ** 15,
+            bit_depth=1.0,
             random_scale=0.002,
             r_constant=0.95,
             update_method="geom",

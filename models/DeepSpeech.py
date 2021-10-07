@@ -27,11 +27,7 @@ class TFSignalMFCC:
         self.sample_rate = sample_rate
         self.n_ceps = n_ceps
 
-        self.audio_input = tf.where(
-            tf.less(audio_tensor, tf.zeros_like(audio_tensor)),
-            audio_tensor / 2 ** 15,
-            audio_tensor / (2 ** 15 - 1)
-        )
+        self.audio_input = audio_tensor
         self.batch_size = batch_size
 
         self.mfcc = None

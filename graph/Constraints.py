@@ -16,7 +16,7 @@ class AbstractConstraint(ABC):
     """
     Abstract class for constraints, funnily enough.
     """
-    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, update_method="geom", lowest_bound=None):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method="geom", lowest_bound=None):
 
         assert type(r_constant) == float or type(r_constant) == np.float32
         assert 0 < r_constant < 1.0
@@ -96,7 +96,7 @@ class AbstractConstraint(ABC):
 
 
 class L2(AbstractConstraint):
-    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, lowest_bound=None, update_method=None):
 
         super().__init__(
             sess,
@@ -120,7 +120,7 @@ class L2(AbstractConstraint):
 
 
 class Linf(AbstractConstraint):
-    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
             batch,
@@ -143,7 +143,7 @@ class Linf(AbstractConstraint):
 
 
 class Energy(AbstractConstraint):
-    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
             batch,
@@ -165,7 +165,7 @@ class Energy(AbstractConstraint):
 
 
 class RMS(AbstractConstraint):
-    def __init__(self, sess, batch, bit_depth=2 ** 15, r_constant=0.95, lowest_bound=None, update_method=None):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, lowest_bound=None, update_method=None):
         super().__init__(
             sess,
             batch,

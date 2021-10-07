@@ -114,7 +114,7 @@ class Audios(IterableETL):
         # so side-effects should be minimal).
 
         for audio in audios:
-            audio[audio == 0] = 1.0
+            audio[audio == 0] = 1e-10
 
         maxlen = max(map(len, audios))
         maximum_length = maxlen + self.padding(maxlen)
