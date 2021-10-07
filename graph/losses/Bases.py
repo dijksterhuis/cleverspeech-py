@@ -517,17 +517,17 @@ class _KappaTokenWeights(_SimpleTokenWeights):
 
                 # reset the token weights, otherwise token weight updates may
                 # take a while to react to changes
-                weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
+                # weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
 
             elif suc is True:
-
+                pass
                 # we've found successful adversarial examples, awesome.
                 # let's try and find a smaller value of kappa
-                kaps[idx] *= 1 - (self.increment * self.increment)
+                # kaps[idx] *= self.increment * self.increment
 
                 # reset the token weights, otherwise token weight updates may
                 # take a while to react to changes
-                weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
+                # weights[idx] = self.initial * np.ones(w.shape, dtype=np.float32)
 
             else:
                 pass
