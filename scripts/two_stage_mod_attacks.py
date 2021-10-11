@@ -272,16 +272,16 @@ def attack_run(master_settings):
     master_settings["outdir"] = outdir
     master_settings["attack type"] = attack_type
 
-    audios = data.ingress.two_stage.Audios(
+    audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
         master_settings["audio_indir"],
         filter_term="audio.wav"
     )
 
-    transcriptions = data.ingress.two_stage.Targets(
+    transcriptions = data.ingress.two_stage.TwoStageTranscriptions(
         master_settings["audio_indir"],
     )
 
-    batch_gen = data.ingress.mcv_v1.BatchIterator(
+    batch_gen = data.ingress.two_stage.TwoStageIterableBatches(
         master_settings, audios, transcriptions
     )
 
