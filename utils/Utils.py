@@ -20,6 +20,16 @@ def l_map(f, *x):
     return list(map(f, *x))
 
 
+def l_filter(f, *x):
+    return list(filter(f, *x))
+
+
+def l_sort(f, x, reverse=False):
+    assert type(x) is list
+    x.sort(key=f, reverse=reverse)
+    return x
+
+
 def np_arr(x, t):
     return np.array(x, dtype=t)
 
