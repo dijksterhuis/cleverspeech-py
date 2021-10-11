@@ -70,7 +70,7 @@ def get_target_batch(batch):
 
 
 def get_audio_batch(batch):
-    excludes = ["max_samples", "max_feats"]
+    excludes = ["max_samples", "max_feats", "ground_truth"]
     auds = {k: v for k, v in batch.audios.items() if k not in excludes}
     return auds
 
