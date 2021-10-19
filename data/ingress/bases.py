@@ -563,6 +563,56 @@ class _BaseSilenceAudioBatchETL(_BaseAudiosBatchETL):
         }
 
 
+class _BaseConstantAmplitudeAudioBatchETL(_BaseAudiosBatchETL):
+
+    @staticmethod
+    def get_single_ground_truth_phrase(file_path):
+        return ""
+
+    def _transform_and_load(self, batch_data):
+
+        # meta
+        file_paths = self.get_batch_wav_file_paths(batch_data)
+        basenames = self.get_batch_wav_basenames(batch_data)
+        audios = self.get_batch_audio(file_paths)
+        n_samples = self.get_batch_n_samples(audios)
+
+        ground_truth_phrase = self.get_batch_ground_truth_phrases(
+            len(batch_data)
+        )
+        ground_truth_length = self.get_batch_ground_truth_phrase_lengths(
+            len(batch_data)
+        )
+
+        # audio processing
+        silenced = self.get_batch_pseudo_silence(audios)
+        non_zero = self.get_batch_nonzero_values(silenced)
+
+        # post processing meta
+        maximum_padded_length = self.get_batch_max_padded_length(non_zero)
+        padded = self.get_batch_padded_audio(silenced, maximum_padded_length)
+        max_n_features = self.get_batch_max_n_feats(
+            len(batch_data), maximum_padded_length
+        )
+        actual_n_features = self.get_batch_actual_n_feats(audios)
+
+        return {
+            "file_paths": file_paths,
+            "max_samples": maximum_padded_length,
+            "max_feats": max_n_features[0],
+            "audio": audios,
+            "padded_audio": padded,
+            "basenames": basenames,
+            "n_samples": n_samples,
+            "ds_feats": max_n_features,
+            "real_feats": actual_n_features,
+            "ground_truth": {
+                "phrase": ground_truth_phrase,
+                "phrase_length": ground_truth_length,
+            },
+        }
+
+
 class _BaseWhiteNoiseAudioBatchETL(_BaseAudiosBatchETL):
 
     @staticmethod

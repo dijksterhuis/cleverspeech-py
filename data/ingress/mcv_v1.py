@@ -11,6 +11,7 @@ from cleverspeech.data.ingress.bases import (
     _BaseSilenceAudioBatchETL,
     _BaseWhiteNoiseAudioBatchETL,
     _BaseTranscriptionsBatchETL,
+    _BaseConstantAmplitudeAudioBatchETL,
     _BaseBatchIterator as MCV1IterableBatches,
     NoSuitableTranscriptionFoundException,
     Wav32BitSignedFloat,
@@ -127,6 +128,12 @@ class MCV1TrimmedAudioBatchETL(
 
 class MCV1SilenceAudioBatchETL(
     _BaseSilenceAudioBatchETL, _BaseFromMCV1Audios
+):
+    pass
+
+
+class MCV1ConstantAmplitudeAudioBatchETL(
+    _BaseConstantAmplitudeAudioBatchETL, _BaseFromMCV1Audios
 ):
     pass
 
@@ -275,6 +282,7 @@ def generate_all_possible_etls(settings):
 
     non_silence = [
         MCV1WhiteNoiseAudioBatchETL,
+        MCV1ConstantAmplitudeAudioBatchETL,
         MCV1StandardAudioBatchETL,
         MCV1TrimmedAudioBatchETL,
     ]
