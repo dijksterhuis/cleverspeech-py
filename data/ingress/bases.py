@@ -79,132 +79,75 @@ class _IterableETL(ABC):
 
 
 class AbstractAudioType(ABC):
+
+    _bit_depth = None
+    _max_sample_value = None
+    _min_sample_value = None
+    _smallest_nonzero_value = None
+    _signed = None
+    _np_dtype = None
+    _soundfile_dtype = None
+
     @property
-    @abstractmethod
     def bit_depth(self):
-        pass
+        return self._bit_depth
 
     @property
-    @abstractmethod
     def max_sample_value(self):
-        pass
+        return self._max_sample_value
 
     @property
-    @abstractmethod
     def min_sample_value(self):
-        pass
+        return self._min_sample_value
 
     @property
-    @abstractmethod
     def smallest_nonzero_value(self):
-        pass
+        return self._smallest_nonzero_value
 
     @property
-    @abstractmethod
     def signed(self):
-        pass
+        return self._signed
 
     @property
-    @abstractmethod
     def np_dtype(self):
-        pass
+        return self._np_dtype
 
     @property
-    @abstractmethod
     def soundfile_dtype(self):
-        pass
+        return self._soundfile_dtype
+
+    @max_sample_value.setter
+    def max_sample_value(self, x):
+        self._max_sample_value = x
+
+    @min_sample_value.setter
+    def min_sample_value(self, x):
+        self._min_sample_value = x
 
 
 class Wav16BitSignedInt(AbstractAudioType):
-    @property
-    def bit_depth(self):
-        return 16
-
-    @property
-    def max_sample_value(self):
-        return 2**15-1
-
-    @property
-    def min_sample_value(self):
-        return -2**15
-
-    @property
-    def smallest_nonzero_value(self):
-        return 1
-
-    @property
-    def signed(self):
-        return True
-
-    @property
-    def np_dtype(self):
-        return np.int16
-
-    @property
-    def soundfile_dtype(self):
-        return "int16"
+    def __init__(self):
+        self._bit_depth = 16
+        self._max_sample_value = 2**(self._bit_depth - 1) - 1
+        self._min_sample_value = - 2**(self._bit_depth - 1)
+        self._smallest_nonzero_value = 1
+        self._signed = True
+        self._np_dtype = np.int16
+        self._soundfile_dtype = "int16"
 
 
 class Wav32BitSignedFloat(AbstractAudioType):
-    @property
-    def bit_depth(self):
-        return 32
 
-    @property
-    def max_sample_value(self):
-        return 1.0
-
-    @property
-    def min_sample_value(self):
-        return -1.0
-
-    @property
-    def smallest_nonzero_value(self):
-        # NOTE: this is close to smallest possible value ~8e-46 for np.float32
-        # and tf.float32
-        return 1e-45
-
-    @property
-    def signed(self):
-        return True
-
-    @property
-    def np_dtype(self):
-        return np.float32
-
-    @property
-    def soundfile_dtype(self):
-        return "float32"
-
-
-class OneQuarterScaleWav32BitSignedFloat(Wav32BitSignedFloat):
-    @property
-    def max_sample_value(self):
-        return 1.0 * 0.25
-
-    @property
-    def min_sample_value(self):
-        return -1.0 * 0.25
-
-
-class OneHalfScaleWav32BitSignedFloat(Wav32BitSignedFloat):
-    @property
-    def max_sample_value(self):
-        return 1.0 * 0.5
-
-    @property
-    def min_sample_value(self):
-        return -1.0 * 0.5
-
-
-class ThreeQuarterScaleWav32BitSignedFloat(Wav32BitSignedFloat):
-    @property
-    def max_sample_value(self):
-        return 1.0 * 0.75
-
-    @property
-    def min_sample_value(self):
-        return -1.0 * 0.75
+    def __init__(self):
+        self._bit_depth = 32
+        self._max_sample_value = 1.0
+        self._min_sample_value = - self._max_sample_value
+        # ==> this is the smallest possible value that we can optimise with.
+        # otherwise perturbation sizes explode on step 1 and no progress is made
+        self._smallest_nonzero_value = 1e-11
+        self._signed = True
+        self._np_dtype = np.float32
+        self._soundfile_dtype = "float32"
 
 
 class _BaseAudiosBatchETL(_IterableETL):
@@ -757,6 +700,10 @@ class _BaseBatchIterator:
         base_out_dir = os.path.join(
             settings["outdir"], str(settings["unique_run_id"])
         )
+
+        if not os.path.exists(base_out_dir):
+            os.makedirs(base_out_dir, exist_ok=True)
+
         self.out_file_path = os.path.join(base_out_dir, "batches.json")
 
         n_batches = self.n_examples / self.batch_size
