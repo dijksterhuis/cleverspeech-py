@@ -248,9 +248,8 @@ class _BaseAudiosBatchETL(_IterableETL):
         return l_map(self.get_single_ground_truth_phrase, file_paths)
 
     @staticmethod
-    @abstractmethod
-    def get_batch_ground_truth_phrase_lengths(phrase):
-        pass
+    def get_batch_ground_truth_phrase_lengths(phrases):
+        return l_map(len, phrases)
 
     def convert_audio_type(self, audio):
         return audio.astype(self.output_dtype.np_dtype)
@@ -528,10 +527,10 @@ class _BaseSilenceAudioBatchETL(_BaseAudiosBatchETL):
         n_samples = self.get_batch_n_samples(audios)
 
         ground_truth_phrase = self.get_batch_ground_truth_phrases(
-            len(batch_data)
+            range(len(batch_data))
         )
         ground_truth_length = self.get_batch_ground_truth_phrase_lengths(
-            len(batch_data)
+            ground_truth_phrase
         )
 
         # audio processing
@@ -578,10 +577,10 @@ class _BaseConstantAmplitudeAudioBatchETL(_BaseAudiosBatchETL):
         n_samples = self.get_batch_n_samples(audios)
 
         ground_truth_phrase = self.get_batch_ground_truth_phrases(
-            len(batch_data)
+            range(len(batch_data))
         )
         ground_truth_length = self.get_batch_ground_truth_phrase_lengths(
-            len(batch_data)
+            ground_truth_phrase
         )
 
         # audio processing
@@ -628,10 +627,10 @@ class _BaseWhiteNoiseAudioBatchETL(_BaseAudiosBatchETL):
         n_samples = self.get_batch_n_samples(audios)
 
         ground_truth_phrase = self.get_batch_ground_truth_phrases(
-            len(batch_data)
+            range(len(batch_data))
         )
         ground_truth_length = self.get_batch_ground_truth_phrase_lengths(
-            len(batch_data)
+            ground_truth_phrase
         )
 
         # audio processing
