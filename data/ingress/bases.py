@@ -356,7 +356,7 @@ class _BaseAudiosBatchETL(_IterableETL):
 
     @staticmethod
     def get_batch_max_samples(audios):
-        return max(map(len, audios))
+        return max(l_map(lambda x: x.size, audios))
 
     def padding(self, max_len):
         """
