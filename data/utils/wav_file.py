@@ -24,7 +24,7 @@ def load(fp, dtype):
     return audio
 
 
-def write(path, data, sample_rate=16000, bit_depth=16):
+def write(path, data, sample_rate=16000, max_value=1.0, min_value=-1.0):
     # change to write()
 
     """
@@ -36,16 +36,20 @@ def write(path, data, sample_rate=16000, bit_depth=16):
     floating point encoded wav files back into to deepspeech - it expects 16 bit
     signed ints as file inputs (although uses float32 for calculations).
 
+    :param min_value:
     :param path: file path to write to
     :param data: the numpy array being written
     :param sample_rate: sample rate of the output file
-    :param bit_depth: How many signed integer bits the input data has for normalisation.
+    :param max_value: How many signed integer bits the input data has for normalisation.
 
     :return: None
-
-    TODO: handle varying bit depths, `bit_depth` arg is currently unused.
     """
-    assert type(data) is np.ndarray
+    try:
+        assert type(data) is np.ndarray
+    except AssertionError:
+        print("Wrong data type for data: {}".format(type(data)))
+        raise
+
     assert type(path) is str
 
     # always convert to float32 for writing to maintain integrity.
@@ -54,28 +58,17 @@ def write(path, data, sample_rate=16000, bit_depth=16):
 
     # Make sure we write out files correctly for float32.
     try:
-        assert min(data) >= -2**(bit_depth - 1)
-        assert max(data) <= 2**(bit_depth - 1) - 1
+        assert max_value >= min(data) >= min_value
+        assert min_value <= max(data) <= max_value
 
-    except AssertionError as e:
-        err = "Conversion to float32 wav output failed for {}\n".format(
-            path)
-        err += "min(data)={}\n".format(min(data))
-        err += "max(data)={}\n".format(max(data))
-        err += "Output data must respect assertion: -2^15 <= x <= 2^15 - 1 \n"
-        print(err)
+    except AssertionError:
+        print("Values in wav data were beyond max and min bounds!")
+        print(" MAX: {ma} MIN: {mi}".format(ma=max(data), mi=min(data)))
         raise
-
-    # normalise
-    normalised = np.where(
-        np.less(data, np_zero(data.size, np.float32)),
-        data / (2 ** (bit_depth - 1)),
-        data / (2 ** (bit_depth - 1) - 1)
-    )
 
     soundfile.write(
         path,
-        normalised,
+        data,
         sample_rate,
         subtype="FLOAT",
         format="WAV"
