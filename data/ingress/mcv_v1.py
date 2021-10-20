@@ -15,9 +15,6 @@ from cleverspeech.data.ingress.bases import (
     _BaseBatchIterator as MCV1IterableBatches,
     NoSuitableTranscriptionFoundException,
     Wav32BitSignedFloat,
-    OneQuarterScaleWav32BitSignedFloat,
-    OneHalfScaleWav32BitSignedFloat,
-    ThreeQuarterScaleWav32BitSignedFloat,
 )
 
 
