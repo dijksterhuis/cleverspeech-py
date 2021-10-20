@@ -19,7 +19,7 @@ class L2CarliniLoss(Bases.SimpleWeightings):
         # N.B. original code did `reduce_mean` on `(advex - original) ** 2`...
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
-        l2delta = tf.reduce_mean(attack.delta_graph.perturbations ** 2, axis=1)
+        l2delta = tf.reduce_mean(attack.perturbations ** 2, axis=1)
         self.loss_fn = l2delta * self.weights
 
 
@@ -35,7 +35,7 @@ class L2SquaredLoss(Bases.SimpleWeightings):
             updateable=updateable,
         )
 
-        l2delta = tf.reduce_sum(attack.delta_graph.perturbations ** 2, axis=-1)
+        l2delta = tf.reduce_sum(attack.perturbations ** 2, axis=-1)
         self.loss_fn = l2delta * self.weights
 
 
@@ -55,7 +55,7 @@ class L2TanhSquaredLoss(Bases.SimpleWeightings):
         # `tf.reduce_mean` on `deltas` is exactly the same with fewer variables
 
         l2delta = tf.reduce_sum(
-            tf.tanh(attack.delta_graph.final_deltas / 2**15) ** 2, axis=-1
+            tf.tanh(attack.perturbations / 2**15) ** 2, axis=-1
         )
         self.loss_fn = l2delta * self.weights
 
@@ -73,7 +73,7 @@ class L2TanhCarliniLoss(Bases.SimpleWeightings):
         )
 
         l2delta = tf.reduce_mean(
-            tf.tanh(attack.delta_graph.final_deltas / 2**15) ** 2, axis=-1
+            tf.tanh(attack.perturbations / 2**15) ** 2, axis=-1
         )
         self.loss_fn = l2delta * self.weights
 
