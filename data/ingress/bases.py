@@ -352,7 +352,7 @@ class _BaseAudiosBatchETL(_IterableETL):
         return audio
 
     def get_batch_nonzero_values(self, audios):
-        return l_map(lambda x: self.apply_single_nonzero_values, audios)
+        return l_map(self.apply_single_nonzero_values, audios)
 
     @staticmethod
     def get_batch_max_samples(audios):
