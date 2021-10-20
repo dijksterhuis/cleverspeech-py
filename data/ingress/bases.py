@@ -683,7 +683,8 @@ class _BaseTranscriptionsBatchETL(_IterableETL, ABC):
         upper_bound = len(phrase) <= n_feats // 4
         lower_bound = len(phrase) >= 4
         not_ground_truth = phrase != ground_truth
-        not_selected = phrase not in selections
+        existing_phrases = l_map(lambda x: x[0], selections)
+        not_selected = phrase not in existing_phrases
 
         return upper_bound and lower_bound and not_ground_truth and not_selected
 
