@@ -159,11 +159,17 @@ class IndependentVariables(AbstractPerturbationsGraph):
     def random_restarts(self, successes):
 
         def get_delta_assign(delta):
-            maximal_value = tf.reduce_max(tf.abs(delta)) * 2
+            maximal_value = tf.reduce_max(tf.abs(delta)) * 2.0
+
+            new_val = tf.where(
+                tf.greater_equal(maximal_value, self.bit_depth / 2.0),
+                self.bit_depth, maximal_value
+            )
+
             new_delta = tf.random.uniform(
                 delta.shape,
-                minval=-maximal_value,
-                maxval=maximal_value,
+                minval=-new_val,
+                maxval=new_val,
                 dtype=tf.float32
             )
             return delta.assign(new_delta)
