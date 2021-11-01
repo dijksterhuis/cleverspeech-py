@@ -144,6 +144,39 @@ class AbstractProcedure(ABC):
             self.current_step += 1
 
 
+class WithRandomRestarts(AbstractProcedure):
+    """
+    Randomise perturbation for examples that have **never** found success after
+    `current_step % restart_step == 0` optimisation steps.
+    """
+    def __init__(self, attack, *args, restart_step: int = 2500, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+        assert restart_step % self.update_step == 0
+
+        self.restart_step = restart_step
+        self.successful_example_tracker = l_map(
+            lambda _: None, range(attack.batch.size)
+        )
+
+    def pre_optimisation_updates_hook(self, successes):
+
+        self.successful_example_tracker = l_map(
+            lambda x: self.current_step if x is True else None, successes
+        )
+
+        bool_any_successes = l_map(
+            lambda x: False if x is None else True,
+            self.successful_example_tracker
+        )
+
+        if self.current_step % self.restart_step == 0:
+            self.attack.delta_graph.random_restarts(bool_any_successes)
+
+        super().pre_optimisation_updates_hook(successes)
+
+
 class SuccessOnDecoding(AbstractProcedure):
     """
     Check whether current adversarial decodings match the target phrase,
