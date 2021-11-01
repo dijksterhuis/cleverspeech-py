@@ -149,3 +149,26 @@ class IndependentVariables(AbstractPerturbationsGraph):
 
         self.sess.run(assign_ops)
 
+    def random_restarts(self, successes):
+
+        def get_delta_assign(delta):
+            maximal_value = tf.reduce_max(tf.abs(delta)) * 2
+            new_delta = tf.random.uniform(
+                delta.shape,
+                minval=-maximal_value,
+                maxval=maximal_value,
+                dtype=tf.float32
+            )
+            return delta.assign(new_delta)
+
+        def gen(bools):
+            for idx, s in enumerate(bools):
+                if s is False:
+                    yield idx
+
+        self.sess.run(
+            [get_delta_assign(self.raw_deltas[idx]) for idx in gen(successes)]
+        )
+
+
+
