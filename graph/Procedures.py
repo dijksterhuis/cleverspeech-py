@@ -177,15 +177,13 @@ class WithRandomRestarts(AbstractProcedure):
         super().pre_optimisation_updates_hook(successes)
 
 
-class SuccessOnDecoding(AbstractProcedure):
+class _SuccessOnDecoding(AbstractProcedure):
     """
     Check whether current adversarial decodings match the target phrase,
     yielding True if so, False if not.
     """
     def __init__(self, attack, **kwargs):
-
         super().__init__(attack, **kwargs)
-
         self.init_optimiser_variables()
 
     def check_for_successful_examples(self):
@@ -203,7 +201,15 @@ class SuccessOnDecoding(AbstractProcedure):
         )
 
 
-class SuccessOnLosses(AbstractProcedure):
+class SuccessOnDecoding(_SuccessOnDecoding):
+    pass
+
+
+class SuccessOnDecodingWithRestarts(_SuccessOnDecoding, WithRandomRestarts):
+    pass
+
+
+class _SuccessOnLosses(AbstractProcedure):
     """
     Perform updates when loss reaches a specified threshold.
     """
@@ -223,7 +229,15 @@ class SuccessOnLosses(AbstractProcedure):
         )
 
 
-class HardcoreMode(SuccessOnDecoding):
+class SuccessOnLosses(_SuccessOnLosses):
+    pass
+
+
+class SuccessOnLossesWithRestarts(_SuccessOnLosses, WithRandomRestarts):
+    pass
+
+
+class HardcoreMode(_SuccessOnDecoding):
     """
     Optimise forever (or until you KeyboardInterrupt).
 
@@ -237,7 +251,11 @@ class HardcoreMode(SuccessOnDecoding):
         return True
 
 
-class SuccessOnDecoderLogProbs(AbstractProcedure):
+class HardcoreModeWithRandomRestarts(HardcoreMode, WithRandomRestarts):
+    pass
+
+
+class _SuccessOnDecoderLogProbs(AbstractProcedure):
     """
     Perform updates when decoder log probs reach a specified threshold.
     """
@@ -263,7 +281,17 @@ class SuccessOnDecoderLogProbs(AbstractProcedure):
         )
 
 
-class SuccessOnGreedySearchPath(AbstractProcedure):
+class SuccessOnDecoderLogProbs(_SuccessOnDecoderLogProbs):
+    pass
+
+
+class SuccessOnDecoderLogProbsWithRandomRestarts(
+    _SuccessOnDecoderLogProbs, WithRandomRestarts
+):
+    pass
+
+
+class _SuccessOnGreedySearchPath(AbstractProcedure):
     """
     Perform updates when loss reaches a specified threshold.
     """
@@ -286,7 +314,19 @@ class SuccessOnGreedySearchPath(AbstractProcedure):
         return self.attack.sess.run(test)
 
 
-class SuccessOnDeepSpeechBeamSearchPath(AbstractProcedure):
+class SuccessOnGreedySearchPath(
+    _SuccessOnGreedySearchPath
+):
+    pass
+
+
+class SuccessOnGreedySearchPathWithRandomRestarts(
+    _SuccessOnGreedySearchPath, WithRandomRestarts
+):
+    pass
+
+
+class _SuccessOnDeepSpeechBeamSearchPath(AbstractProcedure):
     """
     Perform updates when loss reaches a specified threshold.
     """
@@ -319,3 +359,15 @@ class SuccessOnDeepSpeechBeamSearchPath(AbstractProcedure):
         )
 
         return self.tf_run(test)
+
+
+class SuccessOnDeepSpeechBeamSearchPath(
+    _SuccessOnDeepSpeechBeamSearchPath
+):
+    pass
+
+
+class SuccessOnDeepSpeechBeamSearchPathWithRandomRestarts(
+    _SuccessOnDeepSpeechBeamSearchPath, WithRandomRestarts
+):
+    pass
