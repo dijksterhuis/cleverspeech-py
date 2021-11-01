@@ -26,12 +26,6 @@ class AbstractProcedure(ABC):
         self.attack = attack
         self.current_step = 0
 
-        self.successes = tf.Variable(
-            tf.ones(attack.batch.size, dtype=tf.int16),
-            trainable=False,
-            name="successes"
-        )
-
     def init_optimiser_variables(self):
         """
         We must wait to initialise the optimiser so that we can initialise only
