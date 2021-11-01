@@ -19,6 +19,7 @@ def args(attack_run, additional_args: dict = None):
         "learning_rate": [float, 10 / 2**15, False, None],
         "nsteps": [int, 10000, False, None],
         "decode_step": [int, 100, False, None],
+        "restart_step": [int, 2500, False, None],
         "constraint_update": [str, "geom", False, ["geom", "lin", "log"]],
         "rescale": [float, 0.9, False, None],
         "audio_indir": [str, "./samples/all/", False, None],
