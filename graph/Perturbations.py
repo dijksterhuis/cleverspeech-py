@@ -141,10 +141,17 @@ class IndependentVariables(AbstractPerturbationsGraph):
             new_delta = np.round((signs * abs_floor).astype(np.float32))
             return new_delta
 
+        def gen(ds):
+            for idx, d in enumerate(ds):
+                yield idx, d
+
+        def assign(idx, new_delta):
+            return self.raw_deltas[idx].assign(new_delta)
+
         deltas = self.sess.run(self.deltas)
 
         assign_ops = [
-            self.raw_deltas[i].assign(rounding_func(d)) for i, d in enumerate(deltas)
+            assign(idx, rounding_func(delta)) for idx, delta in gen(deltas)
         ]
 
         self.sess.run(assign_ops)
