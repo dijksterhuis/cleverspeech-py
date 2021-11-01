@@ -227,7 +227,8 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
     attack.add_procedure(
         graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
-        update_step=settings["decode_step"]
+        update_step=settings["decode_step"],
+        restart_step=settings["restart_step"],
     )
 
     return attack
