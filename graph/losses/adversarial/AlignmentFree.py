@@ -1,6 +1,7 @@
 import tensorflow as tf
 from cleverspeech.graph.losses import Bases
-
+from cleverspeech.utils.Utils import l_map
+import numpy as np
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.ctc_ops import (
     _ctc_state_trans,
@@ -360,8 +361,94 @@ class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradients
         self.loss_fn = - self.fwd_target_log_probs
 
 
+class _BaseMinimumEnergy:
+    @staticmethod
+    def init_path_search_graph(self, attack):
+
+        unstacked_examples = tf.unstack(attack.adversarial_examples, axis=0)
+        unstacked_paths = []
+
+        for idx, example in enumerate(unstacked_examples):
+
+            frame_size = int(0.032 * 16000)
+            frame_step = int(0.02 * 16000)
+
+            frames = tf.signal.frame(
+                example,
+                frame_size,
+                frame_step,
+                pad_end=True,
+            )
+
+            target_length = attack.batch.targets["lengths"][idx]
+            actual_features = attack.batch.audios["real_feats"][idx]
+            max_features = attack.batch.audios["max_feats"]
+
+            available_positions = actual_features - target_length
+
+            def tf_energy(x):
+                return tf.reduce_sum(tf.square(tf.abs(x)))
+
+            energy_per_window = l_map(
+                lambda i: tf_energy(frames[i: i + target_length]),
+                range(available_positions)
+            )
+
+            stacked_energy_windows = tf.stack(energy_per_window)
+            minimum_window_arg = tf.argmin(stacked_energy_windows)
+
+            start_pad_shape = minimum_window_arg
+            end_pad_shape = actual_features - (minimum_window_arg + target_length)
+
+            start_pad = 28 * tf.ones(start_pad_shape, dtype=tf.int32)
+            end_pad = 28 * tf.ones(end_pad_shape, dtype=tf.int32)
+
+            # FIXME: we shouldn't need select elems up to actual_features, but
+            #  for some reason we get weird padding lengths if we don't.
+            #  ==> Could be to do with shape of signal frames?
+
+            path_concat = tf.concat(
+                [start_pad, attack.placeholders.targets[idx], end_pad],
+                axis=0
+            )[0:actual_features]
+
+            max_pad_shape = max_features - actual_features
+            max_pad = 28 * tf.ones(max_pad_shape, dtype=tf.int32)
+
+            path_concat = tf.concat(
+                [path_concat, max_pad],
+                axis=0
+            )
+
+            unstacked_paths.append(path_concat)
+
+        return tf.stack(unstacked_paths, axis=0)
+
+
+class CWMaxMinMinimumEnergy(Bases.KappaGreedySearchTokenWeights, _BaseMinimumEnergy):
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        self.target_path = self.init_path_search_graph(attack)
+
+        super().__init__(
+            attack,
+            custom_target=self.target_path,
+            use_softmax=False,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        kap = self.kappa[:, tf.newaxis]
+
+        self.max_diff_abs = - self.target_logit + self.max_other_logit
+        self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap
+
+        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
+
+
 GRADIENT_PATHS = {
     "cw": CWMaxMin,
+    "cw-nrg": CWMaxMinMinimumEnergy,
     "sumlogprobs-fwd": SumLogProbsForward,
 }
 
