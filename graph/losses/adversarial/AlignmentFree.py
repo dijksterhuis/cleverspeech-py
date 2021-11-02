@@ -1,7 +1,6 @@
 import tensorflow as tf
 from cleverspeech.graph.losses import Bases
 from cleverspeech.utils.Utils import l_map
-import numpy as np
 from tensorflow.python.framework import ops
 from tensorflow.python.ops.ctc_ops import (
     _ctc_state_trans,
@@ -363,7 +362,7 @@ class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradients
 
 class _BaseMinimumEnergy:
     @staticmethod
-    def init_path_search_graph(self, attack):
+    def init_path_search_graph(attack):
 
         unstacked_examples = tf.unstack(attack.adversarial_examples, axis=0)
         unstacked_paths = []
