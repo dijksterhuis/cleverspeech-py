@@ -112,8 +112,10 @@ class AbstractProcedure(ABC):
             is_update_step = self.current_step % self.update_step == 0
             is_update_step = is_update_step and not self.current_step == 0
 
-            if is_update_step:
+            if not is_update_step:
+                yield self.current_step, False, None
 
+            else:
                 successes = l_map(
                     lambda x: x, self.check_for_successful_examples()
                 )
