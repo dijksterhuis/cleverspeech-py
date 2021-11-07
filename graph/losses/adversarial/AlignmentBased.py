@@ -33,7 +33,7 @@ class BiggioMaxMin(Bases.SimpleGreedySearchTokenWeights):
         self.loss_fn = self.loss_fn
 
 
-class MaxOfMaxMin(Bases.SimpleBeamSearchTokenWeights):
+class MaxOfMaxMin(Bases.SimpleGreedySearchTokenWeights):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         super().__init__(
@@ -49,7 +49,7 @@ class MaxOfMaxMin(Bases.SimpleBeamSearchTokenWeights):
         self.loss_fn = self.loss_fn
 
 
-class CWMaxMin(Bases.SimpleBeamSearchTokenWeights):
+class CWMaxMin(Bases.SimpleGreedySearchTokenWeights):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0), updateable: bool = False, use_softmax: bool = False):
 
         assert k >= 0
