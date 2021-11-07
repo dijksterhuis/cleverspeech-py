@@ -1,4 +1,4 @@
-import tensorflow as tf
+import numpy as np
 
 from cleverspeech.utils.Utils import l_map, log
 
@@ -101,7 +101,7 @@ def get_attack_state(attack, successes):
 
     batched_steps = convert_to_batch_from_one(
         attack.procedure.current_step,
-        attack.batch.size
+        attack.batch.size,
     )
     batched_tokens = convert_to_batch_from_one(
         attack.batch.targets["tokens"],
@@ -117,7 +117,7 @@ def get_attack_state(attack, successes):
         attack.perturbations,
         attack.adversarial_examples,
         attack.victim.logits,
-        tf.transpose(attack.victim.raw_logits, [1, 0, 2]),
+        attack.victim.raw_logits,
         # attack.optimiser.gradients,
     ]
 
@@ -159,6 +159,8 @@ def get_attack_state(attack, successes):
             raw_logits,
             # gradients,
         ] = np_vars
+
+    raw_logits = np.transpose(raw_logits, [1, 0, 2])
 
     batched_results = {
         "step": batched_steps,

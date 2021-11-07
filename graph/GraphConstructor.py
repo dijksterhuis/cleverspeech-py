@@ -109,6 +109,7 @@ class Constructor:
             self.sess,
             self.adversarial_examples,
             self.batch,
+            self.feeds.attack,
             *args,
             **kwargs
         )
@@ -195,11 +196,7 @@ class Constructor:
         """
         Do an initial decoding to verify everything is working
         """
-        decodings, probs = self.victim.inference(
-            self.batch,
-            feed=self.feeds.examples,
-            decoder="batch"
-        )
+        decodings, probs = self.victim.inference(self.batch)
 
         probs_rounded = [round(p, 2) for p in probs]
 

@@ -8,9 +8,21 @@ from abc import ABC
 from multiprocessing import cpu_count
 from cleverspeech.utils.Utils import lcomp, l_map
 
-from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.train import create_model
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.train import (
+  create_inference_graph,
+  create_model
+)
 from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import Config, initialize_globals
 from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.flags import create_flags
+
+from cleverspeech.models.Decoders import (
+    DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder,
+    DeepSpeechBeamSearchWithLanguageModelBatchDecoder,
+    DeepSpeechBeamSearchWithoutLanguageModelDecoder,
+    DeepSpeechBeamSearchWithLanguageModelDecoder,
+    TensorflowBeamSearchWithoutLanguageModelDecoder,
+    TensorflowGreedySearchWithoutLanguageModelDecoder,
+)
 
 
 class TFSignalMFCC:
@@ -83,7 +95,7 @@ class TFSignalMFCC:
 
 
 class Model(ABC):
-    def __init__(self, sess, input_tensor, batch, beam_width=500, decoder='ds', tokens=" abcdefghijklmnopqrstuvwxyz'-"):
+    def __init__(self, sess, input_tensor, batch, feed, beam_width=500, decoder='ds', tokens=" abcdefghijklmnopqrstuvwxyz'-"):
 
         self.sess = sess
 
@@ -102,7 +114,6 @@ class Model(ABC):
         )
 
         self.tokens = tokens
-        self.decoder = decoder
         self.beam_width = beam_width
         # beam_width = tf.app.flags.FLAGS.beam_width
 
@@ -113,11 +124,12 @@ class Model(ABC):
         self.layers = None
         self.__reset_rnn_state = None
         self.saver = None
+        self.decoder = None
         self.alphabet = None
         self.scorer = None
 
         self.initialise()
-        self.create_graph(input_tensor, batch.audios["ds_feats"], batch.size)
+        self.create_graph(input_tensor, batch, feed, decoder)
         self.load_checkpoint()
 
     def __configure(self):
@@ -144,16 +156,6 @@ class Model(ABC):
         # tf.app.flags.FLAGS.use_seq_length = True
 
         initialize_globals()
-
-        self.alphabet = ds_ctcdecoder.Alphabet(
-            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path))
-
-        self.scorer = ds_ctcdecoder.Scorer(
-            tf.app.flags.FLAGS.lm_alpha,
-            tf.app.flags.FLAGS.lm_beta,
-            tf.app.flags.FLAGS.scorer_path,
-            self.alphabet,
-        )
 
     def initialise(self):
         """
@@ -183,7 +185,9 @@ class Model(ABC):
         finally:
             self.__configure()
 
-    def create_graph(self, input_tensor, seq_length, batch_size):
+    def create_graph(self, input_tensor, batch, feed, decoder):
+
+        seq_length, batch_size, = batch.audios["ds_feats"], batch.size
 
         feature_extraction = TFSignalMFCC(
             input_tensor,
@@ -202,10 +206,16 @@ class Model(ABC):
 
         self.outputs = outputs
         self.layers = layers
-        self.reset_state()
+
+        #self.__reset_rnn_state = outputs["initialize_state"]
+        #self.reset_state()
 
         self.raw_logits = layers['raw_logits']
         self.logits = tf.nn.softmax(tf.transpose(self.raw_logits, [1, 0, 2]))
+
+        self.decoder = TensorflowGreedySearchWithoutLanguageModelDecoder(
+            self.sess, self.logits, batch, feed, self.tokens, self.beam_width
+        )
 
     def load_checkpoint(self):
 
@@ -240,8 +250,8 @@ class Model(ABC):
             return result
 
     def reset_state(self):
+        # self.sess.run(self.__reset_rnn_state)
         pass
-        #self.sess.run(self.__reset_rnn_state)
 
     def tf_run(self, *args, **kwargs):
         self.reset_state()
@@ -250,392 +260,7 @@ class Model(ABC):
         return outs
 
     def inference(self, batch, feed=None, logits=None, decoder=None, top_five=False):
-
-        if decoder:
-            decoder = decoder
-        else:
-            decoder = self.decoder
-
-        if decoder == "tf_beam":
-
-            if top_five is True:
-                raise NotImplementedError(
-                    "top_five is not implemented for the tf decoder"
-                )
-
-            if logits is None:
-                logits = self.get_logits(self.raw_logits, feed)
-
-            decodings = self.tf_beam_decode(
-                logits,
-                batch.audios["ds_feats"],
-                self.tokens,
-            )
-            return decodings
-
-        elif decoder == "ds" or not decoder:
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            decoded_with_probs = l_map(
-                lambda x: self.ds_decode(x, top_five=top_five), logits
-            )
-
-            # TODO
-
-            decodings = l_map(lambda x: x[0], decoded_with_probs)
-            probs = l_map(lambda x: x[1], decoded_with_probs)
-            token_order = l_map(lambda x: x[2], decoded_with_probs)
-            timsteps = l_map(lambda x: x[3], decoded_with_probs)
-
-            return decodings, probs
-
-        elif decoder == "batch":
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            decodings, probs = self.ds_decode_batch(
-                logits,
-                batch.audios["ds_feats"],
-                top_five=True,
-            )
-
-            if not top_five:
-                decodings = l_map(lambda x: x[0], decodings)
-                probs = l_map(lambda x: x[0], probs)
-
-            return decodings, probs
-
-        elif decoder == "batch_no_lm":
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            decodings, probs = self.ds_decode_batch_no_lm(
-                logits,
-                batch.audios["ds_feats"],
-                top_five=True,
-            )
-
-            if not top_five:
-                decodings = l_map(lambda x: x[0], decodings)
-                probs = l_map(lambda x: x[0], probs)
-
-            return decodings, probs
-
-        elif decoder == "greedy_no_lm" or decoder == "greedy":
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            decodings, probs = self.ds_decode_batch_greedy_no_lm(
-                logits,
-                batch.audios["ds_feats"],
-                top_five=False,
-            )
-
-            decodings = l_map(lambda x: x[0], decodings)
-            probs = l_map(lambda x: x[0], probs)
-
-            return decodings, probs
-
-        elif decoder == "tf_greedy":
-
-            if top_five is True:
-                raise NotImplementedError(
-                    "top_five is not implemented for greedy decoders"
-                )
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            if type(logits) == np.ndarray and logits.shape[0] == batch.size:
-                # batch major but tf greedy search wants time major
-                logits = np.transpose(logits, [1, 0, 2])
-
-            elif type(logits) == tf.Tensor and logits.get_shape().as_list()[
-                0] == batch.size:
-                # batch major but tf greedy search wants time major
-                logits = tf.transpose(logits, [1, 0, 2])
-
-            else:
-                pass
-
-            decodings = self.tf_greedy_decode(
-                logits,
-                batch.audios["ds_feats"],
-                self.tokens,
-            )
-            return decodings
-        elif decoder == "hotfix_greedy":
-
-            if top_five is True:
-                raise NotImplementedError(
-                    "top_five is not implemented for greedy decoders"
-                )
-
-            if logits is None:
-                logits = self.get_logits(self.logits, feed)
-
-            if type(logits) == np.ndarray and logits.shape[0] != batch.size:
-                # time major but hotfix greedy search wants batch major
-                logits = np.transpose(logits, [1, 0, 2])
-
-            elif type(logits) == tf.Tensor and logits.get_shape().as_list()[0] != batch.size:
-                # time major but hotfix greedy search wants batch major
-                logits = tf.transpose(logits, [1, 0, 2])
-
-            decodings = self.hotfix_greedy_decode(logits, self.tokens)
-            return decodings
-
-        else:
-            raise Exception(
-                "Please choose a valid decoder."
-            )
-
-    def ds_decode(self, logits, top_five=False, with_metadata=False):
-
-        decoded_probs = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder(
-            np.squeeze(logits),
-            Config.alphabet,
-            self.beam_width,
-            1,
-            40,
-            self.scorer,
-            dict(),
-            1 if not top_five else 5
-        )
-
-        beam_results = l_map(
-            lambda x:
-            (
-                Config.alphabet.Decode(x.tokens),
-                x.confidence,
-                lcomp(x.tokens),
-                lcomp(x.timesteps)
-            ),
-            decoded_probs
-        )
-
-        labellings = l_map(
-            lambda x: x[0], beam_results
-        )
-
-        probs = l_map(
-            lambda x: x[1], beam_results
-        )
-
-        token_order = l_map(
-            lambda x: x[2], beam_results
-        )
-
-        timestep_switches = l_map(
-            lambda x: x[3], beam_results
-        )
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
-
-    def ds_decode_batch(self, logits, lengths, top_five=False, with_metadata=False):
-
-        l = lengths[0]
-
-        # I have 6 cores on my development machine -- I also want to do other
-        # things like write papers when running experiments.
-
-        batched_beam_results = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder_batch(
-            logits,
-            np.asarray([l for _ in range(logits.shape[0])], dtype=np.int32),
-            Config.alphabet,
-            self.beam_width,
-            cpu_count() - 2 if cpu_count() > 2 else 1,
-            1,
-            40,
-            self.scorer,
-            dict(),
-            1 if not top_five else 5,
-        )
-
-        beam_results = [l_map(
-            lambda x:
-            (
-                Config.alphabet.Decode(x.tokens),
-                x.confidence,
-                lcomp(x.tokens),
-                lcomp(x.timesteps)
-            ),
-            beam_results
-        ) for beam_results in batched_beam_results]
-
-        labellings = l_map(
-            lambda y: l_map(lambda x: x[0], y), beam_results
-        )
-
-        probs = l_map(
-            lambda y: l_map(lambda x: x[1], y), beam_results
-        )
-
-        token_order = l_map(
-            lambda y: l_map(lambda x: x[2], y), beam_results
-        )
-
-        timestep_switches = l_map(
-            lambda y: l_map(lambda x: x[3], y), beam_results
-        )
-
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
-
-    def ds_decode_batch_greedy_no_lm(self, logits, lengths, top_five=False, with_metadata=False):
-
-        l = lengths[0]
-
-        # I have 6 cores on my development machine -- I also want to do other
-        # things like write papers when running experiments.
-
-        batched_beam_results = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder_batch(
-            logits,
-            np.asarray([l for _ in range(logits.shape[0])], dtype=np.int32),
-            Config.alphabet,
-            1,
-            cpu_count() - 2 if cpu_count() > 2 else 1,
-            1,
-            1,
-            None,
-            dict(),
-            1 if not top_five else 5,
-        )
-
-        beam_results = [l_map(
-            lambda x:
-            (
-                Config.alphabet.Decode(x.tokens),
-                x.confidence,
-                lcomp(x.tokens),
-                lcomp(x.timesteps)
-            ),
-            beam_results
-        ) for beam_results in batched_beam_results]
-
-        labellings = l_map(
-            lambda y: l_map(lambda x: x[0], y), beam_results
-        )
-
-        probs = l_map(
-            lambda y: l_map(lambda x: x[1], y), beam_results
-        )
-
-        token_order = l_map(
-            lambda y: l_map(lambda x: x[2], y), beam_results
-        )
-
-        timestep_switches = l_map(
-            lambda y: l_map(lambda x: x[3], y), beam_results
-        )
-
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
-
-    def ds_decode_batch_no_lm(self, logits, lengths, top_five=False, with_metadata=False):
-
-        l = lengths[0]
-
-        # I have 6 cores on my development machine -- I also want to do other
-        # things like write papers when running experiments.
-
-        batched_beam_results = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder_batch(
-            logits,
-            np.asarray([l for _ in range(logits.shape[0])], dtype=np.int32),
-            Config.alphabet,
-            self.beam_width,
-            cpu_count() - 2 if cpu_count() > 2 else 1,
-            1,
-            40,
-            None,
-            dict(),
-            1 if not top_five else 5,
-        )
-
-        beam_results = [l_map(
-            lambda x:
-            (
-                Config.alphabet.Decode(x.tokens),
-                x.confidence,
-                lcomp(x.tokens),
-                lcomp(x.timesteps)
-            ),
-            beam_results
-        ) for beam_results in batched_beam_results]
-
-        labellings = l_map(
-            lambda y: l_map(lambda x: x[0], y), beam_results
-        )
-
-        probs = l_map(
-            lambda y: l_map(lambda x: x[1], y), beam_results
-        )
-
-        token_order = l_map(
-            lambda y: l_map(lambda x: x[2], y), beam_results
-        )
-
-        timestep_switches = l_map(
-            lambda y: l_map(lambda x: x[3], y), beam_results
-        )
-
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
-
-    def tf_beam_decode(self, logits, features_lengths, tokens):
-
-        tf_decode, log_probs = tf.nn.ctc_beam_search_decoder(
-            logits,
-            features_lengths,
-            merge_repeated=False,
-            beam_width=self.beam_width
-        )
-        dense = [tf.sparse.to_dense(tf_decode[0])]
-        tf_dense, probs = self.tf_run([dense, log_probs])
-
-        tf_outputs = l_map(
-            lambda y: ''.join([tokens[int(x)] for x in y]),
-            tf_dense[0]
-        )
-
-        tf_outputs = [o.rstrip(" ") for o in tf_outputs]
-        probs = [prob[0] for prob in probs]
-
-        return tf_outputs, probs
-
-    def tf_greedy_decode(self, logits, features_lengths, tokens, merge_repeated=True):
-
-        tf_decode, log_probs = tf.nn.ctc_greedy_decoder(
-            logits,
-            features_lengths,
-            merge_repeated=merge_repeated,
-        )
-        dense = [tf.sparse.to_dense(tf_decode[0])]
-
-        tf_dense, neg_sum_logits = self.tf_run([dense, log_probs])
-
-        tf_outputs = l_map(
-            lambda y: ''.join([tokens[int(x)] for x in y]),
-            tf_dense[0]
-        )
-
-        tf_outputs = [o.rstrip(" ") for o in tf_outputs]
-        neg_sum_logits = [prob[0] for prob in neg_sum_logits]
-
-        return tf_outputs, neg_sum_logits
+        return self.decoder.inference(top_five=top_five)
 
     @staticmethod
     def reduce(argmax):
