@@ -33,9 +33,12 @@ class TFRuntime:
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-        self.config = tf.ConfigProto()
-        self.config.gpu_options.allow_growth = True
-        self.config.allow_soft_placement = True
+        c = tf.ConfigProto()
+
+        c.gpu_options.allow_growth = True
+        c.allow_soft_placement = True
+
+        self.config = c
 
         if not device_id:
             device = "/device:GPU:0"
