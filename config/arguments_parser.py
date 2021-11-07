@@ -129,6 +129,7 @@ def args(attack_run, additional_args: dict = None):
     master_settings = {
         "dry_run": arguments.dry_run,
         "enable_jit": arguments.enable_jit,
+        "use_resource_variables": arguments.use_resource_variables,
         "no_step_logs": arguments.no_step_logs,
     }
 

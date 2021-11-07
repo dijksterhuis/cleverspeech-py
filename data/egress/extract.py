@@ -115,8 +115,13 @@ def get_attack_state(attack, successes):
             get_batch_success_rate(attack) / attack.batch.size,
             attack.batch.size
         )
+        batched_anys = attack.procedure.successful_example_tracker,
     else:
         batched_any_success_rate = convert_to_batch_from_one(
+            None,
+            attack.batch.size
+        )
+        batched_anys = convert_to_batch_from_one(
             None,
             attack.batch.size
         )
@@ -179,7 +184,7 @@ def get_attack_state(attack, successes):
         "step": batched_steps,
         "tokens": batched_tokens,
         "sr":  batched_any_success_rate,
-        "any": attack.procedure.successful_example_tracker,
+        "any": batched_anys,
         "losses": each_graph_loss_transposed,
         "total_loss": total_losses,
         "deltas": deltas,
