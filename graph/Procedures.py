@@ -203,11 +203,7 @@ class _SuccessOnDecoding(AbstractProcedure):
 
     def check_for_successful_examples(self):
 
-        decodings, _ = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
+        decodings, _ = self.attack.victim.inference()
 
         phrases = self.attack.batch.targets["phrases"]
 
@@ -282,11 +278,7 @@ class _SuccessOnDecoderLogProbs(AbstractProcedure):
 
     def check_for_successful_examples(self):
 
-        _, probs = self.attack.victim.inference(
-            self.attack.batch,
-            feed=self.attack.feeds.attack,
-            top_five=False,
-        )
+        _, probs = self.attack.victim.inference()
 
         loss = self.tf_run(self.attack.loss_fn)
         threshold = [self.probs_diff for _ in range(self.attack.batch.size)]
@@ -306,83 +298,83 @@ class SuccessOnDecoderLogProbsWithRandomRestarts(
     pass
 
 
-class _SuccessOnGreedySearchPath(AbstractProcedure):
-    """
-    Perform updates when loss reaches a specified threshold.
-    """
-    def __init__(self, attack, **kwargs):
-
-        super().__init__(attack, **kwargs)
-
-    def check_for_successful_examples(self):
-
-        current_argmaxes = tf.argmax(
-            self.attack.victim.logits, axis=-1
-        )
-        target_argmaxes = self.attack.placeholders.targets
-
-        test = tf.reduce_all(
-            tf.equal(current_argmaxes, target_argmaxes),
-            axis=-1
-        )
-
-        return self.attack.sess.run(test)
-
-
-class SuccessOnGreedySearchPath(
-    _SuccessOnGreedySearchPath
-):
-    pass
-
-
-class SuccessOnGreedySearchPathWithRandomRestarts(
-    _SuccessOnGreedySearchPath, WithRandomRestarts
-):
-    pass
-
-
-class _SuccessOnDeepSpeechBeamSearchPath(AbstractProcedure):
-    """
-    Perform updates when loss reaches a specified threshold.
-    """
-    def __init__(self, attack, loss_lower_bound=0.1, **kwargs):
-
-        super().__init__(attack, **kwargs)
-
-        self.loss_bound = loss_lower_bound
-
-    def check_for_successful_examples(self):
-
-        _, _, token_order, timestep_switches = self.attack.victim.ds_decode_batch_no_lm(
-            self.attack.procedure.tf_run(
-                self.attack.victim.logits
-            ),
-            self.attack.batch.audios["ds_feats"],
-            top_five=False, with_metadata=True
-        )
-        ds_decode_align = 28 * np.ones(
-            self.attack.victim.logits.shape, dtype=np.int32
-        )
-
-        for tok, time in zip(token_order, timestep_switches):
-            ds_decode_align[0][time] = tok
-
-        test = tf.reduce_all(
-            tf.equal(
-                ds_decode_align, tf.argmax(self.attack.victim.logits, axis=-1)
-            ), axis=-1
-        )
-
-        return self.tf_run(test)
+# class _SuccessOnGreedySearchPath(AbstractProcedure):
+#     """
+#     Perform updates when loss reaches a specified threshold.
+#     """
+#     def __init__(self, attack, **kwargs):
+#
+#         super().__init__(attack, **kwargs)
+#
+#     def check_for_successful_examples(self):
+#
+#         current_argmaxes = tf.argmax(
+#             self.attack.victim.logits, axis=-1
+#         )
+#         target_argmaxes = self.attack.placeholders.targets
+#
+#         test = tf.reduce_all(
+#             tf.equal(current_argmaxes, target_argmaxes),
+#             axis=-1
+#         )
+#
+#         return self.attack.sess.run(test)
+#
+#
+# class SuccessOnGreedySearchPath(
+#     _SuccessOnGreedySearchPath
+# ):
+#     pass
+#
+#
+# class SuccessOnGreedySearchPathWithRandomRestarts(
+#     _SuccessOnGreedySearchPath, WithRandomRestarts
+# ):
+#     pass
 
 
-class SuccessOnDeepSpeechBeamSearchPath(
-    _SuccessOnDeepSpeechBeamSearchPath
-):
-    pass
-
-
-class SuccessOnDeepSpeechBeamSearchPathWithRandomRestarts(
-    _SuccessOnDeepSpeechBeamSearchPath, WithRandomRestarts
-):
-    pass
+# class _SuccessOnDeepSpeechBeamSearchPath(AbstractProcedure):
+#     """
+#     Perform updates when loss reaches a specified threshold.
+#     """
+#     def __init__(self, attack, loss_lower_bound=0.1, **kwargs):
+#
+#         super().__init__(attack, **kwargs)
+#
+#         self.loss_bound = loss_lower_bound
+#
+#     def check_for_successful_examples(self):
+#
+#         _, _, token_order, timestep_switches = self.attack.victim.ds_decode_batch_no_lm(
+#             self.attack.procedure.tf_run(
+#                 self.attack.victim.logits
+#             ),
+#             self.attack.batch.audios["ds_feats"],
+#             top_five=False, with_metadata=True
+#         )
+#         ds_decode_align = 28 * np.ones(
+#             self.attack.victim.logits.shape, dtype=np.int32
+#         )
+#
+#         for tok, time in zip(token_order, timestep_switches):
+#             ds_decode_align[0][time] = tok
+#
+#         test = tf.reduce_all(
+#             tf.equal(
+#                 ds_decode_align, tf.argmax(self.attack.victim.logits, axis=-1)
+#             ), axis=-1
+#         )
+#
+#         return self.tf_run(test)
+#
+#
+# class SuccessOnDeepSpeechBeamSearchPath(
+#     _SuccessOnDeepSpeechBeamSearchPath
+# ):
+#     pass
+#
+#
+# class SuccessOnDeepSpeechBeamSearchPathWithRandomRestarts(
+#     _SuccessOnDeepSpeechBeamSearchPath, WithRandomRestarts
+# ):
+#     pass

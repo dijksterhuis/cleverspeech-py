@@ -24,6 +24,15 @@ from cleverspeech.models.Decoders import (
     TensorflowGreedySearchWithoutLanguageModelDecoder,
 )
 
+DECODERS = {
+    "ds": DeepSpeechBeamSearchWithLanguageModelDecoder,
+    "ds_no_lm": DeepSpeechBeamSearchWithoutLanguageModelDecoder,
+    "batch": DeepSpeechBeamSearchWithLanguageModelBatchDecoder,
+    "batch_no_lm": DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder,
+    "tf_greedy": TensorflowGreedySearchWithoutLanguageModelDecoder,
+    "tf_beam": TensorflowBeamSearchWithoutLanguageModelDecoder,
+}
+
 
 class TFSignalMFCC:
     def __init__(self, audio_tensor, batch_size, sample_rate=16000, n_context=9, n_ceps=26, cep_lift=22):
@@ -144,14 +153,6 @@ class Model(ABC):
             self.model_dir,
             "deepspeech-0.9.3-models.scorer"
         )
-        # tf.app.flags.FLAGS.lm_binary_path = os.path.join(
-        #     self.model_dir,
-        #     "lm.binary"
-        # )
-        # tf.app.flags.FLAGS.lm_trie_path = os.path.join(
-        #     self.model_dir,
-        #     "trie"
-        # )
         tf.app.flags.FLAGS.n_steps = -1
         # tf.app.flags.FLAGS.use_seq_length = True
 
@@ -213,7 +214,9 @@ class Model(ABC):
         self.raw_logits = layers['raw_logits']
         self.logits = tf.nn.softmax(tf.transpose(self.raw_logits, [1, 0, 2]))
 
-        self.decoder = TensorflowGreedySearchWithoutLanguageModelDecoder(
+        decoder_cls = DECODERS[decoder]
+
+        self.decoder = decoder_cls(
             self.sess, self.logits, batch, feed, self.tokens, self.beam_width
         )
 
@@ -259,7 +262,7 @@ class Model(ABC):
         self.reset_state()
         return outs
 
-    def inference(self, batch, feed=None, logits=None, decoder=None, top_five=False):
+    def inference(self, top_five=False):
         return self.decoder.inference(top_five=top_five)
 
     @staticmethod

@@ -196,7 +196,7 @@ class Constructor:
         """
         Do an initial decoding to verify everything is working
         """
-        decodings, probs = self.victim.inference(self.batch)
+        decodings, probs = self.victim.inference()
 
         probs_rounded = [round(p, 2) for p in probs]
 

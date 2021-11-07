@@ -9,11 +9,9 @@ def convert_to_batch_from_one(x, size):
 
 def get_decodings(attack):
 
-    if attack.victim.decoder in ["batch", "ds", "batch_no_lm"] and attack.victim.beam_width >= 5:
+    if attack.victim.beam_width >= 5:
 
         top_5_decodings, top_5_probs = attack.victim.inference(
-            attack.batch,
-            feed=attack.feeds.attack,
             top_five=True,
         )
 
@@ -33,10 +31,7 @@ def get_decodings(attack):
 
     else:
 
-        decodings, probs = attack.victim.inference(
-            attack.batch,
-            feed=attack.feeds.attack,
-        )
+        decodings, probs = attack.victim.inference()
 
         result = {
             "decodings": decodings,
