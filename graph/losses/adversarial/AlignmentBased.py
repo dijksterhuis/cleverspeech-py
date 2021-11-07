@@ -86,6 +86,34 @@ class AdaptiveKappaMaxMin(Bases.KappaGreedySearchTokenWeights):
 
         self.loss_fn = self.loss_fn
 
+    def check_kappa(self, batch_successes):
+
+        tf_vars = [
+            self.kappa, self.weights, self.tf_tokens_test_check
+        ]
+
+        kaps, weights, kap_test = self.attack.procedure.tf_run(tf_vars)
+
+        z = zip(batch_successes, kaps, weights, kap_test)
+        for idx, (suc, k, w, t) in enumerate(z):
+
+            # N.B. `t` is a numpy.bool, which is not a real bool so `t is True`
+            # actually evaluates to False when t really is True... one of the
+            # joys of dynamically typed languages:
+            # https://stackoverflow.com/a/37744300/5945794
+
+            if suc is False and bool(t) is True:
+                # increment kappa upwards so the perturbation can become more
+                # confident
+                kaps[idx] += 0.1
+                log("\n updated kappa {k}".format(k=kaps[idx]), wrap=False)
+
+        self.attack.sess.run(self.kappa.assign(kaps))
+
+        # self.attack.sess.run(
+        #     [self.kappa.assign(kaps), self.weights.assign(weights)]
+        # )
+
 
 class WeightedMaxMin(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
     def __init__(self, attack, k=0.0, weight_settings=(1.0, 1.0)):

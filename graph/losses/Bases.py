@@ -479,6 +479,14 @@ class _KappaTokenWeights(_SimpleTokenWeights):
             self.test, axis=-1
         )
 
+        other_test = tf.reduce_all(
+            tf.greater_equal(self.target_logit - self.max_other_logit, self.kappa)
+        )
+
+        self.tf_tokens_test_check = tf.logical_and(
+            self.tf_tokens_test_check, other_test
+        )
+
     def init_weights(self, attack, weight_settings):
 
         super().init_weights(attack, weight_settings)
@@ -513,7 +521,7 @@ class _KappaTokenWeights(_SimpleTokenWeights):
 
                 # increment kappa upwards so the perturbation can become more
                 # confident
-                kaps[idx] *= 1/self.increment
+                kaps[idx] += self.increment
 
         self.attack.sess.run(self.kappa.assign(kaps))
 
