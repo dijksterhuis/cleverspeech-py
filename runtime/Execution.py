@@ -26,32 +26,42 @@ class EndOfRunException(Exception):
     pass
 
 
-def writer_boilerplate_fn(results_transforms, queue, settings):
+def _check_for_dead_queue(results):
+    return results == "dead"
+
+
+def _results_generator(results_writer, results, settings):
+    from cleverspeech.data.egress.transform import transforms_gen
+    for example in transforms_gen(results, settings):
+        if example["success"] is True:
+            results_writer(settings["outdir"], example)
+
+
+def writer_boilerplate_fn(queue, settings):
 
     import traceback
     from time import sleep
 
     try:
 
-        settings_writer = settings["writer"].split("_")[0]
-        SETTINGS_WRITER_FUNCS[settings_writer](settings["outdir"], settings)
+        settings_writer_fn = SETTINGS_WRITER_FUNCS[settings["writer"].split("_")[0]]
+        settings_writer_fn(settings["outdir"], settings)
+
+        results_writer_fn = RESULTS_WRITER_FUNCS[settings["writer"]]
 
         while True:
 
             sleep(1)
             results = queue.get()
 
-            if results == "dead":
+            if _check_for_dead_queue(results):
                 queue.task_done()
                 raise EndOfRunException
 
             else:
-                for example in results_transforms(results, settings):
-                    if example["success"] is True:
-                        RESULTS_WRITER_FUNCS[settings["writer"]](
-                            settings["outdir"],
-                            example
-                        )
+                _results_generator(results_writer_fn, results, settings)
+                queue.task_done()
+
     except EndOfRunException:
         s = "Dead queue entry detected... Writer subprocess exiting."
         log(s)
@@ -63,7 +73,8 @@ def writer_boilerplate_fn(results_transforms, queue, settings):
 
     except BaseException as e:
         tb = "".join(
-            traceback.format_exception(None, e, e.__traceback__))
+            traceback.format_exception(None, e, e.__traceback__)
+        )
 
         s = "\033[1;31mSomething broke during file writes!\033[1;0m"
         s += "\n\nError Traceback:\n{e}".format(e=tb)
@@ -71,7 +82,9 @@ def writer_boilerplate_fn(results_transforms, queue, settings):
         raise e
 
 
-def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_fn):
+def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
+
+    from cleverspeech.data.egress.extract import get_attack_state
 
     # tensorflow sessions can't be passed between processes
     tf_runtime = TFRuntime(settings["gpu_device"], seed=settings["random_seed"])
@@ -108,9 +121,6 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
                         res = get_attack_state(attack, successes)
                         results_queue.put(res)
 
-                    if step > 0:
-                        p.update(step)
-
         except BaseException:
             log("")
             s = "\033[1;31mAttack failed to run for these examples:\033[1;0m\n"
@@ -119,15 +129,7 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
             raise
 
 
-def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_transform_fn=None):
-
-    if not results_extract_fn:
-        from cleverspeech.data.egress.extract import get_attack_state
-        results_extract_fn = get_attack_state
-
-    if not results_transform_fn:
-        from cleverspeech.data.egress.transform import transforms_gen
-        results_transform_fn = transforms_gen
+def manager(settings, attack_fn, batch_gen):
 
     # modify this as late as possible to catch any added directories in exp defs
     settings["outdir"] = os.path.join(
@@ -139,7 +141,7 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
 
     writer_process = mp.Process(
         target=writer_boilerplate_fn,
-        args=(results_transform_fn, results_queue, settings)
+        args=(results_queue, settings)
     )
 
     writer_process.start()
@@ -166,9 +168,9 @@ def manager(settings, attack_fn, batch_gen, results_extract_fn=None, results_tra
             log(s, wrap=True)
 
             executor_boilerplate_fn(
-                results_extract_fn,
                 results_queue,
-                settings, batch,
+                settings,
+                batch,
                 attack_fn
             )
             s = "Finished Batch Number: {b} of {n}".format(
