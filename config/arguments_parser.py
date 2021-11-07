@@ -66,9 +66,11 @@ def args(attack_run, additional_args: dict = None):
 
     parser.add_argument('--dry_run', dest='dry_run', action='store_true')
     parser.add_argument('--enable_jit', dest='dry_run', action='store_true')
+    parser.add_argument('--use_resource_variables', dest='dry_run', action='store_true')
     parser.add_argument('--no_step_logs', dest='no_step_logs', action='store_true')
     parser.set_defaults(dry_run=False)
     parser.set_defaults(enable_jit=False)
+    parser.set_defaults(use_resource_variables=False)
     parser.set_defaults(no_step_logs=False)
 
     # parser.add_argument(

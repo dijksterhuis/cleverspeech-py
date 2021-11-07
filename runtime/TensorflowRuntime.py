@@ -50,6 +50,9 @@ class TFRuntime:
 
         self.device = tf.device(device)
 
+        if settings["use_resource_variables"] is True:
+            tf.enable_resource_variables()
+
         tf.reset_default_graph()
 
         # set the graph seed after resetting the graph...
