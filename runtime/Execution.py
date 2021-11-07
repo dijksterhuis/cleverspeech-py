@@ -98,12 +98,14 @@ def executor_boilerplate_fn(extract_fn, results_queue, settings, batch, attack_f
 
         try:
 
-            with ProgressBar(min_value=1, max_value=settings["nsteps"]) as p:
+            with ProgressBar(min_value=0, max_value=1+settings["nsteps"]) as p:
 
                 for step, is_results_step, successes in attack.run():
 
-                    if is_results_step:
-                        res = extract_fn(attack, successes)
+                    p.update(step)
+
+                    if is_results_step and settings["no_step_logs"] is False:
+                        res = get_attack_state(attack, successes)
                         results_queue.put(res)
 
                     if step > 0:

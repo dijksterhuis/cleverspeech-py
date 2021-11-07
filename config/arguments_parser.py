@@ -65,7 +65,9 @@ def args(attack_run, additional_args: dict = None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--dry_run', dest='dry_run', action='store_true')
+    parser.add_argument('--no_step_logs', dest='no_step_logs', action='store_true')
     parser.set_defaults(dry_run=False)
+    parser.set_defaults(no_step_logs=False)
 
     # parser.add_argument(
     #     "experiment",
@@ -121,7 +123,8 @@ def args(attack_run, additional_args: dict = None):
             d.update({k: v})
 
     master_settings = {
-        "dry_run": arguments.dry_run
+        "dry_run": arguments.dry_run,
+        "no_step_logs": arguments.no_step_logs,
     }
 
     for k in standard_non_required_args.keys():
