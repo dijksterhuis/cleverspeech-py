@@ -25,6 +25,7 @@ class AbstractProcedure(ABC):
 
         self.attack = attack
         self.current_step = 0
+        self.successful_example_tracker = None
 
     def init_optimiser_variables(self):
         """

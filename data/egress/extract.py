@@ -59,6 +59,13 @@ def get_batched_losses(attack):
     return losses_transposed
 
 
+def get_batch_success_rate(attack):
+    any_successes = attack.procedure.successful_example_tracker
+    successes = l_map(lambda x: False if x is False else True, any_successes)
+
+    return sum(successes)
+
+
 def get_tf_graph_variables(tf_graph_variables: list, tf_run):
     return tf_run(tf_graph_variables)
 
@@ -107,6 +114,17 @@ def get_attack_state(attack, successes):
         attack.batch.targets["tokens"],
         attack.batch.size
     )
+
+    if attack.procedure.successful_example_tracker is not None:
+        batched_any_success_rate = convert_to_batch_from_one(
+            get_batch_success_rate(attack) / attack.batch.size,
+            attack.batch.size
+        )
+    else:
+        batched_any_success_rate = convert_to_batch_from_one(
+            None,
+            attack.batch.size
+        )
 
     # decodings = get_decodings(attack)
 
@@ -165,6 +183,8 @@ def get_attack_state(attack, successes):
     batched_results = {
         "step": batched_steps,
         "tokens": batched_tokens,
+        "sr":  batched_any_success_rate,
+        "any": attack.procedure.successful_example_tracker,
         "losses": each_graph_loss_transposed,
         "total_loss": total_losses,
         "deltas": deltas,
