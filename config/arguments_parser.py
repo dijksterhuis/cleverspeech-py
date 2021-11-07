@@ -65,8 +65,10 @@ def args(attack_run, additional_args: dict = None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--dry_run', dest='dry_run', action='store_true')
+    parser.add_argument('--enable_jit', dest='dry_run', action='store_true')
     parser.add_argument('--no_step_logs', dest='no_step_logs', action='store_true')
     parser.set_defaults(dry_run=False)
+    parser.set_defaults(enable_jit=False)
     parser.set_defaults(no_step_logs=False)
 
     # parser.add_argument(
@@ -124,6 +126,7 @@ def args(attack_run, additional_args: dict = None):
 
     master_settings = {
         "dry_run": arguments.dry_run,
+        "enable_jit": arguments.enable_jit,
         "no_step_logs": arguments.no_step_logs,
     }
 

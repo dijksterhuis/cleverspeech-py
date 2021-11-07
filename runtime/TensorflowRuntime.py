@@ -29,7 +29,7 @@ class OOMEnabledSession(tf.Session):
 
 
 class TFRuntime:
-    def __init__(self, device_id=None, seed=None):
+    def __init__(self, settings):
 
         tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -38,12 +38,13 @@ class TFRuntime:
         c.gpu_options.allow_growth = True
         c.allow_soft_placement = True
 
+        if settings["enable_jit"] is True:
+            jit_option = tf.OptimizerOptions.ON_1
+            c.graph_options.optimizer_options.global_jit_level = jit_option
+
         self.config = c
 
-        if not device_id:
-            device = "/device:GPU:0"
-        else:
-            device = "/device:GPU:{}".format(device_id)
+        device = "/device:GPU:{}".format(settings["gpu_device_id"])
 
         self.session = OOMEnabledSession(config=self.config)
 
@@ -54,8 +55,7 @@ class TFRuntime:
         # set the graph seed after resetting the graph...
         # https://stackoverflow.com/a/36289575/5945794
 
-        if seed is not None:
-            tf.set_random_seed(seed)
+        tf.set_random_seed(settings["random_seed"])
 
         # 1.15.5 deterministic GPU ops
         tfdeterminism.patch()
