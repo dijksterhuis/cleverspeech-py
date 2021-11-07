@@ -25,6 +25,7 @@ class AbstractProcedure(ABC):
 
         self.attack = attack
         self.current_step = 0
+        self.successful_example_tracker = None
 
     def init_optimiser_variables(self):
         """
@@ -154,21 +155,38 @@ class WithRandomRestarts(AbstractProcedure):
 
         self.restart_step = restart_step
         self.successful_example_tracker = l_map(
-            lambda _: None, range(attack.batch.size)
+            lambda _: False, range(attack.batch.size)
         )
 
     def pre_optimisation_updates_hook(self, successes):
 
+        def any_successes(x, y):
+            if x is True:
+                return self.current_step
+            elif y is not False:
+                return y
+            else:
+                return False
+
         self.successful_example_tracker = l_map(
-            lambda x: self.current_step if x is True else None, successes
+            lambda x: any_successes(*x),
+            zip(successes, self.successful_example_tracker)
         )
 
         bool_any_successes = l_map(
-            lambda x: False if x is None else True,
+            lambda x: False if x is False else True,
             self.successful_example_tracker
         )
 
         if self.current_step % self.restart_step == 0:
+            log("\n", wrap=False)
+
+            s = "Doing random restarts."
+            s += " Current overall success rate: {}".format(
+                sum(bool_any_successes) * 100 / len(successes)
+            )
+            log(s, wrap=True)
+
             self.attack.delta_graph.random_restarts(bool_any_successes)
 
         super().pre_optimisation_updates_hook(successes)

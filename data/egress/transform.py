@@ -97,8 +97,10 @@ def logging_transforms(example_data, additional_logging_keys=None):
 
     logging_keys = [
         "step",
+        "sr",
         "basenames",
         "success",
+        "any",
         "total_loss",
         "l0",
         "l2",
