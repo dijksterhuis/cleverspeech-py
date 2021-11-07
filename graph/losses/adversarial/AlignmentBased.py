@@ -209,27 +209,28 @@ class SumLogProbsBackward(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
         self.loss_fn = - self.back_target_log_probs * self.weights
 
 
-class SumLogProbsProduct(Bases.BaseAlignmentLoss, Bases.SimpleWeightings):
+class SumLogProbsProduct(Bases.SimpleWeightings):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
         """
         """
 
         super().__init__(
+            attack, weight_settings=weight_settings, updateable=updateable
+        )
+
+        forwards = SumLogProbsBackward(
             attack,
             weight_settings=weight_settings,
             updateable=updateable,
         )
 
-        self.log_smax = tf.log(self.target_logit)
-
-        self.fwd_target_log_probs = tf.reduce_sum(
-            self.log_smax, axis=-1
-        )
-        self.back_target_log_probs = tf.reduce_sum(
-            tf.reverse(self.log_smax, axis=[-1]), axis=-1
+        backwards = SumLogProbsBackward(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
         )
 
-        self.loss_fn = -(self.back_target_log_probs * self.fwd_target_log_probs)  * self.weights
+        self.loss_fn = tf.log(forwards.loss_fn) + tf.log(backwards.loss_fn)
 
 
 class CumulativeLogProbsForward(Bases.SimpleBeamSearchTokenWeights):
