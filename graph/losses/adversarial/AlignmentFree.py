@@ -424,7 +424,7 @@ class _BaseMinimumEnergy:
         return tf.stack(unstacked_paths, axis=0)
 
 
-class CWMaxMinMinimumEnergy(Bases.KappaGreedySearchTokenWeights, _BaseMinimumEnergy):
+class CWMaxMinMinimumEnergy(Bases.SimpleGreedySearchTokenWeights, _BaseMinimumEnergy):
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
         self.target_path = self.init_path_search_graph(attack)
@@ -437,7 +437,7 @@ class CWMaxMinMinimumEnergy(Bases.KappaGreedySearchTokenWeights, _BaseMinimumEne
             updateable=updateable,
         )
 
-        kap = self.kappa[:, tf.newaxis]
+        kap = tf.constant(0.0, dtype=tf.float32)
 
         self.max_diff_abs = - self.target_logit + self.max_other_logit
         self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap

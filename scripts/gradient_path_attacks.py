@@ -55,6 +55,9 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
+    attack.add_path_search(
+        graph.Paths.ModifiedTranscription
+    )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )

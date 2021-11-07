@@ -110,6 +110,50 @@ class Path(ABC):
         pass
 
 
+class ModifiedTranscription(Path):
+    def path_calculation(self, modified_transcriptions):
+        return np.asarray(modified_transcriptions)
+
+    def create(self):
+
+        modified_transcriptions = l_map(
+            lambda x: self.create_modified_transcription(*x),
+            zip(self.orig_indices, self.lengths)
+        )
+
+        new_indices = self.path_calculation(modified_transcriptions)
+        n_blanks = l_map(
+            lambda i: np.count_nonzero(i[i == 28]), new_indices
+        )
+
+        # update the target sequence lengths
+        lengths = np.asarray(l_map(lambda x: len(x), new_indices))
+
+        padded = np_arr(
+            [
+                l_map(lambda x: x, self._apply_padding(x, max(lengths))) for x in new_indices
+            ],
+            np.int32
+        )
+
+        logging_alignments = l_map(
+            lambda x: "".join([self.tokens[i] for i in x]), new_indices
+        )
+        s = "Modified targets batch to use the following (un-padded) paths:\n"
+        s += "\n".join(logging_alignments)
+
+        log(s, wrap=True)
+
+        self.batch.targets = {
+            "tokens": self.tokens,
+            "phrases": self.target_phrases,
+            "row_ids": self.target_ids,
+            "indices": padded,
+            "original_indices": self.orig_indices,
+            "lengths": lengths,
+        }
+
+
 class _LinearlyDistributed(Path):
 
     density = None
