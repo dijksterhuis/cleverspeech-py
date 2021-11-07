@@ -215,9 +215,10 @@ class Model(ABC):
         self.logits = tf.nn.softmax(tf.transpose(self.raw_logits, [1, 0, 2]))
 
         decoder_cls = DECODERS[decoder]
+        decoder_logits = self.raw_logits if decoder == "tf_beam" else self.logits
 
         self.decoder = decoder_cls(
-            self.sess, self.logits, batch, feed, self.tokens, self.beam_width
+            self.sess, decoder_logits, batch, feed, self.tokens, self.beam_width
         )
 
     def load_checkpoint(self):

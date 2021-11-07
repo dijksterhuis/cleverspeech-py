@@ -48,45 +48,28 @@ class _DeepSpeechDecoder(_AbstractDecoder):
         return self._tf_sess.run(logits, feed_dict=self._feed)
 
     @staticmethod
-    def _convert_beam_to_lists(batched_beam_results):
-        beam_results = [l_map(
-            lambda x:
-            (
-                Config.alphabet.Decode(x.tokens),
-                x.confidence,
-                lcomp(x.tokens),
-                lcomp(x.timesteps)
-            ),
-            beam_results
-        ) for beam_results in batched_beam_results]
-
-        labellings = l_map(
-            lambda y: l_map(lambda x: x[0], y), beam_results
-        )
-
-        probs = l_map(
-            lambda y: l_map(lambda x: x[1], y), beam_results
-        )
-
-        token_order = l_map(
-            lambda y: l_map(lambda x: x[2], y), beam_results
-        )
-
-        timestep_switches = l_map(
-            lambda y: l_map(lambda x: x[3], y), beam_results
-        )
-        return labellings, probs, token_order, timestep_switches
+    @abstractmethod
+    def _convert_beam_to_lists(beam_results):
+        pass
 
 
 class _TensorflowDecoder(_AbstractDecoder):
-
     def get_logits(self, logits, time_major=False):
+        if time_major:
+            return self._get_time_major_logits(logits)
 
-        if not time_major and logits.shape[0] != self._batch.size:
-            return tf.transpose(logits, [1, 0, 2])
+        else:
+            return self._get_batch_major_logits(logits)
 
-        if time_major and logits.shape[0] == self._batch.size:
-            return tf.transpose(logits, [1, 0, 2])
+    def _get_time_major_logits(self, logits):
+        b = self._batch.size
+        l = logits if logits.shape[0] != b else tf.transpose(logits, [1, 0, 2])
+        return l
+
+    def _get_batch_major_logits(self, logits):
+        b = self._batch.size
+        l = logits if logits.shape[0] != b else tf.transpose(logits, [1, 0, 2])
+        return l
 
     def inference(self, top_five=False):
 
@@ -120,21 +103,57 @@ class DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder(_DeepSpeechBeamSearch
 
         self.decode_op = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder_batch
 
-    def inference(self, top_five=False):
+    def inference(self, top_five=False, with_metadata=False):
 
         logits = self.get_logits(self._tf_logits)
 
-        decodings, probs = self._decoding(
+        labellings, probs, token_order, timestep_switches = self._decoding(
             logits,
             self._batch.audios["ds_feats"],
-            top_five=True,
+            top_five=top_five,
         )
 
         if not top_five:
-            decodings = l_map(lambda x: x[0], decodings)
+            labellings = l_map(lambda x: x[0], labellings)
             probs = l_map(lambda x: x[0], probs)
+            token_order = l_map(lambda x: x[0], token_order)
+            timestep_switches = l_map(lambda x: x[0], timestep_switches)
 
-        return decodings, probs
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
+
+    @staticmethod
+    def _convert_beam_to_lists(beam_results):
+        beam_results = [l_map(
+            lambda x:
+            (
+                Config.alphabet.Decode(x.tokens),
+                x.confidence,
+                lcomp(x.tokens),
+                lcomp(x.timesteps)
+            ),
+            beam_result
+        ) for beam_result in beam_results]
+
+        labellings = l_map(
+            lambda y: l_map(lambda x: x[0], y), beam_results
+        )
+
+        probs = l_map(
+            lambda y: l_map(lambda x: x[1], y), beam_results
+        )
+
+        token_order = l_map(
+            lambda y: l_map(lambda x: x[2], y), beam_results
+        )
+
+        timestep_switches = l_map(
+            lambda y: l_map(lambda x: x[3], y), beam_results
+        )
+
+        return labellings, probs, token_order, timestep_switches
 
     def _decoding(self, logits, lengths, top_five=False, with_metadata=False):
 
@@ -163,17 +182,7 @@ class DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder(_DeepSpeechBeamSearch
             n_results,
         )
 
-        (
-            labellings,
-            probs,
-            token_order,
-            timestep_switches
-        ) = self._convert_beam_to_lists(batched_beam_results)
-
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
+        return self._convert_beam_to_lists(batched_beam_results)
 
 
 class DeepSpeechBeamSearchWithLanguageModelBatchDecoder(
@@ -202,29 +211,41 @@ class DeepSpeechBeamSearchWithoutLanguageModelDecoder(_DeepSpeechBeamSearchMixin
 
         self.decode_op = ds_ctcdecoder.swigwrapper.ctc_beam_search_decoder
 
-    def inference(self, top_five=False):
+    def inference(self, top_five=False, with_metadata=False):
 
         logits = self.get_logits(self._tf_logits)
 
-        decodings, probs = self._decoding(
-            logits,
-            self._batch.audios["ds_feats"],
-            top_five=True,
+        decoded_with_probs = l_map(
+            lambda x: self._decoding(x, top_five=top_five), logits
         )
 
+        labellings = l_map(lambda x: x[0], decoded_with_probs)
+        probs = l_map(lambda x: x[1], decoded_with_probs)
+        token_order = l_map(lambda x: x[2], decoded_with_probs)
+        timestep_switches = l_map(lambda x: x[3], decoded_with_probs)
+
         if not top_five:
-            decodings = l_map(lambda x: x[0], decodings)
+            labellings = l_map(lambda x: x[0], labellings)
             probs = l_map(lambda x: x[0], probs)
+            token_order = l_map(lambda x: x[0], token_order)
+            timestep_switches = l_map(lambda x: x[0], timestep_switches)
 
-        return decodings, probs
+        if with_metadata:
+            return labellings, probs, token_order, timestep_switches
+        else:
+            return labellings, probs
 
-    def _decoding(self, logits, lengths, top_five=False, with_metadata=False):
+    @staticmethod
+    def _convert_beam_to_lists(beam_results):
+        pass
+
+    def _decoding(self, logits, top_five=False, with_metadata=False):
 
         n_results = 1 if not top_five else 5
         n_cutoff_top = 40
         cutoff_top_prob = 1
 
-        batched_beam_results = self.decode_op(
+        beam_results = self.decode_op(
             np.squeeze(logits),
             Config.alphabet,
             self.beam_width,
@@ -235,17 +256,35 @@ class DeepSpeechBeamSearchWithoutLanguageModelDecoder(_DeepSpeechBeamSearchMixin
             n_results,
         )
 
-        (
-            labellings,
-            probs,
-            token_order,
-            timestep_switches
-        ) = self._convert_beam_to_lists(batched_beam_results)
+        beam_results = l_map(
+            lambda x:
+            (
+                Config.alphabet.Decode(x.tokens),
+                x.confidence,
+                lcomp(x.tokens),
+                lcomp(x.timesteps)
+            ),
+            beam_results
+        )
 
-        if with_metadata:
-            return labellings, probs, token_order, timestep_switches
-        else:
-            return labellings, probs
+        labellings = l_map(
+            lambda x: x[0], beam_results
+        )
+
+        probs = l_map(
+            lambda x: x[1], beam_results
+        )
+
+        token_order = l_map(
+            lambda x: x[2], beam_results
+        )
+
+        timestep_switches = l_map(
+            lambda x: x[3], beam_results
+        )
+
+
+        return labellings, probs, token_order, timestep_switches
 
 
 class DeepSpeechBeamSearchWithLanguageModelDecoder(
@@ -311,8 +350,6 @@ class TensorflowGreedySearchWithoutLanguageModelDecoder(
         dense = [tf.sparse.to_dense(tf_decode[0])]
 
         self.decode_op = [dense, log_probs]
-
-        print(self.decode_op)
 
     def _decoding(self, logits, lengths, top_five=False, with_metadata=False):
         tf_dense, neg_sum_logits = self._tf_sess.run(self.decode_op, self._feed)
