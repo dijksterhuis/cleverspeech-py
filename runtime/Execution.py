@@ -87,7 +87,7 @@ def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
     from cleverspeech.data.egress.extract import get_attack_state
 
     # tensorflow sessions can't be passed between processes
-    tf_runtime = TFRuntime(settings["gpu_device"], seed=settings["random_seed"])
+    tf_runtime = TFRuntime(settings)
 
     with tf_runtime.session as sess, tf_runtime.device as tf_device:
 

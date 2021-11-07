@@ -44,7 +44,7 @@ class TFRuntime:
 
         self.config = c
 
-        device = "/device:GPU:{}".format(settings["gpu_device_id"])
+        device = "/device:GPU:{}".format(settings["gpu_device"])
 
         self.session = OOMEnabledSession(config=self.config)
 
