@@ -110,21 +110,11 @@ def get_attack_state(attack, successes):
         attack.batch.size
     )
 
-    if attack.procedure.successful_example_tracker is not None:
-        batched_any_success_rate = convert_to_batch_from_one(
-            get_batch_success_rate(attack) / attack.batch.size,
-            attack.batch.size
-        )
-        batched_anys = attack.procedure.successful_example_tracker,
-    else:
-        batched_any_success_rate = convert_to_batch_from_one(
-            None,
-            attack.batch.size
-        )
-        batched_anys = convert_to_batch_from_one(
-            None,
-            attack.batch.size
-        )
+    batched_any_success_rate = convert_to_batch_from_one(
+        get_batch_success_rate(attack) / attack.batch.size,
+        attack.batch.size
+    )
+    batched_anys = attack.procedure.successful_example_tracker
 
     # decodings = get_decodings(attack)
 

@@ -8,7 +8,6 @@ actually doing an attack.
 --------------------------------------------------------------------------------
 """
 
-import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
@@ -25,7 +24,9 @@ class AbstractProcedure(ABC):
 
         self.attack = attack
         self.current_step = 0
-        self.successful_example_tracker = None
+        self.successful_example_tracker = l_map(
+            lambda _: False, range(attack.batch.size)
+        )
 
     def init_optimiser_variables(self):
         """
@@ -69,6 +70,14 @@ class AbstractProcedure(ABC):
         """
         pass
 
+    def check_for_any_successes(self, x, y):
+        if x is True:
+            return self.current_step
+        elif y is not False:
+            return y
+        else:
+            return False
+
     def results_hook(self, successes):
         return self.current_step, True, successes
 
@@ -101,10 +110,11 @@ class AbstractProcedure(ABC):
         a = self.attack
 
         # write out initial step 0 data
-        successes = l_map(
+        initial_successes = l_map(
             lambda x: x, self.check_for_successful_examples()
         )
-        yield self.results_hook(successes)
+        yield self.results_hook(initial_successes)
+        del initial_successes
 
         log("Initial state written, starting optimisation....")
 
@@ -117,12 +127,18 @@ class AbstractProcedure(ABC):
                 yield self.current_step, False, None
 
             else:
+
                 successes = l_map(
                     lambda x: x, self.check_for_successful_examples()
                 )
 
                 bool_success = l_map(
                     lambda x: x[0], successes
+                )
+
+                self.successful_example_tracker = l_map(
+                    lambda x: self.check_for_any_successes(*x),
+                    zip(bool_success, self.successful_example_tracker)
                 )
 
                 # perform post optimisation update i..e. project gradient
@@ -152,26 +168,9 @@ class WithRandomRestarts(AbstractProcedure):
         super().__init__(attack, *args, **kwargs)
 
         assert restart_step % self.update_step == 0
-
         self.restart_step = restart_step
-        self.successful_example_tracker = l_map(
-            lambda _: False, range(attack.batch.size)
-        )
 
     def pre_optimisation_updates_hook(self, successes):
-
-        def any_successes(x, y):
-            if x is True:
-                return self.current_step
-            elif y is not False:
-                return y
-            else:
-                return False
-
-        self.successful_example_tracker = l_map(
-            lambda x: any_successes(*x),
-            zip(successes, self.successful_example_tracker)
-        )
 
         bool_any_successes = l_map(
             lambda x: False if x is False else True,
