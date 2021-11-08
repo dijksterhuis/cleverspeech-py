@@ -131,56 +131,93 @@ class BaseAlignmentLoss(BaseLoss):
             self.target_argmax,
             self.current.shape.as_list()[2],
             on_value=1.0,
-            off_value=0.0
+            off_value=0.0,
         )
-
-        # targ will only be non-zero for the target class in each frame
-        # so we can just do a sum after filtering to get the current value
-
-        self.targ = self.current * targ_onehot
-        self.target_logit = tf.reduce_sum(self.targ, axis=2)
-
-        # the max other class per frame is slightly more tricky if we're using
-        # activations
 
         others_onehot = tf.one_hot(
             self.target_argmax,
             self.current.shape.as_list()[2],
             on_value=0.0,
-            off_value=1.0
+            off_value=1.0,
         )
 
-        if use_softmax is False:
+        assert targ_onehot.shape.as_list() == others_onehot.shape.as_list()
 
-            # if the most likely other activation for a frame is negative we
-            # need to make sure we don't accidentally select the 0.0 one hot
-            # filter value
+        if len(targ_onehot.shape.as_list()) < 4:
 
-            # get the current maximal value over the entire activations matix
+            # targ will only be non-zero for the target class in each frame
+            # so we can just do a sum after filtering to get the current value
 
+            self.targ = self.current * targ_onehot
+            self.target_logit = tf.reduce_sum(self.targ, axis=2)
+
+            # the max other class per frame is slightly more tricky if we're using
+            # activations
+
+            if use_softmax is False:
+
+                # if the most likely other activation for a frame is negative we
+                # need to make sure we don't accidentally select the 0.0 one hot
+                # filter value
+
+                # get the current minimal value over the entire activations matix
+
+                maximal = tf.reduce_max(self.current, axis=0)
+
+                # set the onehot zero values to the negative of 2 * the smallest
+                # current activation entry to guarantee we *never* choose it
+                # ==> we could minus by a constant, but this could lead to weird
+                # edge case behaviour if an attack were to do *really* well
+
+                self.others = tf.where(
+                    tf.equal(others_onehot, tf.zeros_like(others_onehot)),
+                    tf.zeros_like(others_onehot) - (2 * maximal),
+                    self.current * others_onehot
+                )
+
+            else:
+
+                # softmax is guaranteed to be in the 0 -> 1 range, so we don't need
+                # to worry about doing this
+
+                self.others = self.current * others_onehot
+
+            # finally, we can do the max_{k' \neq k} op.
+
+            self.max_other_logit = tf.reduce_max(self.others, axis=2)
+
+        elif len(targ_onehot.shape.as_list()) == 4:
+
+            unstacked = tf.unstack(targ_onehot, axis=2)
+            targs_stacked = [self.current * onehot for onehot in unstacked]
+
+            unstacked = tf.unstack(others_onehot, axis=2)
             maximal = tf.reduce_max(self.current, axis=0)
 
-            # set the onehot zero values to the negative of 2 * the biggest
-            # current activation entry to guarantee we *never* choose it
-            # ==> we could minus by a constant, but this could lead to weird
-            # edge case behaviour if an attack were to do *really* well
+            def norming(oh, m, c):
+                return tf.where(
+                    tf.equal(oh, tf.zeros_like(oh)),
+                    tf.zeros_like(oh) - (2 * m),
+                    c * oh
+                )
+            others_stacked = [
+                norming(one_hot, maximal, self.current) for one_hot in unstacked
+            ]
 
-            self.others = tf.where(
-                tf.equal(others_onehot, tf.zeros_like(others_onehot)),
-                tf.zeros_like(others_onehot) - (2 * maximal),
-                self.current * others_onehot
-            )
+            # make everything [batch, feats, paths, tokens] shape
+
+            self.others = tf.stack(others_stacked, axis=2)
+            self.targ = tf.stack(targs_stacked, axis=2)
+
+            self.target_logit = tf.reduce_sum(self.targ, axis=-1)
+            self.max_other_logit = tf.reduce_max(self.others, axis=-1)
 
         else:
-
-            # softmax is guaranteed to be in the 0 -> 1 range, so we don't need
-            # to worry about doing this
-
-            self.others = self.current * others_onehot
-
-        # finally, we can do the max_{k' \neq k} op.
-
-        self.max_other_logit = tf.reduce_max(self.others, axis=2)
+            onehots_len = len(targ_onehot.shape.as_list())
+            s = "One hots have too many dims ==> {} > 4...".format(
+                onehots_len
+            )
+            raise IndexError(s)
 
 
 class _BasePathSearch(BaseAlignmentLoss):

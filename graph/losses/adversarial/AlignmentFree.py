@@ -360,9 +360,8 @@ class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradients
         self.loss_fn = - self.fwd_target_log_probs
 
 
-class _BaseMinimumEnergy:
-    @staticmethod
-    def init_path_search_graph(attack):
+class _BaseMinimumEnergy(Bases.BaseAlignmentLoss):
+    def init_path_search_graph(self, attack, n_paths=10):
 
         unstacked_examples = tf.unstack(attack.adversarial_examples, axis=0)
         unstacked_paths = []
@@ -394,40 +393,49 @@ class _BaseMinimumEnergy:
             )
 
             stacked_energy_windows = tf.stack(energy_per_window)
-            minimum_window_arg = tf.argmin(stacked_energy_windows)
 
-            start_pad_shape = minimum_window_arg
-            end_pad_shape = actual_features - (minimum_window_arg + target_length)
+            top_ten = tf.argsort(stacked_energy_windows)[:n_paths]
 
-            start_pad = 28 * tf.ones(start_pad_shape, dtype=tf.int32)
-            end_pad = 28 * tf.ones(end_pad_shape, dtype=tf.int32)
+            top_ten = tf.unstack(top_ten, axis=-1)
 
-            # FIXME: we shouldn't need select elems up to actual_features, but
-            #  for some reason we get weird padding lengths if we don't.
-            #  ==> Could be to do with shape of signal frames?
+            top_ns = []
+            for top_n in top_ten:
 
-            path_concat = tf.concat(
-                [start_pad, attack.placeholders.targets[idx], end_pad],
-                axis=0
-            )[0:actual_features]
+                start_pad_shape = top_n
+                end_pad_shape = actual_features - (top_n + target_length)
 
-            max_pad_shape = max_features - actual_features
-            max_pad = 28 * tf.ones(max_pad_shape, dtype=tf.int32)
+                start_pad = 28 * tf.ones(start_pad_shape, dtype=tf.int32)
+                end_pad = 28 * tf.ones(end_pad_shape, dtype=tf.int32)
 
-            path_concat = tf.concat(
-                [path_concat, max_pad],
-                axis=0
-            )
+                # FIXME: we shouldn't need select elems up to actual_features, but
+                #  for some reason we get weird padding lengths if we don't.
+                #  ==> Could be to do with shape of signal frames?
 
-            unstacked_paths.append(path_concat)
+                path_concat = tf.concat(
+                    [start_pad, attack.placeholders.targets[idx], end_pad],
+                    axis=0
+                )[0:actual_features]
 
-        return tf.stack(unstacked_paths, axis=0)
+                max_pad_shape = max_features - actual_features
+                max_pad = 28 * tf.ones(max_pad_shape, dtype=tf.int32)
+
+                path_concat = tf.concat(
+                    [path_concat, max_pad],
+                    axis=0
+                )
+                top_ns.append(path_concat)
+            top_ten_padded = tf.stack(top_ns, axis=-1)
+
+            unstacked_paths.append(top_ten_padded)
+        stacked_paths = tf.stack(unstacked_paths, axis=0)
+
+        return stacked_paths
 
 
-class CWMaxMinMinimumEnergy(Bases.SimpleGreedySearchTokenWeights, _BaseMinimumEnergy):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+class CWMaxMinMinimumEnergy(_BaseMinimumEnergy, Bases.SimpleWeightings):
+    def __init__(self, attack, n_paths=10, weight_settings=(1.0, 1.0), updateable: bool = False):
 
-        self.target_path = self.init_path_search_graph(attack)
+        self.target_path = self.init_path_search_graph(attack, n_paths=n_paths)
 
         super().__init__(
             attack,
@@ -439,10 +447,19 @@ class CWMaxMinMinimumEnergy(Bases.SimpleGreedySearchTokenWeights, _BaseMinimumEn
 
         kap = tf.constant(0.0, dtype=tf.float32)
 
-        self.max_diff_abs = - self.target_logit + self.max_other_logit
-        self.max_diff = tf.maximum(self.max_diff_abs, -kap) + kap
+        self.maximise = self.target_logit
+        self.minimise = self.max_other_logit
 
-        self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
+        self.path_wise_min_max = - self.maximise + self.minimise
+
+        top_n_weights = tf.range(n_paths + 1, 1, delta=-1, dtype=tf.float32)
+        top_n_weights *= tf.cast(1.0 / n_paths, dtype=tf.float32)
+        # top_n_weights *= tf.constant(2.0)
+        top_n_weights = tf.exp(top_n_weights)
+
+        self.clamped = tf.maximum(self.path_wise_min_max, -kap) + kap
+        self.min_max = tf.reduce_sum(self.clamped * top_n_weights, axis=-1)
+        self.loss_fn = tf.reduce_sum(self.min_max, axis=1) * self.weights
 
 
 GRADIENT_PATHS = {
