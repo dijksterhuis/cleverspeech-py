@@ -60,8 +60,14 @@ class TFRuntime:
 
         tf.set_random_seed(settings["random_seed"])
 
-        # 1.15.5 deterministic GPU ops
-        tfdeterminism.patch()
+        # noinspection PyBroadException
+        try:
+            # enable 1.15.5 deterministic GPU ops
+            tfdeterminism.patch()
+        except BaseException as e:
+            # nvidia-tensorflow throws an error as it's patched internally
+            # so just catch the error and move on
+            pass
 
     @staticmethod
     def log_attack_tensors():
