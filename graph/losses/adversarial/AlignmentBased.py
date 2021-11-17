@@ -106,7 +106,7 @@ class AdaptiveKappaMaxMin(Bases.KappaGreedySearchTokenWeights):
                 # increment kappa upwards so the perturbation can become more
                 # confident
                 kaps[idx] += 0.1
-                log("\n updated kappa {k}".format(k=kaps[idx]), wrap=False)
+                # log("\n updated kappa {k}".format(k=kaps[idx]), wrap=False)
 
         self.attack.sess.run(self.kappa.assign(kaps))
 
