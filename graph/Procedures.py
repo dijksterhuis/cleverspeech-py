@@ -7,7 +7,9 @@ actually doing an attack.
 
 --------------------------------------------------------------------------------
 """
+import sys
 
+import numpy as np
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
@@ -140,6 +142,36 @@ class AbstractProcedure(ABC):
                     lambda x: self.check_for_any_successes(*x),
                     zip(bool_success, self.successful_example_tracker)
                 )
+
+                tf_vars = self.tf_run(
+                    [
+                        self.attack.victim.logits,
+                        # self.attack.loss[0].ilabel_init,
+                        # self.attack.loss[0].state_log_probs,
+                        self.attack.loss[0].state_trans_probs,
+                        # self.attack.loss[0].initial_state_log_probs,  # 4
+                        # self.attack.loss[0].final_state_log_probs,
+                        # self.attack.loss[0].fwd_bwd_log_probs,
+                        self.attack.loss[0].log_likelihood,
+                        # self.attack.loss[0].bwd,  # 8
+                        # self.attack.loss[0].d,  # 8
+                        # self.attack.loss[0].d2,  # 8
+                        # self.attack.loss[0].d,  # 8
+                        self.attack.loss[0].d3,  # 8
+                        # self.attack.loss[0].others,  # 8
+                        self.attack.loss[0].others_reduced,  # 12
+                        self.attack.loss[0].others_reduced - self.attack.loss[0].d3 > 0,  # 8
+                        # self.attack.loss[0].obs,
+                        # self.attack.loss[0].init_lp,
+                    ]
+                )
+                argmax_align = np.argmax(tf_vars[0][0], axis=-1)
+                armax_toks = "".join([self.attack.batch.targets["tokens"][i] for i in argmax_align])
+
+                with np.printoptions(linewidth=200): #, threshold=sys.maxsize)
+                    for i, tf_var in enumerate(tf_vars[1:]):
+                        print("\n", i, tf_var.shape, tf_var)
+                    print(armax_toks)
 
                 # perform post optimisation update i..e. project gradient
                 # descent method
