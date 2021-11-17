@@ -42,7 +42,7 @@ def only_box_constraint_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecoding,
+        graph.Procedures.SuccessOnDecodingWithRestarts,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -81,7 +81,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     )
     attack.add_loss(
         graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS[settings["loss"]],
-        weight_settings=(1.0e3, 0.5),
+        weight_settings=(1.0, 1.0),
         updateable=True,
     )
     attack.create_loss_fn()
@@ -125,7 +125,7 @@ def attack_run(master_settings):
 
     master_settings["outdir"] = outdir
 
-    audios = data.ingress.mcv_v1.MCV1StandardAudioBatchETL(
+    audios = data.ingress.mcv_v1.MCV1SilenceAudioBatchETL(
         master_settings["audio_indir"],
         master_settings["max_examples"],
         filter_term=".wav",

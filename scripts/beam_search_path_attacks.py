@@ -43,7 +43,7 @@ def only_box_constraint_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecoding,
+        graph.Procedures.SuccessOnDecodingWithRestarts,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -91,7 +91,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecoding,
+        graph.Procedures.SuccessOnDecodingWithRestarts,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -144,7 +144,7 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecoding,
+        graph.Procedures.SuccessOnDecodingWithRestarts,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -197,7 +197,7 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecoding,
+        graph.Procedures.SuccessOnDecodingWithRestarts,
         steps=settings["nsteps"],
         update_step=settings["decode_step"],
         restart_step=settings["restart_step"],
