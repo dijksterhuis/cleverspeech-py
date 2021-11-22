@@ -135,3 +135,61 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
         self.tf_run(bound_assigns)
 
 
+class AbstractDecibelSizeConstraint(AbstractSizeConstraint):
+
+    @staticmethod
+    def _log10(x):
+        numerator = tf.log(x)
+        denominator = tf.log(tf.constant(10, dtype=x.dtype))
+        return numerator / denominator
+
+    def _gen_tau(self, act_lengths):
+        for _ in act_lengths:
+            yield [-1e-10]
+
+    @abstractmethod
+    def analyse(self, x):
+        """
+        Only implemented by child classes.
+        """
+        pass
+
+    @abstractmethod
+    def clip(self, x):
+        """
+        Only implemented by child classes.
+        """
+        pass
+
+    def get_new_bound(self, dist):
+        """
+        Get a new bound with geometric progression.
+        """
+        return dist / self.r_constant
+
+    def update(self, deltas, successes):
+        """
+        Update bounds for all perturbations in a batch, if they've found success
+        """
+        tf_bounds = [self.bounds, self.previous]
+        current_bounds, previous_bounds = self.tf_run(tf_bounds)
+        current_distances = self.analyse(deltas)[0]
+
+        z = zip(current_bounds, previous_bounds, current_distances, successes)
+        for idx, (b, p, d, s) in enumerate(z):
+
+            if s is True:
+                if b[0] > d / 2:
+                    b[0] = d
+                p[0] = b[0]
+                b[0] = self.get_new_bound(b[0])
+
+            # if s is False and "_binary" in self.update_method:
+            #     b[0] = self.revert_bound(d, p[0])
+
+        bound_assigns = [
+            self.bounds.assign(current_bounds),
+            self.previous.assign(previous_bounds)
+        ]
+
+        self.tf_run(bound_assigns)
