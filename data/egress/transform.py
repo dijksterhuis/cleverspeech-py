@@ -5,8 +5,15 @@ from collections import OrderedDict
 from cleverspeech.data.metrics.transcription_error import character_error_rate
 from cleverspeech.data.metrics.transcription_error import word_error_rate
 from cleverspeech.data.metrics.dsp_metrics import lnorm
+from cleverspeech.data.metrics.dsp_metrics import lnorm_db
 from cleverspeech.data.metrics.dsp_metrics import peak_to_peak
-from cleverspeech.utils.Utils import log
+from cleverspeech.data.metrics.dsp_metrics import rms_amplitude_db
+from cleverspeech.data.metrics.dsp_metrics import energy_db
+from cleverspeech.data.metrics.dsp_metrics import power_db
+from cleverspeech.data.metrics.dsp_metrics import snr_peak_db
+from cleverspeech.data.metrics.dsp_metrics import snr_power_db
+from cleverspeech.data.metrics.dsp_metrics import snr_segmented
+from cleverspeech.utils.Utils import log, l_map
 
 
 def fix_nesting(y):
@@ -85,6 +92,14 @@ def metadata_transforms(batched_results):
         example["l2"] = lnorm(example["deltas"], norm=2)
         example["linf"] = lnorm(example["deltas"], norm=np.inf)
         example["p2p"] = peak_to_peak(example["deltas"])
+
+        example["peak_db"] = lnorm_db(example["deltas"], norm=np.inf)
+        example["rms_db"] = rms_amplitude_db(example["deltas"])
+        example["energy_db"] = energy_db(example["deltas"])
+        example["power_db"] = power_db(example["deltas"], size=example["n_samples"])
+        example["snr_peak_db"] = snr_peak_db(example["deltas"], example["audio"])
+        example["snr_power_db"] = snr_power_db(example["deltas"], example["audio"])
+        example["snr_seg_db"] = snr_segmented(example["deltas"], example["audio"])
 
         # convert spaces to "=" so we can tell what's what in logs
         example["decodings"] = example["decodings"].replace(" ", "=")
