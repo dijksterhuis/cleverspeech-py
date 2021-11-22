@@ -144,7 +144,7 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -197,10 +197,9 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"],
-        restart_step=settings["restart_step"],
     )
 
     return attack
@@ -238,7 +237,8 @@ def attack_run(master_settings):
         master_settings["audio_indir"],
         master_settings["max_examples"],
         filter_term=".wav",
-        max_file_size=master_settings["max_audio_file_bytes"]
+        max_file_size=master_settings["max_audio_file_bytes"],
+        file_size_sort="shuffle",
     )
 
     transcriptions = data.ingress.mcv_v1.MCV1TranscriptionsFromCSVFile(

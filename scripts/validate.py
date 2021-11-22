@@ -125,7 +125,7 @@ def create_validation_graph(sess, batch, settings):
     }
 
     model = models.DeepSpeech.Model(
-        sess, audios_ph, batch,
+        sess, audios_ph, batch, feeds,
         decoder=settings["decoder"],
         beam_width=settings["beam_width"]
     )
@@ -142,7 +142,8 @@ def attack_run(master_settings):
         master_settings["audio_indir"],
         master_settings["max_examples"],
         filter_term=".wav",
-        max_file_size=master_settings["max_audio_file_bytes"]
+        max_file_size=master_settings["max_audio_file_bytes"],
+        file_size_sort="shuffle",
     )
 
     transcriptions = data.ingress.mcv_v1.MCV1TranscriptionsFromCSVFile(

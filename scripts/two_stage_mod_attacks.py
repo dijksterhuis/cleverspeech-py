@@ -47,7 +47,7 @@ def only_box_constraint_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
     )
@@ -103,132 +103,9 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         learning_rate=settings["learning_rate"]
     )
     attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
+        graph.Procedures.SuccessOnDecoding,
         steps=settings["nsteps"],
         update_step=settings["decode_step"]
-    )
-
-    return attack
-
-
-def clipped_linf_with_l2_loss(sess, batch, settings):
-
-    attack = graph.GraphConstructor.Constructor(
-        sess, batch, settings
-    )
-    attack.add_placeholders(
-        graph.Placeholders.Placeholders
-    )
-    attack.add_box_constraint(
-        graph.constraints.box.ClippedBoxConstraint
-    )
-    attack.add_size_constraint(
-        graph.constraints.size.Linf,
-        r_constant=settings["rescale"],
-        update_method=settings["constraint_update"],
-    )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.IndependentVariables,
-        random_scale=settings["delta_randomiser"]
-    )
-    attack.create_adversarial_examples()
-    attack.add_victim(
-        models.DeepSpeech.Model,
-        decoder=settings["decoder"],
-        beam_width=settings["beam_width"]
-    )
-
-    if settings["loss"] in KAPPA_LOSSES:
-        attack.add_loss(
-            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-            k=settings["kappa"],
-            weight_settings=(1.0e3, 0.5),
-            updateable=True,
-        )
-    else:
-        attack.add_loss(
-            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-            weight_settings=(1.0e3, 0.5),
-            updateable=True,
-        )
-    attack.add_loss(
-        graph.losses.Distance.L2CarliniLoss,
-        weight_settings=(1.0e-3, 1),
-        updateable=True,
-    )
-    attack.create_loss_fn()
-    attack.add_optimiser(
-        graph.Optimisers.AdamIndependentOptimiser,
-        learning_rate=settings["learning_rate"]
-    )
-    attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
-        steps=settings["nsteps"],
-        update_step=settings["decode_step"]
-    )
-
-    return attack
-
-
-def clipped_l2_with_linf_loss(sess, batch, settings):
-
-    attack = graph.GraphConstructor.Constructor(
-        sess, batch, settings
-    )
-    attack.add_placeholders(
-        graph.Placeholders.Placeholders
-    )
-    attack.add_box_constraint(
-        graph.constraints.box.ClippedBoxConstraint
-    )
-    attack.add_size_constraint(
-        graph.constraints.size.L2,
-        r_constant=settings["rescale"],
-        update_method=settings["constraint_update"],
-    )
-    attack.add_perturbation_subgraph(
-        graph.Perturbations.IndependentVariables,
-        random_scale=settings["delta_randomiser"]
-    )
-    attack.create_adversarial_examples()
-    attack.add_victim(
-        models.DeepSpeech.Model,
-        decoder=settings["decoder"],
-        beam_width=settings["beam_width"]
-    )
-
-    if settings["loss"] in KAPPA_LOSSES:
-        attack.add_loss(
-            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-            k=settings["kappa"],
-            weight_settings=(1.0e3, 0.5),
-            updateable=True,
-        )
-    else:
-        attack.add_loss(
-            graph.losses.adversarial.AlignmentBased.GREEDY[settings["loss"]],
-            use_softmax=settings["use_softmax"],
-            weight_settings=(1.0e3, 0.5),
-            updateable=True,
-        )
-    attack.add_loss(
-        graph.losses.Distance.LinfLoss,
-        weight_settings=(1.0e-3, 1),
-        updateable=False,
-    )
-    attack.create_loss_fn()
-    attack.add_optimiser(
-        graph.Optimisers.AdamIndependentOptimiser,
-        learning_rate=settings["learning_rate"]
-    )
-    attack.add_procedure(
-        graph.Procedures.SuccessOnDecodingWithRestarts,
-        steps=settings["nsteps"],
-        update_step=settings["decode_step"],
-        restart_step=settings["restart_step"],
     )
 
     return attack
@@ -275,7 +152,8 @@ def attack_run(master_settings):
 
     audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
         master_settings["audio_indir"],
-        filter_term="audio.wav"
+        filter_term="audio.wav",
+        file_size_sort="shuffle",
     )
 
     transcriptions = data.ingress.two_stage.TwoStageTranscriptions(
@@ -297,8 +175,6 @@ def attack_run(master_settings):
 ATTACK_GRAPHS = {
     "box": only_box_constraint_graph,
     "cgd": clipped_gradient_descent_graph,
-    "linf_l2": clipped_linf_with_l2_loss,
-    "l2_linf": clipped_l2_with_linf_loss,
 }
 
 KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]

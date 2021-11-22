@@ -19,7 +19,7 @@ def only_box_constraint_graph(sess, batch, settings):
         graph.Placeholders.Placeholders
     )
     attack.add_box_constraint(
-        graph.constraints.box.ClippedBoxConstraint
+        graph.constraints.box.TanhBoxConstraint
     )
     attack.add_perturbation_subgraph(
         graph.Perturbations.IndependentVariables,
@@ -32,7 +32,9 @@ def only_box_constraint_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
+        graph.losses.adversarial.AlignmentFree.LogProbsMaxConfidence,
+        weight_settings=(1.0, 0.5),
+        updateable=True,
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -53,11 +55,14 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
+    # attack.add_path_search(
+    #     graph.Paths.ModifiedTranscription
+    # )
     attack.add_placeholders(
         graph.Placeholders.Placeholders
     )
     attack.add_box_constraint(
-        graph.constraints.box.ClippedBoxConstraint
+        graph.constraints.box.TanhBoxConstraint
     )
     attack.add_size_constraint(
         graph.constraints.size.L2,
@@ -75,7 +80,9 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
+        graph.losses.adversarial.AlignmentFree.LogProbsMaxConfidence,
+        weight_settings=(1.0, 0.5),
+        updateable=True,
     )
     attack.create_loss_fn()
     attack.add_optimiser(
@@ -106,12 +113,13 @@ def attack_run(master_settings):
     """
 
     attack_type = master_settings["attack_graph"]
-    loss = master_settings["loss"]
+    # loss = master_settings["loss"]
     decoder = master_settings["decoder"]
     outdir = master_settings["outdir"]
 
+    outdir = os.path.join(outdir, "gradient_path")
     outdir = os.path.join(outdir, attack_type)
-    outdir = os.path.join(outdir, "{}/".format(loss))
+    # outdir = os.path.join(outdir, "{}/".format(loss))
     outdir = os.path.join(outdir, "{}/".format(decoder))
 
     master_settings["outdir"] = outdir
@@ -152,7 +160,7 @@ def main():
 
     extra_args = {
         "attack_graph": [str, "box", False, ATTACK_GRAPHS.keys()],
-        "loss": [str, "ctc", True, graph.losses.adversarial.AlignmentFree.CTC.keys()]
+        # "loss": [str, "cw", True, graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS.keys()]
     }
 
     args(attack_run, additional_args=extra_args)
