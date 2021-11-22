@@ -83,7 +83,7 @@ class AbstractProcedure(ABC):
 
     def pre_optimisation_updates_hook(self, successes):
 
-        if self.attack.size_constraint is not None and any(successes):
+        if self.attack.size_constraint is not None:
             self.attack.size_constraint.update(
                 self.tf_run(self.attack.perturbations),
                 successes
