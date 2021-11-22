@@ -83,15 +83,15 @@ class AbstractProcedure(ABC):
 
     def pre_optimisation_updates_hook(self, successes):
 
+        for loss in self.attack.loss:
+            if loss.updateable is True:
+                loss.update_many(successes)
+
         if self.attack.size_constraint is not None:
             self.attack.size_constraint.update(
                 self.tf_run(self.attack.perturbations),
                 successes
             )
-
-        for loss in self.attack.loss:
-            if loss.updateable is True:
-                loss.update_many(successes)
 
     def post_optimisation_hook(self, successes):
         """
