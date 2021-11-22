@@ -199,3 +199,71 @@ class SegmentedEnergy(AbstractSizeConstraint):
         seg_sum = tf.reduce_sum(tf.reduce_sum(tf.abs(framed) ** 2, axis=-1) / 512)
         return x * self._tf_clipper(seg_sum)
 
+
+class PeakDB(AbstractDecibelSizeConstraint):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        res = 20.0 * np.log10(np.max(np.abs(x), axis=-1) + 1e-10)
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        peak = 20.0 * self._log10(tf.reduce_max(tf.abs(x), axis=-1) + 1e-10)
+        # NOTE: This doesn't **quite** work correctly
+        return x * (tf.maximum(self.bounds, tf.expand_dims(peak, axis=-1)) / self.bounds)
+
+
+class EnergyDB(AbstractDecibelSizeConstraint):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        safe_energy = np.sum(np.square(np.abs(x)), axis=-1) + 1e-10
+        res = np.log10(safe_energy)
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        safe_energy = tf.reduce_sum(tf.square(tf.abs(x)), axis=-1) + 1e-10
+        energy = self._log10(safe_energy)
+        # NOTE: This doesn't **quite** work correctly
+        return x * (tf.maximum(self.bounds, tf.expand_dims(energy, axis=-1)) / self.bounds)
+
+
+class RMSDB(AbstractDecibelSizeConstraint):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        res = 20.0 * np.log10(np.sqrt(np.mean(np.square(np.abs(x)), axis=-1)))
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        rms = 20.0 * self._log10(tf.sqrt(tf.reduce_mean(tf.square(tf.abs(x)), axis=-1)))
+        # NOTE: This doesn't **quite** work correctly
+        return x * (tf.maximum(self.bounds, tf.expand_dims(rms, axis=-1)) / self.bounds)
+
