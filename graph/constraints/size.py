@@ -1,7 +1,9 @@
 import tensorflow as tf
 import numpy as np
-
-from cleverspeech.graph.constraints.bases import AbstractSizeConstraint
+import python_speech_features as psf
+from cleverspeech.graph.constraints.bases import (
+    AbstractSizeConstraint, AbstractDecibelSizeConstraint
+)
 
 
 class L2(AbstractSizeConstraint):
@@ -49,7 +51,7 @@ class Linf(AbstractSizeConstraint):
         return tf.clip_by_value(x, -self.bounds, self.bounds)
 
 
-class Energy(AbstractSizeConstraint):
+class Peak2Peak(AbstractSizeConstraint):
     def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
         super().__init__(
             sess,
@@ -58,16 +60,28 @@ class Energy(AbstractSizeConstraint):
             r_constant=r_constant,
             update_method=update_method,
         )
+        print(self.bounds)
 
     def analyse(self, x):
-        res = np.sum(np.abs(x) ** 2, axis=-1)
+        res = np.max(x, axis=-1) - np.min(x, axis=-1)
         if type(res) != list:
             res = [res]
         return res
 
+    def _gen_tau(self, act_lengths):
+        """
+        Generate the initial bounds based on the the maximum possible value for
+        a perturbation and it's actual un-padded length (i.e. number of audio
+        samples).
+        """
+        for l in act_lengths:
+            positives = [self.bit_depth for _ in range(l//2)]
+            negatives = [-self.bit_depth for _ in range(l//2)]
+            yield self.analyse(positives + negatives)
+
     def clip(self, x):
-        energy = tf.reduce_sum(tf.abs(x ** 2), axis=-1)
-        return x * (self.bounds / tf.maximum(self.bounds, energy))
+        peak_to_peak = tf.reduce_max(x, axis=-1) - tf.reduce_min(x, axis=-1)
+        return x * self._tf_clipper(peak_to_peak)
 
 
 class RMS(AbstractSizeConstraint):
@@ -87,7 +101,101 @@ class RMS(AbstractSizeConstraint):
         return res
 
     def clip(self, x):
-
         rms = tf.sqrt(tf.reduce_mean(tf.abs(x ** 2), axis=-1))
-        return x * (self.bounds / tf.maximum(self.bounds, rms))
+        return x * self._tf_clipper(rms)
+
+
+class Energy(AbstractSizeConstraint):
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+        res = np.sum(np.abs(x) ** 2, axis=-1)
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        energy = tf.reduce_sum(tf.abs(x ** 2), axis=-1)
+        return x * self._tf_clipper(energy)
+
+
+class SegmentedMeanPeak(AbstractSizeConstraint):
+
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+
+        assert type(x) is np.ndarray
+
+        if len(x.shape) > 1:
+            seg_sums = []
+            for each_x in x:
+                framed = psf.sigproc.framesig(each_x, 512, 512)
+                seg_sum = np.mean(np.max(np.abs(framed) ** 2, axis=-1) / 512)
+                seg_sums.append([seg_sum])
+
+        else:
+            framed = psf.sigproc.framesig(x, 512, 512)
+            seg_sums = np.mean(np.max(np.abs(framed) ** 2, axis=-1) / 512)
+
+        res = seg_sums
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        framed = tf.signal.frame(x, 512, 512)
+        seg_sum = tf.reduce_mean(tf.reduce_max(tf.abs(framed) ** 2, axis=-1) / 512)
+        return x * self._tf_clipper(seg_sum)
+
+
+class SegmentedEnergy(AbstractSizeConstraint):
+
+    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method=None):
+        super().__init__(
+            sess,
+            batch,
+            bit_depth=bit_depth,
+            r_constant=r_constant,
+            update_method=update_method,
+        )
+
+    def analyse(self, x):
+
+        assert type(x) is np.ndarray
+
+        if len(x.shape) > 1:
+            seg_sums = []
+            for each_x in x:
+                framed = psf.sigproc.framesig(each_x, 512, 512)
+                seg_sum = np.sum(np.sum(np.abs(framed) ** 2, axis=-1) / 512)
+                seg_sums.append([seg_sum])
+
+        else:
+            framed = psf.sigproc.framesig(x, 512, 512)
+            seg_sums = np.sum(np.sum(np.abs(framed) ** 2, axis=-1) / 512)
+
+        res = seg_sums
+        if type(res) != list:
+            res = [res]
+        return res
+
+    def clip(self, x):
+        framed = tf.signal.frame(x, 512, 512)
+        seg_sum = tf.reduce_sum(tf.reduce_sum(tf.abs(framed) ** 2, axis=-1) / 512)
+        return x * self._tf_clipper(seg_sum)
 
