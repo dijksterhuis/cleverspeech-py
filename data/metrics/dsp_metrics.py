@@ -59,24 +59,33 @@ def energy_db(x):
     return to_db(energy(x))
 
 
-def power(x):
+def power(x, size=None):
     """
     P = E / t
 
     :param x: audio signal vector of amplitudes over time
     :return: power of the signal
     """
-    return energy(x) / x.size
+    if size is None and type(x) is np.ndarray:
+        size = x.size
+    elif size is None and type(x) is list:
+        size = len(x)
+    elif size is None:
+        raise TypeError
+    else:
+        pass
+
+    return energy(x) / size
 
 
-def power_db(x):
+def power_db(x, size=None):
     """
     P_db = 10.log10(P)
 
     :param x: audio signal vector of amplitudes over time
     :return: power of the signal in decibels relative to full scale
     """
-    return to_db(power(x))
+    return to_db(power(x, size=size))
 
 
 def rms_amplitude(x):
@@ -95,6 +104,28 @@ def rms_amplitude_db(x):
     :return: rms amplitude of signal in decibels relative to full scale
     """
     return to_db(rms_amplitude(x))
+
+
+def snr_peak(error_signal, original_signal):
+    """
+    SNR = P(x) / P(e)
+
+    :param error_signal: adversarial example signal
+    :param original_signal: original example signal
+    :return: SNR Power based on raw amplitudes.
+    """
+    return lnorm(original_signal, np.inf) / lnorm(error_signal, np.inf)
+
+
+def snr_peak_db(error_signal, original_signal):
+    """
+    SNR = P(x) / P(e)
+
+    :param error_signal: adversarial example signal
+    :param original_signal: original example signal
+    :return: SNR Power based on raw amplitudes.
+    """
+    return -to_db(snr_peak(error_signal, original_signal))
 
 
 def snr_power(error_signal, original_signal):
@@ -116,7 +147,7 @@ def snr_power_db(error_signal, original_signal):
     :param original_signal: original example signal
     :return: SNR power in decibels relative to full scale
     """
-    return to_db(power(original_signal) / power(error_signal))
+    return -to_db(power(original_signal) / power(error_signal))
 
 
 def snr_energy(error_signal, original_signal):
@@ -143,56 +174,22 @@ def snr_energy_db(error_signal, original_signal):
 
 def snr_rms_amplitude(error_signal, original_signal):
     """
+    :param error_signal: adversarial example signal
+    :param original_signal: original example signal
+    :return: SNR of the rms amplitudes of input signals
+    """
+    return rms_amplitude(original_signal) / rms_amplitude(error_signal)
+
+
+def snr_rms_amplitude_db(error_signal, original_signal):
+    """
     SNR_db = 20.log10[ (A_s / A_n) ^2] = 20.log10(A_s/A_n)
 
     :param error_signal: adversarial example signal
     :param original_signal: original example signal
     :return: SNR of the rms amplitudes of input signals
     """
-    return to_db(rms_amplitude(original_signal) / rms_amplitude(error_signal))
-
-
-def nsr_power(error_signal, original_signal):
-    """
-    SNR = P(e)/P(x)
-
-    :param error_signal: adversarial example signal
-    :param original_signal: original example signal
-    :return: NSR power
-    """
-    return power(error_signal) - power(original_signal)
-
-
-def nsr_power_db(error_signal, original_signal):
-    """
-    NSR_db = 10.log10(P(e)/P(x))
-
-    :param error_signal: adversarial example signal adversarial example signal
-    :param original_signal: original example signal
-    :return: NSR power in decibels relative to full scale
-    """
-    return to_db(power(error_signal) / power(original_signal))
-
-
-def nsr_energy(error_signal, original_signal):
-    """
-    NSR_E = E(e) / E(x)
-    :param error_signal: adversarial example signal adversarial example signal
-    :param original_signal: original example signal
-    :return: NSR energy
-    """
-    return energy(error_signal) / energy(original_signal)
-
-
-def nsr_rms_amplitude(error_signal, original_signal):
-    """
-    NSR_rms = 20.log10[ (A(e) / A(x)) ^2] = 20.log10(A(e)/A(x))
-
-    :param error_signal: adversarial example signal adversarial example signal
-    :param original_signal: original example signal
-    :return: NSR of the rms amplitudes of input signals
-    """
-    return 2 * to_db(rms_amplitude(error_signal) / rms_amplitude(original_signal))
+    return to_db(snr_rms_amplitude(error_signal, original_signal))
 
 
 def snr_segmented(error_signal, original_signal, frame_size=512):
@@ -210,11 +207,11 @@ def snr_segmented(error_signal, original_signal, frame_size=512):
     :return: Segmented SNR in decibels relative to full scale..
     """
 
-    original_frame = psf.sigproc.framesig(error_signal, frame_size, frame_size)
-    error_frame = psf.sigproc.framesig(original_signal, frame_size, frame_size)
-    segmented_energy = snr_energy(original_frame, error_frame)
+    original_frame = psf.sigproc.framesig(original_signal, frame_size, frame_size)
+    error_frame = psf.sigproc.framesig(error_signal, frame_size, frame_size)
+    segmented_energy = snr_energy(error_frame, original_frame)
     segmented_power = np.sum(segmented_energy / frame_size)
-    return to_db(segmented_power)
+    return -to_db(np.sum(segmented_power))
 
 
 def loudness_k_weighted_db(signal, sample_rate=16000, block_size=0.200):
