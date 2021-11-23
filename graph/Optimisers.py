@@ -14,7 +14,7 @@ TODO: self.attack.delta_graph.opt_vars -> tf.Graph.TRAINABLE_VARIABLES ???
 
 
 import tensorflow as tf
-from cleverspeech.utils.Utils import lcomp, log
+from cleverspeech.utils.Utils import lcomp, log, Logger
 from abc import ABC, abstractmethod
 
 
@@ -69,11 +69,14 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
         """
         train_ops = []
         self.variables = {}
-        gradients = []
 
-        warn = "\nWARNING: Large batches increase time to process ops ..."
-        s = "Loading {n} train ops ... ".format(n=len(self.optimizers))
-        log(s + warn if len(self.optimizers) > 10 else s, wrap=True)
+        if len(self.optimizers) > 10:
+            Logger.warn(
+                "Large batches increase time to process ops ...", timings=True
+            )
+
+        s = "Will load {n} total train ops ... ".format(n=len(self.optimizers))
+        Logger.info(s, timings=True, postfix="\n")
 
         for idx, opt in enumerate(self.optimizers):
 
@@ -90,12 +93,17 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
             self.variables[idx] = opt.variables()
 
             if (idx + 1) % 10 == 0:
-                log("{n} train ops loaded ...".format(n=idx + 1), wrap=False)
+                Logger.info(
+                    "{n} train ops loaded ...".format(n=idx + 1), timings=True
+                )
 
         self.train = tf.group(train_ops)
         self.gradients = tf.stack(gradients, axis=0)
 
-        log("\nAll {n} train ops loaded.".format(n=len(train_ops)), wrap=True)
+        Logger.info(
+            "All {n} train ops loaded.".format(n=len(self._train_ops_as_list)),
+            timings=True
+        )
 
 
 class AbstractBatchwiseOptimiser(AbstractOptimiser):
