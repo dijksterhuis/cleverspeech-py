@@ -184,8 +184,6 @@ class EntropyLoss(Bases.SimpleWeightings):
     """
     def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
-        assert type(weight_settings) in list, tuple
-
         super().__init__(
             attack,
             weight_settings=weight_settings,
