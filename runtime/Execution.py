@@ -6,7 +6,7 @@ from progressbar import ProgressBar
 
 from cleverspeech.data.egress import load
 from cleverspeech.runtime.TensorflowRuntime import TFRuntime
-from cleverspeech.utils.Utils import log
+from cleverspeech.utils.Utils import log, Logger
 
 
 RESULTS_WRITER_FUNCS = {
@@ -63,22 +63,19 @@ def writer_boilerplate_fn(queue, settings):
                 queue.task_done()
 
     except EndOfRunException:
-        s = "Dead queue entry detected... Writer subprocess exiting."
-        log(s)
-        pass
-
-    except KeyboardInterrupt:
-        s = "\nKeyboardInterrupt detected... Writer subprocess exiting."
-        log(s)
-
-    except BaseException as e:
-        tb = "".join(
-            traceback.format_exception(None, e, e.__traceback__)
+        Logger.info(
+            "Dead queue entry detected... Writer subprocess exiting."
         )
 
-        s = "\033[1;31mSomething broke during file writes!\033[1;0m"
-        s += "\n\nError Traceback:\n{e}".format(e=tb)
-        log(s)
+    except KeyboardInterrupt:
+        Logger.critical(
+            "KeyboardInterrupt detected... Writer subprocess exiting."
+        )
+
+    except BaseException as e:
+        tb = "".join(traceback.format_exception(None, e, e.__traceback__))
+        Logger.critical("Something broke during file writes!")
+        Logger.critical("{e}".format(e=tb))
         raise e
 
 
@@ -98,13 +95,15 @@ def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
         attack.validate()
 
         s = "Created Attack Graph and Feeds. Loaded TF Operations:"
-        log(s, wrap=False)
-        log(funcs=tf_runtime.log_attack_tensors)
+        Logger.info(s, timings=True)
+        Logger.log(
+            funcs=tf_runtime.log_attack_tensors, prefix="\n", postfix="\n"
+        )
 
-        s = "Beginning attack run...\nMonitor progress in: {}".format(
+        s = "Beginning attack run... Monitor progress in: {}".format(
             os.path.join(settings["outdir"], "log.txt")
         )
-        log(s)
+        Logger.info(s, timings=True)
 
         if settings["dry_run"] is True:
             return None
@@ -115,17 +114,16 @@ def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
 
                 for step, is_results_step, successes in attack.run():
 
-                    p.update(step)
+                    if step > 0: p.update(step)
 
                     if is_results_step and settings["no_step_logs"] is False:
                         res = get_attack_state(attack, successes)
                         results_queue.put(res)
 
         except BaseException:
-            log("")
-            s = "\033[1;31mAttack failed to run for these examples:\033[1;0m\n"
-            s += '\n'.join(batch.audios["basenames"])
-            log(s)
+            s = "Attack failed to run for these examples: "
+            s += ', '.join(batch.audios["basenames"])
+            Logger.critical(s, timings=True)
             raise
 
 
@@ -137,7 +135,8 @@ def manager(settings, attack_fn, batch_gen):
     )
 
     results_queue = mp.JoinableQueue()
-    log("Initialised the results queue.")
+    s = "Initialised the results queue."
+    Logger.info(s, timings=True)
 
     writer_process = mp.Process(
         target=writer_boilerplate_fn,
@@ -145,7 +144,8 @@ def manager(settings, attack_fn, batch_gen):
     )
 
     writer_process.start()
-    log("Started a writer subprocess.")
+    s = "Started a writer subprocess."
+    Logger.info(s, timings=True)
 
     try:
 
@@ -165,7 +165,7 @@ def manager(settings, attack_fn, batch_gen):
             s = "Running for Batch Number: {b} of {n}".format(
                 b=batch_gen.current_idx, n=batch_gen.n_batches
             )
-            log(s, wrap=True)
+            Logger.info(s, timings=True)
 
             executor_boilerplate_fn(
                 results_queue,
@@ -176,33 +176,32 @@ def manager(settings, attack_fn, batch_gen):
             s = "Finished Batch Number: {b} of {n}".format(
                 b=batch_gen.current_idx, n=batch_gen.n_batches
             )
-            log(s, wrap=True)
+            Logger.info(s, timings=True)
 
     except BaseException as e:
 
         tb = "".join(traceback.format_exception(None, e, e.__traceback__))
-        log(
-            "\033[1;31mERROR TRACEBACK:\033[1;0m\n{e}".format(e=tb),
-            wrap=True
-        )
+        Logger.critical("{e}".format(e=tb), timings=True)
 
     else:
 
-        log("Finished processing all batches, run complete.", wrap=True)
+        Logger.log(
+            "Finished processing all batches, run complete.", timings=True
+        )
 
     finally:
 
-        log(
+        Logger.info(
             "Attempting to close/terminate results queue/writer subprocess.",
-            wrap=True
+            timings=True
         )
         results_queue.put("dead")
         results_queue.close()
-        log("Results queue closed.", wrap=True)
+        Logger.info("Results queue closed.", timings=True)
 
         writer_process.join()
         writer_process.terminate()
-        log("Writer subprocess terminated.", wrap=True)
+        Logger.info("Writer subprocess terminated.", timings=True)
 
 
 def default_manager(settings, attack_fn, batch_gen):
