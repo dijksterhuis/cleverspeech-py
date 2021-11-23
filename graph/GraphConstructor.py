@@ -8,7 +8,8 @@ methods here, i.e. attack.victim.inference()
 """
 
 
-from cleverspeech.utils.Utils import log
+from cleverspeech.utils.Utils import log, Logger
+import tensorflow as tf
 
 
 class Feeds:
@@ -50,6 +51,7 @@ class Constructor:
 
         self.path_search = path_search_cls(self.batch, *args, **kwargs)
         self.path_search.create()
+        Logger.info("Added graph item: {}".format(path_search_cls), timings=True)
 
     def add_placeholders(self, placeholders):
 
@@ -59,13 +61,17 @@ class Constructor:
         self.feeds.examples = self.placeholders.examples_feed
         self.feeds.attack = self.placeholders.attacks_feed
 
+        Logger.info("Added graph item: {}".format(placeholders), timings=True)
+
     def add_box_constraint(self, box_constraint, *args, **kwargs):
         self.box_constraint = box_constraint(*args, **kwargs)
+        Logger.info("Added graph item: {}".format(box_constraint), timings=True)
 
     def add_size_constraint(self, size_constraint, *args, **kwargs):
         self.size_constraint = size_constraint(
             self.sess, self.batch, *args, **kwargs
         )
+        Logger.info("Added graph item: {}".format(size_constraint), timings=True)
 
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
         self.delta_graph = graph(
@@ -74,6 +80,7 @@ class Constructor:
             *args,
             **kwargs,
         )
+        Logger.info("Added graph item: {}".format(graph), timings=True)
 
     def create_adversarial_examples(self):
 
@@ -113,6 +120,7 @@ class Constructor:
             *args,
             **kwargs
         )
+        Logger.info("Added graph item: {}".format(model), timings=True)
 
     def add_loss(self, loss, *args, **kwargs):
         """
@@ -133,6 +141,8 @@ class Constructor:
             self.loss = [new_loss]
         else:
             self.loss.append(new_loss)
+
+        Logger.info("Added graph item: {}".format(loss), timings=True)
 
     def create_loss_fn(self):
         """
@@ -158,6 +168,7 @@ class Constructor:
         :return: None
         """
         self.optimiser = optimiser(self, *args, **kwargs)
+        Logger.info("Added graph item: {}".format(optimiser), timings=True)
 
     def optimise(self, *args, **kwargs):
         """
@@ -180,6 +191,7 @@ class Constructor:
         :return: None
         """
         self.procedure = procedure(self, *args, **kwargs)
+        Logger.info("Added graph item: {}".format(procedure), timings=True)
 
     def run(self, *args, **kwargs):
         """
@@ -199,8 +211,18 @@ class Constructor:
         decodings, probs = self.victim.inference()
 
         probs_rounded = [round(p, 2) for p in probs]
-
-        headers = "BASENAME|FEATS|BATCH_FEATS|LEN|PROBS|DECODING|TARGET_ID|TARGET|N_CHARS"
+        headers = [
+            "BASENAME",
+            "FEATS",
+            "BATCH_FEATS",
+            "O_LEN",
+            "PROBS",
+            "DECODING",
+            "TARGET_ID",
+            "TARGET",
+            "T_LEN"
+        ]
+        headers = "|".join(headers)
 
         z = zip(
             self.batch.audios["basenames"],
@@ -215,15 +237,14 @@ class Constructor:
         )
         s = ["|".join("{}".format(y) for y in x) for x in z]
 
-        log("Running attack for this data:", wrap=False)
-
-        log(
+        Logger.info("Running attack for this data:", timings=True, postfix="\n")
+        Logger.log(
             headers,
             '\n'.join(s),
             wrap=False,
             outdir=self.settings["outdir"],
-            fname="batch.psv"
+            fname="batch.psv",
+            postfix="\n"
         )
-
-        log("Wrote batch data to psv file", wrap=True)
+        Logger.info("Wrote batch data to psv file", timings=True)
 
