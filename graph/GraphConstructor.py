@@ -30,6 +30,7 @@ class Constructor:
         self.placeholders = None
         self.box_constraint = None
         self.size_constraint = None
+        self.masker = None
         self.delta_graph = None
         self.perturbations = None
         self.adversarial_examples = None
@@ -72,6 +73,12 @@ class Constructor:
             self.sess, self.batch, *args, **kwargs
         )
         Logger.info("Added graph item: {}".format(size_constraint), timings=True)
+
+    def add_frequency_masker(self, masker, *args, **kwargs):
+        self.masker = masker(
+            self.sess, self.batch, *args, **kwargs
+        )
+        Logger.info("Added graph item: {}".format(masker), timings=True)
 
     def add_perturbation_subgraph(self, graph, *args, **kwargs):
         self.delta_graph = graph(
@@ -149,12 +156,24 @@ class Constructor:
         Given the loss classes that have been added to the graph, create the
         final loss function by performing a sum over all the loss classes.
 
-        TODO: Add a ref_fn=sum kwarg.
-
+        :param ref_fn: how to combine losses in final loss fn (default `tf.add`)
         :return: None
         """
         assert self.loss is not None
-        self.loss_fn = sum([l.loss_fn for l in self.loss])
+
+        losses = [l.loss_fn for l in self.loss]
+
+        acc = None
+        for loss in losses:
+            if acc is None:
+                acc = loss
+            else:
+                acc = ref_fn(acc, loss)
+
+        if len(losses) > 1:
+            self.loss_fn = acc
+        else:
+            self.loss_fn = acc
 
     def add_optimiser(self, optimiser, *args, **kwargs):
         """

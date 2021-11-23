@@ -198,3 +198,57 @@ class EntropyLoss(Bases.SimpleWeightings):
         neg_max = tf.reduce_max(-log_mult_sum, axis=1)
 
         self.loss_fn = neg_max * self.weights
+
+
+class PsychoacousticFrequencyMaskingLoss(Bases.SimpleWeightings):
+    """
+    This is just the two "tf" methods from the impeceptible_asr attack in the
+    Adversarial Robustness Toolbox
+    https://github.com/Trusted-AI/adversarial-robustness-toolbox/blob/008b60cd91172b87e15b0a2a5b5c00d88d23e89a/art/attacks/evasion/imperceptible_asr/imperceptible_asr.py
+
+    """
+    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+
+        super().__init__(
+            attack,
+            weight_settings=weight_settings,
+            updateable=updateable,
+        )
+
+        assert attack.masker is not None
+
+        window_size = attack.masker.window_size
+        hop_size = attack.masker.hop_size
+
+        # compute short-time Fourier transform (STFT)
+
+        self.stft_matrix = stft_matrix = tf.signal.stft(
+            attack.perturbations, window_size, hop_size
+        )
+
+        # compute power spectral density (PSD)
+        # note: fixes implementation of Qin et al. by also considering the
+        # square root of gain_factor
+
+        gain_factor = np.sqrt(8.0 / 3.0)
+        attenuated = tf.abs(gain_factor * stft_matrix / window_size)
+        psd_matrix = tf.square(attenuated)
+
+        # approximate normalized psd:
+        # psd_matrix_approximated = 10^((96.0 - psd_matrix_max + psd_matrix)/10)
+
+        psd_expanded_dims = tf.reshape(attack.masker.psd, [-1, 1, 1])
+        psd_matrix_delta = tf.pow(10.0, 9.6) / psd_expanded_dims
+        psd_matrix_delta *= psd_matrix
+        psd_matrix_delta = tf.transpose(psd_matrix_delta, [0, 2, 1])
+
+        # return PSD matrix such that shape is
+        # (batch_size, window_size // 2 + 1, frame_length)
+
+        loss = tf.reduce_mean(
+            tf.nn.relu(psd_matrix_delta - attack.masker.thresh),
+            axis=[1, 2],
+            keepdims=False
+        )
+
+        self.loss_fn = loss * self.weights
