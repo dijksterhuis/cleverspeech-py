@@ -91,6 +91,103 @@ def clipped_gradient_descent_graph(sess, batch, settings):
     return attack
 
 
+def psycho_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_size_constraint(
+        graph.constraints.size.Linf,
+        r_constant=settings["rescale"],
+        update_method=settings["constraint_update"],
+    )
+    attack.add_frequency_masker(
+        graph.Maskers.PsychoacousticMasking,
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder=settings["decoder"],
+        beam_width=settings["beam_width"]
+    )
+    attack.add_loss(
+        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
+        updateable=True,
+        weight_settings=(1e3, 0.75),
+    )
+    attack.add_loss(
+        graph.losses.Distance.PsychoacousticFrequencyMaskingLoss,
+    )
+
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"]
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecodingEarlyStop,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"],
+    )
+
+    return attack
+
+
+def entropy_graph(sess, batch, settings):
+
+    attack = graph.GraphConstructor.Constructor(
+        sess, batch, settings
+    )
+    attack.add_placeholders(
+        graph.Placeholders.Placeholders
+    )
+    attack.add_box_constraint(
+        graph.constraints.box.ClippedBoxConstraint
+    )
+    attack.add_perturbation_subgraph(
+        graph.Perturbations.IndependentVariables,
+        random_scale=settings["delta_randomiser"]
+    )
+    attack.create_adversarial_examples()
+    attack.add_victim(
+        models.DeepSpeech.Model,
+        decoder=settings["decoder"],
+        beam_width=settings["beam_width"]
+    )
+    attack.add_loss(
+        graph.losses.adversarial.AlignmentFree.CTC[settings["loss"]],
+        updateable=True,
+        weight_settings=(1e3, 0.75),
+    )
+    attack.add_loss(
+        graph.losses.Distance.EntropyLoss,
+        updateable=False,
+    )
+
+    attack.create_loss_fn()
+    attack.add_optimiser(
+        graph.Optimisers.AdamIndependentOptimiser,
+        learning_rate=settings["learning_rate"]
+    )
+    attack.add_procedure(
+        graph.Procedures.SuccessOnDecoding,
+        steps=settings["nsteps"],
+        update_step=settings["decode_step"],
+    )
+
+    return attack
+
+
 def attack_run(master_settings):
     """
     Use Carlini & Wagner's improved loss function form the original audio paper,
@@ -144,6 +241,8 @@ def attack_run(master_settings):
 ATTACK_GRAPHS = {
     "box": only_box_constraint_graph,
     "cgd": clipped_gradient_descent_graph,
+    "psycho": psycho_graph,
+    "entropy": entropy_graph,
 }
 
 
