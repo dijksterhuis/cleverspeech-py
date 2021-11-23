@@ -34,7 +34,7 @@ from abc import ABC, abstractmethod
 from cleverspeech.data.utils import wav_file
 from cleverspeech.data.egress.load import convert_types_for_json
 from cleverspeech.utils.Utils import (
-    np_arr, np_zero, np_one, l_map, l_filter, l_sort, log
+    np_arr, np_zero, np_one, l_map, l_filter, l_sort, log, Logger
 )
 
 DEFAULT_TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
@@ -713,12 +713,16 @@ class _BaseBatchIterator:
         else:
             self.n_batches = int(n_batches)
 
-        log(
-            "New Run",
-            "Number of test examples: {}".format(self.n_examples),
-            ''.join(
-                ["{k}: {v}\n".format(k=k, v=v) for k, v in settings.items()]),
+        Logger.info("New Run", timings=True)
+        Logger.info(
+            "Number of test examples: {}".format(self.n_examples), timings=True
         )
+        Logger.info("Settings dictionary:", postfix="\n", timings=True)
+
+        settings_as_string = ''.join(
+            ["{k}: {v}\n".format(k=k, v=v) for k, v in settings.items()]
+        )
+        Logger.log(settings_as_string, postfix="\n")
 
     def _write_batch_to_json_file(self, batch):
 
@@ -768,7 +772,10 @@ class _BaseBatchIterator:
             targets_batch,
         )
 
-        log("Writing batch data to {}".format(self.out_file_path))
+        Logger.info(
+            "Writing batch data to {}".format(self.out_file_path), timings=True
+        )
+
         self._write_batch_to_json_file(batch)
 
         return batch
