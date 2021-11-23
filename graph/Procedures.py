@@ -180,7 +180,6 @@ class WithRandomRestarts(AbstractProcedure):
         )
 
         if self.current_step % self.restart_step == 0:
-            log("\n", wrap=False)
 
             s = "Doing random restarts."
             s += " Current overall success rate: {}".format(
@@ -190,6 +189,38 @@ class WithRandomRestarts(AbstractProcedure):
             Logger.info(s, timings=True, prefix="\n")
 
             self.attack.delta_graph.random_restarts(bool_any_successes)
+
+        super().pre_optimisation_updates_hook(successes)
+
+
+class IWouldWalkFiveHundredMilesAndNotAMileMore(AbstractProcedure):
+    """
+    Early stopping rule.
+    """
+    def __init__(self, attack, *args, early_stop_steps: int = 2500, **kwargs):
+
+        super().__init__(attack, *args, **kwargs)
+
+        assert early_stop_steps > 0
+        self.early_stop_steps = early_stop_steps
+
+    def pre_optimisation_updates_hook(self, successes):
+
+        bool_any_successes = l_map(
+            lambda x: (
+                False if x is False
+                else self.current_step - x >= self.early_stop_steps
+            ),
+            self.successful_example_tracker
+        )
+
+        if all(bool_any_successes):
+            s = "100% success rate but no solution in last {} steps".format(
+                self.early_stop_steps
+            )
+            s += " ==> stopping the attack."
+            Logger.warn(s, timings=True, prefix="\n")
+            self.current_step = self.steps
 
         super().pre_optimisation_updates_hook(successes)
 
@@ -214,11 +245,29 @@ class _SuccessOnDecoding(AbstractProcedure):
         )
 
 
-class SuccessOnDecoding(_SuccessOnDecoding):
+class SuccessOnDecoding(
+    _SuccessOnDecoding,
+):
     pass
 
 
-class SuccessOnDecodingWithRestarts(_SuccessOnDecoding, WithRandomRestarts):
+class SuccessOnDecodingEarlyStop(
+    SuccessOnDecoding, IWouldWalkFiveHundredMilesAndNotAMileMore
+):
+    pass
+
+
+class SuccessOnDecodingWithRestarts(
+    _SuccessOnDecoding, WithRandomRestarts
+):
+    pass
+
+
+class SuccessOnDecodingWithRestartsAndEarlyStop(
+    _SuccessOnDecoding,
+    WithRandomRestarts,
+    IWouldWalkFiveHundredMilesAndNotAMileMore
+):
     pass
 
 
