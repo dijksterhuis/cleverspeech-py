@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from abc import ABC, abstractmethod
-from cleverspeech.utils.Utils import np_arr, l_map, log, lcomp
+from cleverspeech.utils.Utils import np_arr, l_map, log, lcomp, Logger
 
 
 TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
@@ -85,13 +85,16 @@ class Path(ABC):
         # update the target sequence lengths
         lengths = l_map(lambda x: x.size, padded)
 
+        Logger.info(
+            "Modified targets batch to use the following (padded) paths...",
+            prefix="\n"
+        )
         logging_alignments = l_map(
             lambda x: "".join([self.tokens[i] for i in x]), padded
         )
-        s = "Modified targets batch to use the following (padded) paths:\n"
-        s += "\n".join(logging_alignments)
-
-        log(s, wrap=True)
+        Logger.log(
+            "\n".join(logging_alignments), prefix="\n", postfix="\n"
+        )
 
         self.batch.targets = {
             "tokens": self.tokens,
