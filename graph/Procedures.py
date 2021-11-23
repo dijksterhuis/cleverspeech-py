@@ -11,7 +11,7 @@ actually doing an attack.
 import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from cleverspeech.utils.Utils import l_map, log
+from cleverspeech.utils.Utils import l_map, log, Logger
 
 
 class AbstractProcedure(ABC):
@@ -34,7 +34,7 @@ class AbstractProcedure(ABC):
         the attack variables (i.e. not the deepspeech ones).
         """
 
-        log("Initialising graph variables ...", wrap=False)
+        Logger.info("Initialising graph variables ...", timings=True)
 
         self.attack.optimiser.create_optimiser()
 
@@ -45,7 +45,7 @@ class AbstractProcedure(ABC):
             opt_vars += val
 
         self.attack.sess.run(tf.variables_initializer(opt_vars))
-        log("Graph variables initialised.", wrap=True)
+        Logger.info("Graph variables initialised.", timings=True)
 
     def tf_run(self, tf_variables):
         """
@@ -116,7 +116,9 @@ class AbstractProcedure(ABC):
         yield self.results_hook(initial_successes)
         del initial_successes
 
-        log("Initial state written, starting optimisation....")
+        Logger.info(
+            "Initial state written, starting optimisation....", timings=True
+        )
 
         while self.steps_rule():
 
@@ -184,7 +186,8 @@ class WithRandomRestarts(AbstractProcedure):
             s += " Current overall success rate: {}".format(
                 sum(bool_any_successes) * 100 / len(successes)
             )
-            log(s, wrap=True)
+
+            Logger.info(s, timings=True, prefix="\n")
 
             self.attack.delta_graph.random_restarts(bool_any_successes)
 
