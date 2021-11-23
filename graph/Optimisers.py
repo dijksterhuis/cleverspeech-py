@@ -31,6 +31,8 @@ class AbstractOptimiser(ABC):
         assert attack.loss_fn is not None
 
         self.train = None
+        self._train_ops_as_list = None
+        self._gradients_as_list = None
         self.variables = None
         self.gradients = None
         self.optimizer = None
@@ -67,7 +69,8 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
         """
         Manage the computation of gradients from the loss and the delta variable
         """
-        train_ops = []
+        self._train_ops_as_list = []
+        self._gradients_as_list = []
         self.variables = {}
 
         if len(self.optimizers) > 10:
@@ -78,18 +81,34 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
         s = "Will load {n} total train ops ... ".format(n=len(self.optimizers))
         Logger.info(s, timings=True, postfix="\n")
 
-        for idx, opt in enumerate(self.optimizers):
+        # losses = tf.unstack(self.attack.loss_fn, axis=0)
+        z = zip(self.optimizers, self.attack.delta_graph.opt_vars)
+
+        for idx, (opt, delta) in enumerate(z):
+
+            # **IMPORTANT** ==> the losses **do not** need to be unstacked here
+            #
+            # tensorflow cannot update d[0] to minimise loss[1] as there are no
+            # graph connections between the two variables (the gradients will
+            # be zero).
+            #
+            # If we were to be explicit and require unstacked losses then the
+            # maximum batch size would be less than ~128 (current tested
+            # maximum) and attacks would take ~ 7-10 longer to run.
+            #
+            # TL;DR ==> this is basically a massive speed/resource usage hack
+            #           for tensorflow v1 which keeps the benefits of
+            #           independent delta optimisation.
 
             grad_var = opt.compute_gradients(
-                self.attack.loss_fn,
-                [self.attack.delta_graph.opt_vars[idx]],
-                colocate_gradients_with_ops=True
+                self.attack.loss_fn, delta, colocate_gradients_with_ops=True
             )
 
             assert None not in lcomp(grad_var, i=0)
             training_op = opt.apply_gradients(grad_var)
-            train_ops.append(training_op)
-            gradients.append(grad_var[0][0])
+
+            self._train_ops_as_list.append(training_op)
+            self._gradients_as_list.append(grad_var[0][0])
             self.variables[idx] = opt.variables()
 
             if (idx + 1) % 10 == 0:
@@ -97,8 +116,8 @@ class AbstractIndependentOptimiser(AbstractOptimiser):
                     "{n} train ops loaded ...".format(n=idx + 1), timings=True
                 )
 
-        self.train = tf.group(train_ops)
-        self.gradients = tf.stack(gradients, axis=0)
+        self.train = tf.group(self._train_ops_as_list)
+        self.gradients = tf.stack(self._gradients_as_list, axis=0)
 
         Logger.info(
             "All {n} train ops loaded.".format(n=len(self._train_ops_as_list)),
