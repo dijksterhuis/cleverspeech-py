@@ -32,7 +32,7 @@ def only_box_constraint_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.LogProbsMaxConfidence,
+        graph.losses.adversarial.AlignmentFree.SumLogProbsForward,
         weight_settings=(1.0, 0.5),
         updateable=True,
     )
@@ -80,7 +80,7 @@ def clipped_gradient_descent_graph(sess, batch, settings):
         beam_width=settings["beam_width"]
     )
     attack.add_loss(
-        graph.losses.adversarial.AlignmentFree.LogProbsMaxConfidence,
+        graph.losses.adversarial.AlignmentFree.SumLogProbsForward,
         weight_settings=(1.0, 0.5),
         updateable=True,
     )

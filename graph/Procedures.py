@@ -8,10 +8,11 @@ actually doing an attack.
 --------------------------------------------------------------------------------
 """
 
-import tensorflow as tf
 from abc import ABC, abstractmethod
 
-from cleverspeech.utils.Utils import l_map, log, Logger
+import tensorflow as tf
+
+from cleverspeech.utils.Utils import l_map, Logger
 
 
 class AbstractProcedure(ABC):

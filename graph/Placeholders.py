@@ -17,8 +17,7 @@ class Placeholders(object):
     A simple placeholders object. The attributes in this object are the absolute
     minimum placeholders required to create an attack.
 
-    :param batch_size: the size of the current input batch, a cleverspeech.data.ingress.batch_generators.batch object
-    :param maxlen: the maximum length of audio examples, post padding for feature extraction
+    :param batch: a batch of audio data
     """
     def __init__(self, batch):
 

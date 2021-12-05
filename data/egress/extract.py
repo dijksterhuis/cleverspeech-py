@@ -1,6 +1,6 @@
 import numpy as np
 
-from cleverspeech.utils.Utils import l_map, log
+from cleverspeech.utils.Utils import l_map
 
 
 def convert_to_batch_from_one(x, size):
@@ -42,7 +42,7 @@ def get_decodings(attack):
 
 
 def get_batched_losses(attack):
-    graph_losses = [l.loss_fn for l in attack.loss]
+    graph_losses = [loss.loss_fn for loss in attack.loss]
     losses = attack.procedure.tf_run(graph_losses)
 
     losses_transposed = [

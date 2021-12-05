@@ -6,7 +6,6 @@ import numpy as np
 
 from matplotlib import pyplot as plt
 
-
 plt.style.use(["science", "muted"])
 
 
@@ -48,7 +47,6 @@ def parse_delimiters(row):
 
 
 def get_column(row, log_column):
-
     log_idx, conversion_fn = LOG_PIPE_INDICES[log_column]
 
     str_data = row[log_idx].split(": ")[1]
@@ -57,9 +55,7 @@ def get_column(row, log_column):
 
 
 def extract_data_generator(log_data):
-
     for row in log_data:
-
         row = parse_delimiters(remove_timestamps(row))
 
         parsed_row_data = {
@@ -70,7 +66,6 @@ def extract_data_generator(log_data):
 
 
 def find_first_and_last_success_and_zeroth_step(data):
-
     first_successful_steps = dict()
     last_successful_steps = dict()
     zeroth_step = dict()
@@ -93,15 +88,15 @@ def find_first_and_last_success_and_zeroth_step(data):
 
 
 def aggregate_per_step(data, idx, ref_fn=np.mean):
-
     for step, row in data.items():
         # print(row)
         losses = [r[idx] for r in row]
         yield step, ref_fn(losses)
 
 
-def plot_per_measure(data, title, y_max=None, x_label=None, y_label=None, stddevs=None):
-
+def plot_per_measure(
+        data, title, y_max=None, x_label=None, y_label=None, stddevs=None
+):
     x = np.asarray(list(data.keys()))
     y = np.asarray(list(data.values()))
 
@@ -177,7 +172,6 @@ def main(log_file_path, outpath):
     prev = [0 for _ in range(len(list(basename_ordered.keys())))]
 
     for idx, res_data in enumerate(step_ordered.values()):
-
         successes = [1 if r["success"] else 0 for r in res_data]
         success_rate = sum(successes) / len(list(basename_ordered.keys()))
         success_rates[idx] = success_rate
@@ -220,14 +214,13 @@ def main(log_file_path, outpath):
 
     xes = np.asarray(list(step_ordered.keys()))
     plt.plot(xes, mean_cers, ls="-", marker="")
-    plt.ylim([0, np.ceil(max(mean_cers)/10)*10])
+    plt.ylim([0, np.ceil(max(mean_cers) / 10) * 10])
     plt.title("Mean Character-Error-Rate Rate Per Step")
 
     # =============> loss vs. ell norms
 
     def mean_normed(x):
         return np.mean(x) / len(x)
-
 
     loss_aggregates = {
         "mean": np.mean, "max": np.max, "min": np.min, "std": np.std
@@ -236,7 +229,7 @@ def main(log_file_path, outpath):
     aggd_loss_per_step = {
         ref: {
             k: v for k, v in
-        aggregate_per_step(step_ordered, "total_loss", ref_fn=ref_fn)
+            aggregate_per_step(step_ordered, "total_loss", ref_fn=ref_fn)
         } for ref, ref_fn in loss_aggregates.items()
     }
 
@@ -247,7 +240,7 @@ def main(log_file_path, outpath):
     aggd_l0_per_step = {
         ref: {
             k: v for k, v in
-        aggregate_per_step(step_ordered, "l0", ref_fn=ref_fn)
+            aggregate_per_step(step_ordered, "l0", ref_fn=ref_fn)
         } for ref, ref_fn in lnorm_aggreagates.items()
     }
     aggd_l2_normed_per_step = {
@@ -275,7 +268,6 @@ def main(log_file_path, outpath):
         } for ref, ref_fn in lnorm_aggreagates.items()
     }
 
-
     results = {
         "loss": aggd_loss_per_step,
         "l0": aggd_l0_per_step,
@@ -301,7 +293,6 @@ def main(log_file_path, outpath):
     plt.figure(2, tight_layout=True, figsize=(18, 12))
 
     for i, (ref, res) in enumerate(prod):
-
         maxmax = np.max(list(results[res]["max"].values()))
         denom = 10 ** np.floor(np.log10(maxmax))
         ceiled_maxmax = np.ceil(maxmax / denom) * denom
@@ -317,7 +308,7 @@ def main(log_file_path, outpath):
             y_label="{ref} {res}".format(
                 ref=ref.capitalize(), res=res_labels_map[res]
             ),
-            stddevs=None, # results[res]["std"] if ref == "mean" else None,
+            stddevs=None,  # results[res]["std"] if ref == "mean" else None,
             y_max=ceiled_maxmax
         )
     plt.savefig(
@@ -331,10 +322,10 @@ def main(log_file_path, outpath):
     #     os.path.join(outpath, "success_rate.png")
     # )
     #     plt.pause(10)
-        # plt.figure(1)
-        # plt.clf()
-        # plt.figure(2)
-        # plt.clf()
+    # plt.figure(1)
+    # plt.clf()
+    # plt.figure(2)
+    # plt.clf()
 
 
 if __name__ == '__main__':
@@ -343,11 +334,10 @@ if __name__ == '__main__':
     if len(log_file_paths) > 1:
         for log_file_path in log_file_paths:
             main(log_file_path, outdir)
-        plt.legend([l.replace("_", "-") for l in log_file_paths])
+        plt.legend([log_file_path.replace("_", "-") for log_file_path in log_file_paths])
     elif len(log_file_paths) == 1:
         main(log_file_paths[0], outdir)
 
     else:
         pass
     plt.show()
-

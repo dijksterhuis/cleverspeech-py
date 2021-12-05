@@ -74,9 +74,9 @@ class Peak2Peak(AbstractSizeConstraint):
         a perturbation and it's actual un-padded length (i.e. number of audio
         samples).
         """
-        for l in act_lengths:
-            positives = [self.bit_depth for _ in range(l//2)]
-            negatives = [-self.bit_depth for _ in range(l//2)]
+        for length in act_lengths:
+            positives = [self.bit_depth for _ in range(length//2)]
+            negatives = [-self.bit_depth for _ in range(length//2)]
             yield self.analyse(positives + negatives)
 
     def clip(self, x):

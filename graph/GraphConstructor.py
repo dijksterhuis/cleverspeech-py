@@ -8,8 +8,7 @@ methods here, i.e. attack.victim.inference()
 """
 
 
-from cleverspeech.utils.Utils import log, Logger
-import tensorflow as tf
+from cleverspeech.utils.Utils import Logger
 
 
 class Feeds:
@@ -161,7 +160,7 @@ class Constructor:
         """
         assert self.loss is not None
 
-        losses = [l.loss_fn for l in self.loss]
+        losses = [graph_loss.loss_fn for graph_loss in self.loss]
 
         acc = None
         for loss in losses:

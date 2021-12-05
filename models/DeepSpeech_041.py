@@ -1,23 +1,25 @@
-import tensorflow as tf
-import numpy as np
 import os
-import ds_ctcdecoder
-
 from abc import ABC
 from multiprocessing import cpu_count
-from cleverspeech.utils.Utils import np_arr, lcomp, log
+
+import ds_ctcdecoder
+import numpy as np
+import tensorflow as tf
 
 from cleverspeech.models.__DeepSpeech_v0_4_1.src import DeepSpeech
 from cleverspeech.models.__DeepSpeech_v0_4_1.src.util.config import Config
 from cleverspeech.models.__DeepSpeech_v0_4_1.src.util.text import Alphabet
+from cleverspeech.utils.Utils import np_arr, log
 
 
 class CarliniWagnerTransforms:
-    def __init__(self, audio_tensor, batch_size, sample_rate=16000, n_context=9, n_ceps=26, cep_lift=22):
+    def __init__(
+            self, audio_tensor, batch_size, sample_rate=16000, n_context=9,
+            n_ceps=26, cep_lift=22
+    ):
         """
         Carlini & Wagners implementation of MFCC & windowing in tensorflow
         :param audio_tensor: the input audio tensor/variable
-        :param audio_data: the DataLoader.AudioData test_data class
         :param batch_size: the size of the test data batch
         :param sample_rate: sample rate of the input audio files
         """
@@ -48,7 +50,10 @@ class CarliniWagnerTransforms:
             yield a
 
     def _context_generator(self, feats):
-        for i in range(0, feats.shape[1] - self.tot_contexts * self.n_ceps + 1, self.n_ceps):
+        for i in range(
+                0, feats.shape[1] - self.tot_contexts * self.n_ceps + 1,
+                self.n_ceps
+        ):
             yield feats[:, i:i + self.tot_contexts * self.n_ceps]
 
     def mfcc_ops(self):
@@ -62,7 +67,9 @@ class CarliniWagnerTransforms:
         audio = tf.cast(self.audio_input, tf.float32)
 
         # 1. Pre-emphasizer, a high-pass filter
-        audio = tf.concat((audio[:, :1], audio[:, 1:] - 0.97 * audio[:, :-1]), 1)
+        audio = tf.concat(
+            (audio[:, :1], audio[:, 1:] - 0.97 * audio[:, :-1]), 1
+        )
 
         # 2. windowing into frames of 320 samples, overlapping
         windows = tf.signal.frame(
@@ -90,7 +97,7 @@ class CarliniWagnerTransforms:
         # 6. Amplify high frequencies for some reason
         _, n_frames, n_coeff = feat.get_shape().as_list()
         n = np.arange(n_coeff)
-        lift = 1 + (self.cep_lifter/ 2.) * np.sin(np.pi * n / self.cep_lifter)
+        lift = 1 + (self.cep_lifter / 2.) * np.sin(np.pi * n / self.cep_lifter)
         feat = lift * feat
         width = feat.get_shape().as_list()[1]
 
@@ -120,11 +127,14 @@ class CarliniWagnerTransforms:
 
         eye_filter = np.asarray(
             np.eye(self.tot_contexts * self.n_ceps).reshape(
-                self.tot_contexts, self.n_ceps, self.tot_contexts * self.n_ceps),
-                 np.float32
+                self.tot_contexts, self.n_ceps, self.tot_contexts * self.n_ceps
+            ),
+            np.float32
         )
 
-        contexts = tf.nn.conv1d(self.mfcc, eye_filter, 1, 'SAME', name="qq_conv")
+        contexts = tf.nn.conv1d(
+            self.mfcc, eye_filter, 1, 'SAME', name="qq_conv"
+        )
 
         self.features = tf.reshape(
             contexts, [batch_size, -1, self.tot_contexts, self.n_ceps]
@@ -132,7 +142,10 @@ class CarliniWagnerTransforms:
 
 
 class Model(ABC):
-    def __init__(self, sess, input_tensor, batch, beam_width=500, decoder='ds', tokens=" abcdefghijklmnopqrstuvwxyz'-"):
+    def __init__(
+            self, sess, input_tensor, batch, beam_width=500, decoder='ds',
+            tokens=" abcdefghijklmnopqrstuvwxyz'-"
+    ):
 
         self.sess = sess
 
@@ -141,7 +154,8 @@ class Model(ABC):
 
         self.checkpoint_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "./DeepSpeech_v0_4_1/data/deepspeech-0.4.1-checkpoint/"
+                model_data_path,
+                "./DeepSpeech_v0_4_1/data/deepspeech-0.4.1-checkpoint/"
             )
         )
         self.model_dir = os.path.abspath(
@@ -190,7 +204,8 @@ class Model(ABC):
         DeepSpeech.initialize_globals()
 
         self.alphabet = Alphabet(
-            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path))
+            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path)
+        )
 
         self.scorer = ds_ctcdecoder.Scorer(
             tf.app.flags.FLAGS.lm_alpha,
@@ -265,7 +280,7 @@ class Model(ABC):
             v.op.name: v
             for v in tf.global_variables()
             if not v.op.name.startswith('previous_state_')
-            and not v.op.name.startswith("qq")
+               and not v.op.name.startswith("qq")
         }
 
         self.saver = saver = tf.train.Saver(mapping)
@@ -273,7 +288,9 @@ class Model(ABC):
 
         if not checkpoint:
             raise Exception(
-                'Not a valid checkpoint directory ({})'.format(self.checkpoint_dir)
+                'Not a valid checkpoint directory ({})'.format(
+                    self.checkpoint_dir
+                )
             )
 
         checkpoint_path = checkpoint.model_checkpoint_path
@@ -285,7 +302,11 @@ class Model(ABC):
         try:
             assert feed is not None
         except AssertionError as e:
-            print("You're trying to `get_logits` without providing a feed: {e}".format(e=e))
+            print(
+                "You're trying to `get_logits` without providing a feed: {e}".format(
+                    e=e
+                )
+            )
         else:
             result = self.tf_run(logits, feed_dict=feed)
             return result
@@ -299,7 +320,9 @@ class Model(ABC):
         self.reset_state()
         return outs
 
-    def inference(self, batch, feed=None, logits=None, decoder=None, top_five=False):
+    def inference(
+            self, batch, feed=None, logits=None, decoder=None, top_five=False
+    ):
 
         if decoder:
             decoder = decoder
@@ -355,10 +378,12 @@ class Model(ABC):
             if top_five is True:
 
                 probs = [
-                    [-decoding_probs[j][:5][i][0] for i in range(0, 5)] for j in range(batch.size)
+                    [-decoding_probs[j][:5][i][0] for i in range(0, 5)] for j in
+                    range(batch.size)
                 ]
                 decodings = [
-                    [decoding_probs[j][:5][i][1] for i in range(0, 5)] for j in range(batch.size)
+                    [decoding_probs[j][:5][i][1] for i in range(0, 5)] for j in
+                    range(batch.size)
                 ]
 
             else:
@@ -380,10 +405,12 @@ class Model(ABC):
             if top_five is True:
 
                 probs = [
-                    [-decoding_probs[j][:5][i][0] for i in range(0, 5)] for j in range(batch.size)
+                    [-decoding_probs[j][:5][i][0] for i in range(0, 5)] for j in
+                    range(batch.size)
                 ]
                 decodings = [
-                    [decoding_probs[j][:5][i][1] for i in range(0, 5)] for j in range(batch.size)
+                    [decoding_probs[j][:5][i][1] for i in range(0, 5)] for j in
+                    range(batch.size)
                 ]
 
             else:
@@ -450,7 +477,8 @@ class Model(ABC):
                 # batch major but tf greedy search wants time major
                 logits = np.transpose(logits, [1, 0, 2])
 
-            elif type(logits) == tf.Tensor and logits.get_shape().as_list()[0] == batch.size:
+            elif type(logits) == tf.Tensor and logits.get_shape().as_list()[
+                0] == batch.size:
                 # batch major but tf greedy search wants time major
                 logits = tf.transpose(logits, [1, 0, 2])
 
@@ -482,14 +510,16 @@ class Model(ABC):
 
     def ds_decode_batch(self, logits, lengths):
 
-        l = lengths[0]
+        length = lengths[0]
 
         # I have 6 cores on my development machine -- I also want to do other
         # things like write papers when running experiments.
 
         decoded_probs = ds_ctcdecoder.ctc_beam_search_decoder_batch(
             logits,
-            np.asarray([l for _ in range(logits.shape[0])], dtype=np.int32),
+            np.asarray(
+                [length for _ in range(logits.shape[0])], dtype=np.int32
+            ),
             Config.alphabet,
             self.beam_width,
             scorer=self.scorer,
@@ -500,14 +530,16 @@ class Model(ABC):
 
     def ds_decode_batch_no_lm(self, logits, lengths):
 
-        l = lengths[0]
+        length = lengths[0]
 
         # I have 6 cores on my development machine -- I also want to do other
         # things like write papers when running experiments.
 
         decoded_probs = ds_ctcdecoder.ctc_beam_search_decoder_batch(
             logits,
-            np.asarray([l for _ in range(logits.shape[0])], dtype=np.int32),
+            np.asarray(
+                [length for _ in range(logits.shape[0])], dtype=np.int32
+            ),
             Config.alphabet,
             self.beam_width,
             num_processes=cpu_count() // 2
@@ -525,9 +557,11 @@ class Model(ABC):
         )
         dense = tf.sparse.to_dense(tf_decode[0])
         tf_dense = self.tf_run([dense])
-        tf_outputs = [''.join([
+        tf_outputs = [''.join(
+            [
                 tokens[int(x)] for x in tf_dense[0][i]
-            ]) for i in range(tf_dense[0].shape[0])]
+            ]
+        ) for i in range(tf_dense[0].shape[0])]
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
 
@@ -535,7 +569,9 @@ class Model(ABC):
         probs = [prob[0] for prob in probs]
         return tf_outputs, probs
 
-    def tf_greedy_decode(self, logits, features_lengths, tokens, merge_repeated=True):
+    def tf_greedy_decode(
+            self, logits, features_lengths, tokens, merge_repeated=True
+    ):
 
         tf_decode, log_probs = tf.nn.ctc_greedy_decoder(
             logits,
@@ -544,9 +580,11 @@ class Model(ABC):
         )
         dense = tf.sparse.to_dense(tf_decode[0])
         tf_dense = self.tf_run([dense])
-        tf_outputs = [''.join([
+        tf_outputs = [''.join(
+            [
                 tokens[int(x)] for x in tf_dense[0][i]
-            ]) for i in range(tf_dense[0].shape[0])]
+            ]
+        ) for i in range(tf_dense[0].shape[0])]
 
         tf_outputs = [o.rstrip(" ") for o in tf_outputs]
 

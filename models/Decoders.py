@@ -6,12 +6,14 @@ import ds_ctcdecoder
 from abc import ABC, abstractmethod
 from multiprocessing import cpu_count
 from cleverspeech.utils.Utils import lcomp, l_map
-from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import Config
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import \
+    Config
 
 
 class _AbstractDecoder(ABC):
-    def __init__(self, tf_sess, tf_logits, batch, feed, tokens, *args, **kwargs):
-
+    def __init__(
+            self, tf_sess, tf_logits, batch, feed, tokens, *args, **kwargs
+    ):
         self.tokens = tokens
         self._feed = feed
         self._tf_sess = tf_sess
@@ -63,13 +65,17 @@ class _TensorflowDecoder(_AbstractDecoder):
 
     def _get_time_major_logits(self, logits):
         b = self._batch.size
-        l = logits if logits.shape[0] != b else tf.transpose(logits, [1, 0, 2])
-        return l
+        logits = logits if logits.shape[0] != b else tf.transpose(
+            logits, [1, 0, 2]
+        )
+        return logits
 
     def _get_batch_major_logits(self, logits):
         b = self._batch.size
-        l = logits if logits.shape[0] != b else tf.transpose(logits, [1, 0, 2])
-        return l
+        logits = logits if logits.shape[0] != b else tf.transpose(
+            logits, [1, 0, 2]
+        )
+        return logits
 
     def inference(self, top_five=False):
 
@@ -91,13 +97,16 @@ class _DeepSpeechBeamSearchMixin(_DeepSpeechDecoder, _BeamSearchDecoder):
     pass
 
 
-class DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder(_DeepSpeechBeamSearchMixin):
+class DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder(
+    _DeepSpeechBeamSearchMixin
+):
 
     def __init__(self, tf_sess, tf_logits, batch, feed, tokens, beam_width):
         super().__init__(tf_sess, tf_logits, batch, feed, tokens, beam_width)
 
         self.alphabet = ds_ctcdecoder.Alphabet(
-            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path))
+            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path)
+        )
 
         self.scorer = None
 
@@ -199,13 +208,16 @@ class DeepSpeechBeamSearchWithLanguageModelBatchDecoder(
         )
 
 
-class DeepSpeechBeamSearchWithoutLanguageModelDecoder(_DeepSpeechBeamSearchMixin):
+class DeepSpeechBeamSearchWithoutLanguageModelDecoder(
+    _DeepSpeechBeamSearchMixin
+):
 
     def __init__(self, tf_sess, tf_logits, batch, feed, tokens, beam_width):
         super().__init__(tf_sess, tf_logits, batch, feed, tokens, beam_width)
 
         self.alphabet = ds_ctcdecoder.Alphabet(
-            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path))
+            os.path.abspath(tf.app.flags.FLAGS.alphabet_config_path)
+        )
 
         self.scorer = None
 
@@ -283,7 +295,6 @@ class DeepSpeechBeamSearchWithoutLanguageModelDecoder(_DeepSpeechBeamSearchMixin
             lambda x: x[3], beam_results
         )
 
-
         return labellings, probs, token_order, timestep_switches
 
 
@@ -320,7 +331,6 @@ class TensorflowBeamSearchWithoutLanguageModelDecoder(
         self.decode_op = [dense, log_probs]
 
     def _decoding(self, logits, lengths, top_five=False, with_metadata=False):
-
         tf_dense, neg_sum_logits = self._tf_sess.run(self.decode_op, self._feed)
 
         tf_outputs = l_map(

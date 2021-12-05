@@ -1,7 +1,6 @@
-import os
-import sys
-import random
 import argparse
+import random
+import sys
 
 import numpy as np
 import tensorflow as tf

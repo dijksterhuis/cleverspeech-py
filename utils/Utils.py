@@ -1,9 +1,9 @@
+from base64 import b64encode
+from datetime import datetime as time
+from os import path
+
 import numpy as np
 
-from os import path
-from datetime import datetime as time
-from base64 import b64encode
-import sys
 
 def dump_b64bytes(z):
     return b64encode(z.dumps()).decode()
