@@ -5,7 +5,6 @@ import tensorflow as tf
 from abc import ABC, abstractmethod
 from cleverspeech.utils.Utils import np_arr, l_map, log, lcomp, Logger
 
-
 TOKENS = " abcdefghijklmnopqrstuvwxyz'-"
 
 
@@ -118,7 +117,6 @@ class ModifiedTranscription(Path):
         return np.asarray(modified_transcriptions)
 
     def create(self):
-
         modified_transcriptions = l_map(
             lambda x: self.create_modified_transcription(*x),
             zip(self.orig_indices, self.lengths)
@@ -134,7 +132,8 @@ class ModifiedTranscription(Path):
 
         padded = np_arr(
             [
-                l_map(lambda x: x, self._apply_padding(x, max(lengths))) for x in new_indices
+                l_map(lambda x: x, self._apply_padding(x, max(lengths))) for x
+                in new_indices
             ],
             np.int32
         )
@@ -158,7 +157,6 @@ class ModifiedTranscription(Path):
 
 
 class _LinearlyDistributed(Path):
-
     density = None
 
     def calculate_repeats(self, actual_n_feats, target_phrase_length):
@@ -214,24 +212,20 @@ class _LinearlyDistributed(Path):
 
 
 class Dense(_LinearlyDistributed):
-
     density = 1.0
 
 
 class Mid(_LinearlyDistributed):
-
     density = 0.5
 
 
 class Sparse(_LinearlyDistributed):
-
     density = 0.0
 
 
 class CustomDensity(_LinearlyDistributed):
 
     def __init__(self, batch, updateable=False, density=0.5):
-
         super().__init__(batch, updateable=updateable)
 
         assert 0 <= density <= 1.0
@@ -266,7 +260,7 @@ class EndPatch(_TranscriptionPatch):
     @staticmethod
     def _calculate_positioning(new_t, act_feat):
         path = np.ones(act_feat, dtype=np.int32) * 28
-        path[act_feat-len(new_t):act_feat] = new_t
+        path[act_feat - len(new_t):act_feat] = new_t
         return path
 
 
@@ -274,7 +268,6 @@ class MidPatch(_TranscriptionPatch):
 
     @staticmethod
     def _calculate_positioning(new_t, act_feat):
-
         feats_mid = act_feat // 2
 
         trans_start = feats_mid - (len(new_t) // 2)
@@ -346,8 +339,8 @@ class RandomMonotonicSparse(Path):
 
 class MinimumEnergyPatch(Path):
 
-    def minimum_energy_patched(self, t_mod, sig, af, sample_rate=16000):
-
+    @staticmethod
+    def minimum_energy_patched(t_mod, sig, af, sample_rate=16000):
         import python_speech_features as psf
 
         total_available_positions = af - len(t_mod)
@@ -378,14 +371,17 @@ class MinimumEnergyPatch(Path):
     def path_calculation(self, modified_transcriptions):
         return l_map(
             lambda x: self.minimum_energy_patched(*x),
-            zip(modified_transcriptions, self.batch.audios["audio"], self.actual_feats)
+            zip(
+                modified_transcriptions, self.batch.audios["audio"],
+                self.actual_feats
+                )
         )
 
 
 class MinimumEnergyDistributed(Path):
 
-    def minimum_energy_distributed(self, t_mod, sig, af, sample_rate=16000):
-
+    @staticmethod
+    def minimum_energy_distributed(t_mod, sig, af, sample_rate=16000):
         import python_speech_features as psf
 
         t_len = len(t_mod)
@@ -402,14 +398,17 @@ class MinimumEnergyDistributed(Path):
         indices = list(sorted(frame_nrg.index(e) for e in lowest_energies))
 
         for n, t in zip(indices, t_mod):
-            path[n-1] = t
+            path[n - 1] = t
 
         return path
 
     def path_calculation(self, modified_transcriptions):
         return l_map(
             lambda x: self.minimum_energy_distributed(*x),
-            zip(modified_transcriptions, self.batch.audios["audio"], self.actual_feats)
+            zip(
+                modified_transcriptions, self.batch.audios["audio"],
+                self.actual_feats
+                )
         )
 
 
@@ -461,11 +460,11 @@ class CTC(Path):
 
             def gen_mask(per_logit_len, maxlen):
                 # per actual frame
-                for l in per_logit_len:
+                for logit_idx in per_logit_len:
                     # per possible frame
                     masks = []
                     for f in range(maxlen):
-                        if l > f:
+                        if logit_idx > f:
                             # if should be optimised
                             mask = np.ones([29])
                         else:
@@ -516,9 +515,11 @@ class CTC(Path):
                 )
                 dense = tf.sparse.to_dense(tf_decode[0])
                 tf_dense = sess.run([dense])
-                tf_outputs = [''.join([
-                    tokens[int(x)] for x in tf_dense[0][i]
-                ]) for i in range(tf_dense[0].shape[0])]
+                tf_outputs = [''.join(
+                    [
+                        tokens[int(x)] for x in tf_dense[0][i]
+                    ]
+                ) for i in range(tf_dense[0].shape[0])]
 
                 tf_outputs = [o.rstrip(" ") for o in tf_outputs]
 
@@ -526,8 +527,10 @@ class CTC(Path):
                 probs = [prob[0] for prob in probs]
                 return tf_outputs, probs
 
-            def tf_greedy_decode(sess, logits, features_lengths, tokens,
-                    merge_repeated=True):
+            def tf_greedy_decode(
+                    sess, logits, features_lengths, tokens,
+                    merge_repeated=True
+                    ):
 
                 tf_decode, log_probs = tf.nn.ctc_greedy_decoder(
                     logits,
@@ -536,9 +539,11 @@ class CTC(Path):
                 )
                 dense = tf.sparse.to_dense(tf_decode[0])
                 tf_dense = sess.run([dense])
-                tf_outputs = [''.join([
-                    tokens[int(x)] for x in tf_dense[0][i]
-                ]) for i in range(tf_dense[0].shape[0])]
+                tf_outputs = [''.join(
+                    [
+                        tokens[int(x)] for x in tf_dense[0][i]
+                    ]
+                ) for i in range(tf_dense[0].shape[0])]
 
                 tf_outputs = [o.rstrip(" ") for o in tf_outputs]
 

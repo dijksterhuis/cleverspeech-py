@@ -1,15 +1,14 @@
-import os
 import json
-import numpy as np
+import os
 
-from cleverspeech.utils.Utils import l_map, log
+import numpy as np
 
 from cleverspeech.data.ingress.bases import (
     _BaseAudiosBatchETL,
     _BaseStandardAudioBatchETL,
     _BaseTranscriptionsBatchETL,
-    _BaseBatchIterator as TwoStageIterableBatches,
 )
+from cleverspeech.utils.Utils import l_map
 
 
 class _BaseFromTwoStageAudios(_BaseAudiosBatchETL):
@@ -47,7 +46,7 @@ class _BaseFromTwoStageAudios(_BaseAudiosBatchETL):
     @staticmethod
     def _popper(data, size):
         return l_map(
-            lambda x: data.pop(x-1), range(size, 0, -1)
+            lambda x: data.pop(x - 1), range(size, 0, -1)
         )
 
     @staticmethod
@@ -61,7 +60,6 @@ class _BaseFromTwoStageAudios(_BaseAudiosBatchETL):
     @staticmethod
     def get_batch_ground_truth_file_paths(batch_size):
         return l_map(lambda _: "", range(batch_size))
-
 
     @staticmethod
     def get_single_ground_truth_phrase(file_path):
@@ -135,7 +133,7 @@ class TwoStageTranscriptions(_BaseTranscriptionsBatchETL):
             filter(
                 lambda x: ".json" in x and "setting" not in x,
                 l_map(lambda i: os.path.join(indir, i), os.listdir(indir))
-           )
+            )
         )
         self.indir = indir
 

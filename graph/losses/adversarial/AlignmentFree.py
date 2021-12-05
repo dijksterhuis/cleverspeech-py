@@ -10,18 +10,20 @@ from tensorflow.python.ops.ctc_ops import (
     _state_to_olabel_unique,
     _state_to_olabel,
     _ilabel_to_state,
-    ctc_loss
+    ctc_loss,
 )
 from tensorflow.python.ops import (
     nn_ops,
     array_ops,
     math_ops,
-    custom_gradient
+    custom_gradient,
 )
 
 
-def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
-        unique=None, blank_index=None, name=None, apply_softmax=True):
+def ctc_mod(
+        labels, logits, label_length, logit_length, logits_time_major=True,
+        unique=None, blank_index=None, name=None, apply_softmax=True
+):
     """
     Set everything up for CTC
     """
@@ -46,11 +48,12 @@ def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
     if blank_index != 0:
         if blank_index < 0:
             blank_index += _get_dim(logits, 2)
-        logits = array_ops.concat([
-            logits[:, :, blank_index:blank_index + 1],
-            logits[:, :, :blank_index],
-            logits[:, :, blank_index + 1:],
-        ],
+        logits = array_ops.concat(
+            [
+                logits[:, :, blank_index:blank_index + 1],
+                logits[:, :, :blank_index],
+                logits[:, :, blank_index + 1:],
+            ],
             axis=2
         )
         labels = array_ops.where(
@@ -64,7 +67,9 @@ def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
         args.extend([unique_y, unique_idx])
 
     @custom_gradient.custom_gradient
-    def compute_ctc_loss(logits_t, labels_t, label_length_t, logit_length_t, *unique_t):
+    def compute_ctc_loss(
+            logits_t, labels_t, label_length_t, logit_length_t, *unique_t
+    ):
 
         """
         Compute CTC loss.
@@ -98,7 +103,10 @@ def ctc_mod(labels, logits, label_length, logit_length, logits_time_major=True,
     return compute_ctc_loss(*args)
 
 
-def ctc_loss_and_grad(logits, labels, label_length, logit_length, apply_softmax=False, unique=None):
+def ctc_loss_and_grad(
+        logits, labels, label_length, logit_length, apply_softmax=False,
+        unique=None
+):
     """
     Computes the actual loss and gradients.
     """
@@ -121,7 +129,8 @@ def ctc_loss_and_grad(logits, labels, label_length, logit_length, apply_softmax=
         initial_state_log_probs=initial_state_log_probs,
         final_state_log_probs=final_state_log_probs,
         observed_log_probs=state_log_probs,
-        sequence_length=logit_length)
+        sequence_length=logit_length
+    )
 
     if unique:
         olabel_log_probs = _state_to_olabel_unique(
@@ -154,8 +163,10 @@ class CTCLoss(Bases.SimpleWeightings):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
+    def __init__(
+            self, attack, weight_settings=(1.0, 1.0), updateable: bool = False
+    ):
         super().__init__(
             attack,
             weight_settings=weight_settings,
@@ -180,8 +191,10 @@ class CTCLossV2(Bases.SimpleWeightings):
 
     N.B. This loss does *not* conform to l(x + d, t) <= 0 <==> C(x + d) = t
     """
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
 
+    def __init__(
+            self, attack, weight_settings=(1.0, 1.0), updateable: bool = False
+    ):
         super().__init__(
             attack,
             weight_settings=weight_settings,
@@ -204,13 +217,15 @@ class CTCLossV2(Bases.SimpleWeightings):
 
 class SoftmaxCTCLoss(Bases.SimpleWeightings):
     """
-    Tensorflow implementatons of CTC Loss take the activations/logits as input
+    Tensorflow implementations of CTC Loss take the activations/logits as input
     and convert them to time major softmax values for us... but this means we
     can't take a partial derivative w.r.t. softmax outputs (only the logits).
     This class fixes that problem.
     """
 
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
+    def __init__(
+            self, attack, weight_settings=(1.0, 1.0), updateable: bool = False
+    ):
         super().__init__(
             attack, weight_settings=weight_settings, updateable=updateable
         )
@@ -232,7 +247,6 @@ class _BaseCTCGradientsPath:
     def get_argmin_softmax_gradient(attack):
 
         with tf.GradientTape() as tape:
-
             tape.watch(attack.victim.logits)
 
             # ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -271,7 +285,6 @@ class _BaseCTCGradientsPath:
     def get_argmin_activations_gradient(attack):
 
         with tf.GradientTape() as tape:
-
             tape.watch(attack.victim.raw_logits)
 
             ctc_target = tf.keras.backend.ctc_label_dense_to_sparse(
@@ -307,9 +320,12 @@ class _BaseCTCGradientsPath:
 
 
 class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
-        self.gradient_argmin, self.gradients = self.get_argmin_activations_gradient(attack)
+    def __init__(
+            self, attack, weight_settings=(1.0, 1.0), updateable: bool = False
+    ):
+        self.gradient_argmin, self.gradients = self.get_argmin_activations_gradient(
+            attack
+        )
 
         super().__init__(
             attack,
@@ -327,9 +343,12 @@ class CWMaxMin(Bases.KappaGreedySearchTokenWeights, _BaseCTCGradientsPath):
         self.loss_fn = tf.reduce_sum(self.max_diff * self.weights, axis=1)
 
 
-class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradientsPath):
-    def __init__(self, attack, weight_settings=(None, None), updateable: bool = False):
-
+class SumLogProbsForward(
+    Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradientsPath
+):
+    def __init__(
+            self, attack, weight_settings=(None, None), updateable: bool = False
+    ):
         # flip the increment round so it's actually doing the opposite but don't
         # make the scripts worry about it
 
@@ -363,12 +382,10 @@ class SumLogProbsForward(Bases.SimpleGreedySearchTokenWeights, _BaseCTCGradients
 class _BaseMinimumEnergy:
     @staticmethod
     def init_path_search_graph(attack):
-
         unstacked_examples = tf.unstack(attack.adversarial_examples, axis=0)
         unstacked_paths = []
 
         for idx, example in enumerate(unstacked_examples):
-
             frame_size = int(0.032 * 16000)
             frame_step = int(0.02 * 16000)
 
@@ -397,7 +414,8 @@ class _BaseMinimumEnergy:
             minimum_window_arg = tf.argmin(stacked_energy_windows)
 
             start_pad_shape = minimum_window_arg
-            end_pad_shape = actual_features - (minimum_window_arg + target_length)
+            end_pad_shape = actual_features - (
+                    minimum_window_arg + target_length)
 
             start_pad = 28 * tf.ones(start_pad_shape, dtype=tf.int32)
             end_pad = 28 * tf.ones(end_pad_shape, dtype=tf.int32)
@@ -424,9 +442,12 @@ class _BaseMinimumEnergy:
         return tf.stack(unstacked_paths, axis=0)
 
 
-class CWMaxMinMinimumEnergy(Bases.SimpleGreedySearchTokenWeights, _BaseMinimumEnergy):
-    def __init__(self, attack, weight_settings=(1.0, 1.0), updateable: bool = False):
-
+class CWMaxMinMinimumEnergy(
+    Bases.SimpleGreedySearchTokenWeights, _BaseMinimumEnergy
+):
+    def __init__(
+            self, attack, weight_settings=(1.0, 1.0), updateable: bool = False
+    ):
         self.target_path = self.init_path_search_graph(attack)
 
         super().__init__(

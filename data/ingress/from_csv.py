@@ -104,7 +104,7 @@ class TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
 
     def create_batch(self, batch_size, audios_batch):
         selections = self._popper(batch_size)
-        return self._transform_and_load(selections)
+        return self._transform_and_load(*selections)
 
     @staticmethod
     def _selection_rules(phrase, n_feats, ground_truth, selections):

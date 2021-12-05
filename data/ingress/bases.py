@@ -24,17 +24,17 @@ Each example will have a transcription that is:
 """
 
 
-import os
 import json
+import os
+from abc import ABC, abstractmethod
+
 import librosa
 import numpy as np
 
-from abc import ABC, abstractmethod
-
-from cleverspeech.data.utils import wav_file
 from cleverspeech.data.egress.load import convert_types_for_json
+from cleverspeech.data.utils import wav_file
 from cleverspeech.utils.Utils import (
-    np_arr, np_zero, np_one, l_map, l_filter, l_sort, log, Logger
+    np_arr, np_zero, np_one, l_map, Logger,
 )
 
 DEFAULT_TOKENS = " abcdefghijklmnopqrstuvwxyz'-"

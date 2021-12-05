@@ -1,13 +1,12 @@
+import multiprocessing as mp
 import os
 import traceback
-import multiprocessing as mp
 
 from progressbar import ProgressBar
 
 from cleverspeech.data.egress import load
 from cleverspeech.runtime.TensorflowRuntime import TFRuntime
-from cleverspeech.utils.Utils import log, Logger
-
+from cleverspeech.utils.Utils import Logger
 
 RESULTS_WRITER_FUNCS = {
     "local_latest": load.write_latest_metadata_to_local_json_file,
@@ -38,13 +37,13 @@ def _results_generator(results_writer, results, settings):
 
 
 def writer_boilerplate_fn(queue, settings):
-
     import traceback
     from time import sleep
 
     try:
 
-        settings_writer_fn = SETTINGS_WRITER_FUNCS[settings["writer"].split("_")[0]]
+        settings_writer_fn = SETTINGS_WRITER_FUNCS[
+            settings["writer"].split("_")[0]]
         settings_writer_fn(settings["outdir"], settings)
 
         results_writer_fn = RESULTS_WRITER_FUNCS[settings["writer"]]
@@ -80,7 +79,6 @@ def writer_boilerplate_fn(queue, settings):
 
 
 def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
-
     from cleverspeech.data.egress.extract import get_attack_state
 
     # tensorflow sessions can't be passed between processes
@@ -110,7 +108,9 @@ def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
 
         try:
 
-            with ProgressBar(min_value=0, max_value=1+settings["nsteps"]) as p:
+            with ProgressBar(
+                    min_value=0, max_value=1 + settings["nsteps"]
+                    ) as p:
 
                 for step, is_results_step, successes in attack.run():
 
@@ -128,7 +128,6 @@ def executor_boilerplate_fn(results_queue, settings, batch, attack_fn):
 
 
 def manager(settings, attack_fn, batch_gen):
-
     # modify this as late as possible to catch any added directories in exp defs
     settings["outdir"] = os.path.join(
         settings["outdir"], str(settings["unique_run_id"])
@@ -205,10 +204,8 @@ def manager(settings, attack_fn, batch_gen):
 
 
 def default_manager(settings, attack_fn, batch_gen):
-
     return manager(
         settings,
         attack_fn,
         batch_gen,
     )
-

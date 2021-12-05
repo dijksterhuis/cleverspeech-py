@@ -10,7 +10,6 @@ from cleverspeech.utils.Utils import log
 
 
 def only_box_constraint_graph(sess, batch, settings):
-
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
@@ -59,7 +58,6 @@ def only_box_constraint_graph(sess, batch, settings):
 
 
 def clipped_gradient_descent_graph(sess, batch, settings):
-
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
@@ -118,7 +116,6 @@ def clipped_gradient_descent_graph(sess, batch, settings):
 
 
 def clipped_linf_with_l2_loss(sess, batch, settings):
-
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
@@ -182,7 +179,6 @@ def clipped_linf_with_l2_loss(sess, batch, settings):
 
 
 def clipped_l2_with_linf_loss(sess, batch, settings):
-
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
@@ -246,7 +242,6 @@ def clipped_l2_with_linf_loss(sess, batch, settings):
 
 
 def psycho_graph(sess, batch, settings):
-
     attack = graph.GraphConstructor.Constructor(
         sess, batch, settings
     )
@@ -375,6 +370,7 @@ def attack_run(master_settings):
         batch_gen,
     )
 
+
 ATTACK_GRAPHS = {
     "box": only_box_constraint_graph,
     "cgd": clipped_gradient_descent_graph,
@@ -387,10 +383,10 @@ KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]
 
 
 def main():
-
     extra_args = {
         "attack_graph": [str, "box", True, ATTACK_GRAPHS.keys()],
-        "loss": [str, None, True, graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
+        "loss": [str, None, True,
+                 graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
         "kappa": [float, None, False, None],
         'use_softmax': [int, 0, False, [0, 1]],
     }

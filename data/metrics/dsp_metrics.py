@@ -59,6 +59,7 @@ def energy_db(x):
     return to_db(energy(x))
 
 
+# noinspection PyIncorrectDocstring
 def power(x, size=None):
     """
     P = E / t
@@ -78,6 +79,7 @@ def power(x, size=None):
     return energy(x) / size
 
 
+# noinspection PyIncorrectDocstring
 def power_db(x, size=None):
     """
     P_db = 10.log10(P)

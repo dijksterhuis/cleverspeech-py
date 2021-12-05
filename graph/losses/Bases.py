@@ -1,8 +1,9 @@
-import tensorflow as tf
-import numpy as np
-
 from abc import ABC, abstractmethod
-from cleverspeech.utils.Utils import log, l_map
+
+import numpy as np
+import tensorflow as tf
+
+from cleverspeech.utils.Utils import l_map
 
 
 class BaseLoss(ABC):

@@ -9,8 +9,8 @@ class AbstractBoxConstraint(ABC):
     """
     Abstract class for constraints, funnily enough.
     """
-    def __init__(self, bit_depth=1.0):
 
+    def __init__(self, bit_depth=1.0):
         self.bit_depth = bit_depth
 
     @abstractmethod
@@ -25,7 +25,11 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
     """
     Abstract class for constraints, funnily enough.
     """
-    def __init__(self, sess, batch, bit_depth=1.0, r_constant=0.95, update_method="geom"):
+
+    def __init__(
+            self, sess, batch, bit_depth=1.0, r_constant=0.95,
+            update_method="geom"
+    ):
 
         super().__init__(bit_depth=bit_depth)
 
@@ -74,8 +78,10 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
         a perturbation and it's actual un-padded length (i.e. number of audio
         samples).
         """
-        for l in act_lengths:
-            yield self.analyse(np.asarray([self.bit_depth for _ in range(l)]))
+        for length in act_lengths:
+            yield self.analyse(
+                np.asarray([self.bit_depth for _ in range(length)])
+            )
 
     @abstractmethod
     def analyse(self, x):
@@ -101,7 +107,8 @@ class AbstractSizeConstraint(AbstractBoxConstraint):
         """
         return dist * self.r_constant
 
-    def revert_bound(self, distance, previous):
+    @staticmethod
+    def revert_bound(distance, previous):
         """
         Get a new bound with geometric progression.
         """

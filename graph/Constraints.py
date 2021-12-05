@@ -57,8 +57,8 @@ class AbstractConstraint(ABC):
         a perturbation and it's actual un-padded length (i.e. number of audio
         samples).
         """
-        for l in act_lengths:
-            yield self.analyse([self.__bit_depth for _ in range(l)])
+        for lengths in act_lengths:
+            yield self.analyse([self.__bit_depth for _ in range(lengths)])
 
     @abstractmethod
     def analyse(self, x):

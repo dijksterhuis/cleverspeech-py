@@ -1,19 +1,10 @@
-import tensorflow as tf
-import numpy as np
-import os
 import multiprocessing as mp
-import ds_ctcdecoder
-
+import os
 from abc import ABC
 from multiprocessing import cpu_count
-from cleverspeech.utils.Utils import lcomp, l_map
 
-from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.train import (
-  create_inference_graph,
-  create_model
-)
-from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import Config, initialize_globals
-from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.flags import create_flags
+import numpy as np
+import tensorflow as tf
 
 from cleverspeech.models.Decoders import (
     DeepSpeechBeamSearchWithoutLanguageModelBatchDecoder,
@@ -23,6 +14,14 @@ from cleverspeech.models.Decoders import (
     TensorflowBeamSearchWithoutLanguageModelDecoder,
     TensorflowGreedySearchWithoutLanguageModelDecoder,
 )
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.train import (
+    create_model
+)
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.config import \
+    initialize_globals
+from cleverspeech.models.__DeepSpeech_v0_9_3.src.training.deepspeech_training.util.flags import \
+    create_flags
+from cleverspeech.utils.Utils import l_map
 
 DECODERS = {
     "ds": DeepSpeechBeamSearchWithLanguageModelDecoder,
@@ -35,11 +34,13 @@ DECODERS = {
 
 
 class TFSignalMFCC:
-    def __init__(self, audio_tensor, batch_size, sample_rate=16000, n_context=9, n_ceps=26, cep_lift=22):
+    def __init__(
+            self, audio_tensor, batch_size, sample_rate=16000, n_context=9,
+            n_ceps=26, cep_lift=22
+    ):
         """
         Carlini & Wagners implementation of MFCC & windowing in tensorflow
         :param audio_tensor: the input audio tensor/variable
-        :param audio_data: the DataLoader.AudioData test_data class
         :param batch_size: the size of the test data batch
         :param sample_rate: sample rate of the input audio files
         """
@@ -58,7 +59,6 @@ class TFSignalMFCC:
         self.features_len = None
 
     def mfcc_ops(self):
-
         stfts = tf.signal.stft(
             self.audio_input,
             frame_length=self.window_size,
@@ -86,12 +86,15 @@ class TFSignalMFCC:
         )
 
         mfcc.set_shape(
-            spectrograms.shape[:-1].concatenate(linear_to_mel_weight_matrix.shape[-1:])
+            spectrograms.shape[:-1].concatenate(
+                linear_to_mel_weight_matrix.shape[-1:]
+            )
         )
 
         log_mel_spectrograms = tf.math.log(mfcc + 1e-6)
 
-        mfcc = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrograms)[..., :self.n_ceps]
+        mfcc = tf.signal.mfccs_from_log_mel_spectrograms(log_mel_spectrograms)[
+               ..., :self.n_ceps]
 
         self.mfcc = tf.reshape(mfcc, [self.batch_size, -1, self.n_ceps])
 
@@ -104,7 +107,10 @@ class TFSignalMFCC:
 
 
 class Model(ABC):
-    def __init__(self, sess, input_tensor, batch, feed, beam_width=500, decoder='ds', tokens=" abcdefghijklmnopqrstuvwxyz'-"):
+    def __init__(
+            self, sess, input_tensor, batch, feed, beam_width=500, decoder='ds',
+            tokens=" abcdefghijklmnopqrstuvwxyz'-"
+    ):
 
         self.sess = sess
 
@@ -113,7 +119,8 @@ class Model(ABC):
 
         self.checkpoint_dir = os.path.abspath(
             os.path.join(
-                model_data_path, "./__DeepSpeech_v0_9_3/data/deepspeech-0.9.3-checkpoint/"
+                model_data_path,
+                "./__DeepSpeech_v0_9_3/data/deepspeech-0.9.3-checkpoint/"
             )
         )
         self.model_dir = os.path.abspath(
@@ -208,8 +215,8 @@ class Model(ABC):
         self.outputs = outputs
         self.layers = layers
 
-        #self.__reset_rnn_state = outputs["initialize_state"]
-        #self.reset_state()
+        # self.__reset_rnn_state = outputs["initialize_state"]
+        # self.reset_state()
 
         self.raw_logits = layers['raw_logits']
         self.logits = tf.nn.softmax(tf.transpose(self.raw_logits, [1, 0, 2]))
@@ -227,7 +234,7 @@ class Model(ABC):
             v.op.name: v
             for v in tf.global_variables()
             if not v.op.name.startswith('previous_state_')
-            and not v.op.name.startswith("qq")
+               and not v.op.name.startswith("qq")
         }
 
         # print("=-=-=-=- Initialised Variables")
@@ -238,7 +245,9 @@ class Model(ABC):
 
         if not checkpoint:
             raise Exception(
-                'Not a valid checkpoint directory ({})'.format(self.checkpoint_dir)
+                'Not a valid checkpoint directory ({})'.format(
+                    self.checkpoint_dir
+                )
             )
 
         checkpoint_path = checkpoint.model_checkpoint_path
@@ -248,7 +257,11 @@ class Model(ABC):
         try:
             assert feed is not None
         except AssertionError as e:
-            print("You're trying to `get_logits` without providing a feed: {e}".format(e=e))
+            print(
+                "You're trying to `get_logits` without providing a feed: {e}".format(
+                    e=e
+                )
+            )
         else:
             result = self.tf_run(logits, feed_dict=feed)
             return result

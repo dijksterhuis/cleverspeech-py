@@ -25,10 +25,10 @@ class AbstractPerturbationsGraph(ABC):
 
         :yield: 0/1 valued mask vector of length max_len
         """
-        for l in lengths:
+        for length in lengths:
             m = list()
             for i in range(max_len):
-                if i < l:
+                if i < length:
                     m.append(1)
                 else:
                     m.append(0)
