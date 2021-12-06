@@ -64,7 +64,7 @@ class MCV7TranscriptionsFromCSVFile(MCV1TranscriptionsFromCSVFile):
             data = f.readlines()
 
         targets = [
-            (row.split(',')[2], idx) for idx, row in enumerate(data) if idx > 0
+            (row.rstrip("\n").split(',')[2], idx) for idx, row in enumerate(data) if idx > 0
         ]
         targets = l_sort(lambda x: len(x[0]), targets, reverse=False)
 
