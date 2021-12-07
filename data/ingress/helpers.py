@@ -21,7 +21,8 @@ def create_batch_gen_fn(settings):
 
     base_dir = "./samples/{}/{}/".format(data_major_id, data_minor_id)
     audio_dir = os.path.join(base_dir, "all")
-    transcript_file = os.path.join(base_dir, "test.csv")
+    transcript_file = "test.csv" if data_major_id == "mcv7" else "cv-valid-test.csv"
+    transcript_file = os.path.join(base_dir, transcript_file)
 
     s3_tar_file_path = "{}-{}.tar.gz".format(data_major_id, data_minor_id)
     downloader.download(s3_tar_file_path)
