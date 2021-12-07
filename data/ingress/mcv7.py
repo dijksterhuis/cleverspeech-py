@@ -3,6 +3,7 @@ import json
 import random
 from cleverspeech.utils.Utils import l_sort, l_filter, l_map
 
+from cleverspeech.data.ingress import downloader
 from cleverspeech.data.ingress.bases import (
     _BaseStandardAudioBatchETL,
     _BaseTrimmedAudioBatchETL,
@@ -18,7 +19,8 @@ from cleverspeech.data.ingress.bases import (
 
 class _BaseFromAudios(_BaseAudiosBatchETL):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, s3_key, *args, **kwargs):
+        downloader.download(s3_key)
         super().__init__(*args, **kwargs)
 
     @staticmethod
