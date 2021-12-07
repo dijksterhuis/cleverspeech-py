@@ -11,7 +11,7 @@ def create_batch_gen_fn(settings):
         from cleverspeech.data.ingress import mcv7 as mcv_data
 
     elif data_major_id == "mcv1":
-        from cleverspeech.data.ingress import mcv_v1 as mcv_data
+        from cleverspeech.data.ingress import mcv1 as mcv_data
 
     else:
         Logger.warn("You selected an incorrect dataset combination...")
