@@ -12,7 +12,7 @@ from cleverspeech.data.ingress.bases import (
     _BaseWhiteNoiseAudioBatchETL,
     _BaseTranscriptionsBatchETL,
     _BaseConstantAmplitudeAudioBatchETL,
-    _BaseBatchIterator as MCV1IterableBatches,
+    _BaseBatchIterator as IterableBatches,
     NoSuitableTranscriptionFoundException,
 )
 
