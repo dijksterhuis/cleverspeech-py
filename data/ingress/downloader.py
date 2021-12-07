@@ -19,31 +19,41 @@ def download(s3_archive):
 
     try:
         assert os.path.exists(samples_path)        # base dir path exists
-        assert len(os.listdir(samples_path)) == 2  # transcription csv
-        assert os.path.exists(audios_dir)          # audios dir exists
-        # at least 1 wav and json file are present
-        more_than_one = len(os.listdir(os.path.join(samples_path, "all"))) > 2
-        assert more_than_one
-
-        if more_than_one:
-            wav_count, json_count = 0, 0
-            for fp in os.listdir(audios_dir):
-                json_count += 1 if ".json" in fp else 0
-                wav_count += 1 if ".wav" in fp else 0
-            assert json_count > 0
-            assert wav_count > 0
-            assert wav_count == json_count
-
-        else:
-            raise AssertionError
 
     except AssertionError:
         Logger.warn(
-            "Incomplete sample data... deleting and recreating directory {}".format(samples_path)
+            "Sample directory doesn't exist. Downloading.".format(samples_path)
         )
-        shutil.rmtree(samples_path)
-        os.makedirs(audios_dir, exist_ok=True)
+
         _maybe_download_and_extract(s3_archive)
+    else:
+
+        try:
+            assert len(os.listdir(samples_path)) == 2  # transcription csv
+            assert os.path.exists(audios_dir)          # audios dir exists
+            # at least 1 wav and json file are present
+            more_than_one = len(os.listdir(os.path.join(samples_path, "all"))) > 2
+            assert more_than_one
+
+            if more_than_one:
+                wav_count, json_count = 0, 0
+                for fp in os.listdir(audios_dir):
+                    json_count += 1 if ".json" in fp else 0
+                    wav_count += 1 if ".wav" in fp else 0
+                assert json_count > 0
+                assert wav_count > 0
+                assert wav_count == json_count
+
+            else:
+                raise AssertionError
+
+        except AssertionError:
+            Logger.warn(
+                "Incomplete sample data. Deleting + recreating {}".format(samples_path)
+            )
+            shutil.rmtree(samples_path)
+            os.makedirs(audios_dir, exist_ok=True)
+            _maybe_download_and_extract(s3_archive)
 
     return True
 
