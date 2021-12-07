@@ -124,7 +124,7 @@ def attack_run(master_settings):
 
     master_settings["outdir"] = outdir
 
-    audios = data.ingress.mcv_v1.MCV1StandardAudioBatchETL(
+    audios = data.ingress.mcv_v1.StandardAudioBatchETL(
         master_settings["audio_indir"],
         master_settings["max_examples"],
         filter_term=".wav",
@@ -132,7 +132,7 @@ def attack_run(master_settings):
         file_size_sort="shuffle"
     )
 
-    transcriptions = data.ingress.mcv_v1.MCV1TranscriptionsFromCSVFile(
+    transcriptions = data.ingress.mcv_v1.TranscriptionsFromCSVFile(
         master_settings["targets_path"],
         master_settings["max_targets"],
     )

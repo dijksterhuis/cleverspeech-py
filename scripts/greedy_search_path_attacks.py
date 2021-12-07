@@ -331,38 +331,7 @@ def attack_run(master_settings):
     else:
         master_settings["kappa"] = None
 
-    attack_type = master_settings["attack_graph"]
-    align = master_settings["align"]
-    loss = master_settings["loss"]
-    decoder = master_settings["decoder"]
-    kappa = master_settings["kappa"]
-    outdir = master_settings["outdir"]
-
-    outdir = os.path.join(outdir, attack_type)
-    outdir = os.path.join(outdir, "{}/".format(loss))
-    outdir = os.path.join(outdir, "{}/".format(align))
-    outdir = os.path.join(outdir, "{}/".format(decoder))
-    outdir = os.path.join(outdir, "k{}/".format(kappa))
-
-    master_settings["outdir"] = outdir
-    master_settings["attack type"] = attack_type
-
-    audios = data.ingress.mcv_v1.MCV1StandardAudioBatchETL(
-        master_settings["audio_indir"],
-        master_settings["max_examples"],
-        filter_term=".wav",
-        max_file_size=master_settings["max_audio_file_bytes"],
-        file_size_sort="shuffle",
-    )
-
-    transcriptions = data.ingress.mcv_v1.MCV1TranscriptionsFromCSVFile(
-        master_settings["targets_path"],
-        master_settings["max_targets"],
-    )
-
-    batch_gen = data.ingress.mcv_v1.MCV1IterableBatches(
-        master_settings, audios, transcriptions
-    )
+    batch_gen = data.ingress.helpers.create_batch_gen_fn(master_settings)
 
     default_manager(
         master_settings,

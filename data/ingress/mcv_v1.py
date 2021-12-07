@@ -14,13 +14,17 @@ from cleverspeech.data.ingress.bases import (
     _BaseConstantAmplitudeAudioBatchETL,
     _BaseBatchIterator as MCV1IterableBatches,
     NoSuitableTranscriptionFoundException,
-    Wav32BitSignedFloat,
 )
 
+from cleverspeech.data.ingress import downloader
 
-class _BaseFromMCV1Audios(_BaseAudiosBatchETL):
 
-    def __init__(self, *args, **kwargs):
+class _BaseFromAudios(_BaseAudiosBatchETL):
+
+    def __init__(self, s3_key, *args, **kwargs):
+
+        downloader.download(s3_key)
+
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -111,37 +115,37 @@ class _BaseFromMCV1Audios(_BaseAudiosBatchETL):
         return l_map(len, phrase)
 
 
-class MCV1StandardAudioBatchETL(
-    _BaseStandardAudioBatchETL, _BaseFromMCV1Audios
+class StandardAudioBatchETL(
+    _BaseStandardAudioBatchETL, _BaseFromAudios
 ):
     pass
 
 
-class MCV1TrimmedAudioBatchETL(
-    _BaseTrimmedAudioBatchETL, _BaseFromMCV1Audios
+class TrimmedAudioBatchETL(
+    _BaseTrimmedAudioBatchETL, _BaseFromAudios
 ):
     pass
 
 
-class MCV1SilenceAudioBatchETL(
-    _BaseSilenceAudioBatchETL, _BaseFromMCV1Audios
+class SilenceAudioBatchETL(
+    _BaseSilenceAudioBatchETL, _BaseFromAudios
 ):
     pass
 
 
-class MCV1ConstantAmplitudeAudioBatchETL(
-    _BaseConstantAmplitudeAudioBatchETL, _BaseFromMCV1Audios
+class ConstantAmplitudeAudioBatchETL(
+    _BaseConstantAmplitudeAudioBatchETL, _BaseFromAudios
 ):
     pass
 
 
-class MCV1WhiteNoiseAudioBatchETL(
-    _BaseWhiteNoiseAudioBatchETL, _BaseFromMCV1Audios
+class WhiteNoiseAudioBatchETL(
+    _BaseWhiteNoiseAudioBatchETL, _BaseFromAudios
 ):
     pass
 
 
-class MCV1TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
+class TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
 
     def __init__(self, csv_file_path, numb):
         super().__init__(csv_file_path, numb)

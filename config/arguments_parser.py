@@ -13,6 +13,8 @@ def args(attack_run, additional_args: dict = None):
 
     standard_non_required_args = {
         "gpu_device": [int, 0, False, None],
+        "data_major": [str, "mcv7", False, ["mcv7", "mcv1"]],
+        "data_minor": [str, "sentences", False, ["sentences", "singlewords"]],
         "batch_size": [int, 1, False, None],
         "skip_n_batch": [int, 0, False, None],
         "learning_rate": [float, 10 / 2**15, False, None],
@@ -21,9 +23,7 @@ def args(attack_run, additional_args: dict = None):
         "restart_step": [int, 2500, False, None],
         "constraint_update": [str, "geom", False, ["geom", "lin", "log"]],
         "rescale": [float, 0.9, False, None],
-        "audio_indir": [str, "./samples/all/", False, None],
         "outdir": [str, "./adv/", False, None],
-        "targets_path": [str, "./samples/cv-valid-test.csv", False, None],
         "max_examples": [int, 100, False, None],
         "max_targets": [int, 2000, False, None],
         "max_audio_file_bytes": [int, 120000, False, None],

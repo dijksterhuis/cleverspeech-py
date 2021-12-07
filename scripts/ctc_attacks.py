@@ -190,45 +190,9 @@ def entropy_graph(sess, batch, settings):
 
 def attack_run(master_settings):
     """
-    Use Carlini & Wagner's improved loss function form the original audio paper,
-    but reintroduce kappa from the image attack as we're looking to perform
-    targeted maximum-confidence evasion attacks --- i.e. not just find minimum
-    perturbations.
-
-    :param master_settings: a dictionary of arguments to run the attack, as
-    defined by command line arguments. Will override the settings dictionary
-    defined below.
-
-    :return: None
     """
 
-    attack_type = master_settings["attack_graph"]
-    loss = master_settings["loss"]
-    decoder = master_settings["decoder"]
-    outdir = master_settings["outdir"]
-
-    outdir = os.path.join(outdir, attack_type)
-    outdir = os.path.join(outdir, "{}/".format(loss))
-    outdir = os.path.join(outdir, "{}/".format(decoder))
-
-    master_settings["outdir"] = outdir
-
-    audios = data.ingress.mcv_v1.MCV1StandardAudioBatchETL(
-        master_settings["audio_indir"],
-        master_settings["max_examples"],
-        filter_term=".wav",
-        max_file_size=master_settings["max_audio_file_bytes"],
-        file_size_sort="shuffle"
-    )
-
-    transcriptions = data.ingress.mcv_v1.MCV1TranscriptionsFromCSVFile(
-        master_settings["targets_path"],
-        master_settings["max_targets"],
-    )
-
-    batch_gen = data.ingress.mcv_v1.MCV1IterableBatches(
-        master_settings, audios, transcriptions
-    )
+    batch_gen = data.ingress.helpers.create_batch_gen_fn(master_settings)
 
     default_manager(
         master_settings,

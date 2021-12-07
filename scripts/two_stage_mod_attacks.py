@@ -151,7 +151,7 @@ def attack_run(master_settings):
     master_settings["attack type"] = attack_type
 
     audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
-        master_settings["audio_indir"],
+        master_settings["audio_dir"],
         filter_term="audio.wav",
         file_size_sort="shuffle",
     )
@@ -188,6 +188,8 @@ def main():
         "loss": [str, None, True, graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
         "kappa": [float, None, False, None],
         'use_softmax': [int, 0, False, [0, 1]],
+        "audios_dir": [str, None, True, None],
+        "targets_csv": [str, None, True, None],
     }
 
     args(attack_run, additional_args=extra_args)
