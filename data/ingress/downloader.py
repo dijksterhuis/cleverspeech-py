@@ -1,4 +1,6 @@
 import os
+import shutil
+
 import boto3
 import tarfile
 # import multiprocessing as mp
@@ -13,15 +15,43 @@ def download(s3_archive):
         os.path.join("./samples", s3_archive.split("-")[0]),
         s3_archive.split("-")[-1].rstrip(".tar.gz")
     )
+    audios_dir = os.path.join(samples_path, "all")
 
-    if not os.path.exists(samples_path):
-        # os.makedirs(os.path.join(samples_path, "all"), exist_ok=True)
-        if not os.path.exists(s3_archive):
-            _download_from_s3(s3_archive)
+    try:
+        assert os.path.exists(samples_path)        # base dir path exists
+        assert len(os.listdir(samples_path)) == 2  # transcription csv
+        assert os.path.exists(audios_dir)          # audios dir exists
+        # at least 1 wav and json file are present
+        more_than_one = len(os.listdir(os.path.join(samples_path, "all"))) > 2
+        assert more_than_one
 
-        _extract_from_tarfile(s3_archive)
+        if more_than_one:
+            wav_count, json_count = 0, 0
+            for fp in os.listdir(audios_dir):
+                json_count += 1 if ".json" in fp else 0
+                wav_count += 1 if ".wav" in fp else 0
+            assert json_count > 0
+            assert wav_count > 0
+            assert wav_count == json_count
+
+        else:
+            raise AssertionError
+
+    except AssertionError:
+        Logger.warn(
+            "Incomplete sample data... deleting and recreating directory {}".format(samples_path)
+        )
+        shutil.rmtree(samples_path)
+        os.makedirs(audios_dir, exist_ok=True)
+        _maybe_download_and_extract(s3_archive)
 
     return True
+
+
+def _maybe_download_and_extract(s3_archive):
+    if not os.path.exists(s3_archive):
+        _download_from_s3(s3_archive)
+    _extract_from_tarfile(s3_archive)
 
 
 def _create_tarfile_filepath(data_major_id, data_minor_id):
@@ -62,8 +92,9 @@ def _extract_from_tarfile(filepath):
 
             def bar_updater(members):
                 for idx, tarinfo in enumerate(members):
-                    bar.update(idx)
-                    yield tarinfo
+                    if not os.path.isdir(tarinfo.path):
+                        bar.update(idx)
+                        yield tarinfo
 
             tar.extractall(members=bar_updater(tar))
 
