@@ -180,10 +180,10 @@ class MCV1TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
 
             for candidate in candidates:
 
-                phrase, row_id = candidate
+                phrase, _ = candidate
 
                 validate = self._selection_rules(
-                    phrase, n_feats, ground_truth, selections
+                    *candidate, n_feats, ground_truth, selections
                 )
 
                 if validate:
@@ -201,7 +201,7 @@ class MCV1TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
                     word = random.choice(phrase.split(" "))
 
                     validate = self._selection_rules(
-                        word, n_feats, ground_truth, selections
+                        word, row_id, n_feats, ground_truth, selections
                     )
 
                     if validate:

@@ -622,13 +622,12 @@ class _BaseTranscriptionsBatchETL(_IterableETL, ABC):
         return self._transform_and_load(selections)
 
     @staticmethod
-    def _selection_rules(phrase, n_feats, ground_truth, selections):
+    def _selection_rules(phrase, row_id, n_feats, ground_truth, selections):
         upper_bound = len(phrase) <= n_feats // 4
-        lower_bound = len(phrase) >= 4
+        lower_bound = len(phrase) >= 2
         not_ground_truth = phrase != ground_truth
-        existing_phrases = l_map(lambda x: x[0], selections)
-        not_selected = phrase not in existing_phrases
-
+        existing_row_ids = l_map(lambda x: x[1], selections)
+        not_selected = row_id not in existing_row_ids
         return upper_bound and lower_bound and not_ground_truth and not_selected
 
     @staticmethod
