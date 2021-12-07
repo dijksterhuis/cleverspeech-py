@@ -28,6 +28,7 @@ def create_batch_gen_fn(settings):
     downloader.download(s3_tar_file_path)
 
     audios = mcv_data.StandardAudioBatchETL(
+        s3_tar_file_path,
         audio_dir,
         settings["max_examples"],
         filter_term=".wav",
