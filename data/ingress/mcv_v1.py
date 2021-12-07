@@ -22,9 +22,7 @@ from cleverspeech.data.ingress import downloader
 class _BaseFromAudios(_BaseAudiosBatchETL):
 
     def __init__(self, s3_key, *args, **kwargs):
-
         downloader.download(s3_key)
-
         super().__init__(*args, **kwargs)
 
     @staticmethod
