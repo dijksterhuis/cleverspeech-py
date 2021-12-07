@@ -19,7 +19,6 @@ from cleverspeech.data.ingress.bases import (
 class _BaseFromAudios(_BaseAudiosBatchETL):
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
     @staticmethod
