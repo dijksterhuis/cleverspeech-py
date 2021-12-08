@@ -72,3 +72,40 @@ def create_mcv_batch_gen_fn(settings):
 
     return batch_gen
 
+
+def create_batch_gen_from_json_files(settings):
+
+    audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
+        settings["audio_dir"],
+        filter_term="audio.wav",
+        file_size_sort="shuffle",
+    )
+
+    transcriptions = data.ingress.two_stage.TwoStageTranscriptions(
+        settings["audio_dir"],
+    )
+
+    batch_gen = data.ingress.two_stage.TwoStageIterableBatches(
+        settings, audios, transcriptions
+    )
+
+    return batch_gen
+
+
+def create_batch_gen_from_csv_files(settings):
+
+    audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
+        settings["audio_csv"],
+        filter_term="audio.wav",
+        file_size_sort="shuffle",
+    )
+
+    transcriptions = data.ingress.two_stage.TwoStageTranscriptions(
+        settings["targets_csv"],
+    )
+
+    batch_gen = data.ingress.two_stage.TwoStageIterableBatches(
+        settings, audios, transcriptions
+    )
+
+    return batch_gen
