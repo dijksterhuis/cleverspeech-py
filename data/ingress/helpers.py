@@ -1,31 +1,56 @@
 import os
-from cleverspeech.data.ingress import downloader
+from cleverspeech import data
 from cleverspeech.utils.Utils import Logger
 
 
 def create_batch_gen_fn(settings):
 
+    data_loader = settings["data_loader"]
+
+    if "mcv" in data_loader:
+        settings["data_major"] = data_loader.split("-")[0]
+        settings["data_minor"] = data_loader.split("-")[1]
+        batch_gen = create_mcv_batch_gen_fn(settings)
+
+    elif data_loader == "json":
+        assert "audio_dir" in settings.keys()
+        batch_gen = create_batch_gen_from_json_files(settings)
+
+    elif data_loader == "csv":
+        assert "audio_csv" in settings.keys()
+        assert "targets_csv" in settings.keys()
+        batch_gen = create_batch_gen_from_csv_files(settings)
+
+    else:
+        raise NotImplementedError
+
+    return batch_gen
+
+
+def create_mcv_batch_gen_fn(settings):
+
     data_major_id, data_minor_id = settings["data_major"], settings["data_minor"]
 
     if data_major_id == "mcv7":
-        from cleverspeech.data.ingress import mcv7 as mcv_data
+        mcv_data = data.ingress.mcv7
 
     elif data_major_id == "mcv1":
-        from cleverspeech.data.ingress import mcv1 as mcv_data
+        mcv_data = data.ingress.mcv1
 
     else:
         Logger.warn("You selected an incorrect dataset combination...")
-        Logger.warn("Defaulting to mcv7-sentences")
+        Logger.warn("Defaulting to mcv7-singlewords")
         data_major_id, data_minor_id = "mcv7", "sentences"
-        from cleverspeech.data.ingress import mcv7 as mcv_data
+        mcv_data = data.ingress.mcv7
 
     base_dir = "./samples/{}/{}/".format(data_major_id, data_minor_id)
+
     audio_dir = os.path.join(base_dir, "all")
     transcript_file = "test.csv" if data_major_id == "mcv7" else "cv-valid-test.csv"
     transcript_file = os.path.join(base_dir, transcript_file)
 
     s3_tar_file_path = "{}-{}.tar.gz".format(data_major_id, data_minor_id)
-    downloader.download(s3_tar_file_path)
+    data.ingress.downloader.download(s3_tar_file_path)
 
     audios = mcv_data.StandardAudioBatchETL(
         s3_tar_file_path,
