@@ -106,15 +106,6 @@ class TranscriptionsFromCSVFile(_BaseTranscriptionsBatchETL):
         selections = self._popper(batch_size)
         return self._transform_and_load(*selections)
 
-    @staticmethod
-    def _selection_rules(phrase, n_feats, ground_truth, selections):
-        upper_bound = len(phrase) <= n_feats // 4
-        lower_bound = len(phrase) >= 4
-        not_ground_truth = phrase != ground_truth
-        not_selected = phrase not in selections
-
-        return upper_bound and lower_bound and not_ground_truth and not_selected
-
     def get_single_transcription_entry(self, batch_df, audio_file_path, key="phrase"):
         df = batch_df.where(self.pool["file_path"] == audio_file_path)
         return df.dropna()[key].tolist()[0]
