@@ -138,7 +138,7 @@ def create_validation_graph(sess, batch, settings):
 
 def attack_run(master_settings):
 
-    batch_gen = data.ingress.helpers.create_batch_gen_fn(master_settings)
+    batch_gen = data.ingress.helpers.create_mcv_batch_gen_fn(master_settings)
 
     custom_manager(
         master_settings,
@@ -150,7 +150,6 @@ def attack_run(master_settings):
 
 
 def main():
-    log("", wrap=True)
     args(attack_run)
 
 

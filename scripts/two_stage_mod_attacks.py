@@ -134,35 +134,7 @@ def attack_run(master_settings):
         else:
             assert master_settings["kappa"] >= 0
 
-    attack_type = master_settings["attack_graph"]
-    align = master_settings["align"]
-    loss = master_settings["loss"]
-    decoder = master_settings["decoder"]
-    kappa = master_settings["kappa"]
-    outdir = master_settings["outdir"]
-
-    outdir = os.path.join(outdir, attack_type)
-    outdir = os.path.join(outdir, "{}/".format(loss))
-    outdir = os.path.join(outdir, "{}/".format(align))
-    outdir = os.path.join(outdir, "{}/".format(decoder))
-    outdir = os.path.join(outdir, "k{}/".format(kappa))
-
-    master_settings["outdir"] = outdir
-    master_settings["attack type"] = attack_type
-
-    audios = data.ingress.two_stage.TwoStageStandardAudioBatchETL(
-        master_settings["audio_dir"],
-        filter_term="audio.wav",
-        file_size_sort="shuffle",
-    )
-
-    transcriptions = data.ingress.two_stage.TwoStageTranscriptions(
-        master_settings["audio_indir"],
-    )
-
-    batch_gen = data.ingress.two_stage.TwoStageIterableBatches(
-        master_settings, audios, transcriptions
-    )
+    batch_gen = data.ingress.create_batch_gen_fn(master_settings)
 
     default_manager(
         master_settings,
@@ -181,15 +153,28 @@ KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]
 
 
 def main():
-    log("", wrap=True)
 
     extra_args = {
-        "attack_graph": [str, "box", True, ATTACK_GRAPHS.keys()],
-        "loss": [str, None, True, graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
-        "kappa": [float, None, False, None],
-        'use_softmax': [int, 0, False, [0, 1]],
-        "audios_dir": [str, None, True, None],
-        "targets_csv": [str, None, True, None],
+        "--attack_graph": [
+            str,
+            "box",
+            False,
+            ATTACK_GRAPHS.keys(),
+            "Choose the attack graph for this script -- default 'box' constraint graph."
+        ],
+        "loss": [
+            str,
+            "cw",
+            True,
+            graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS.keys(),
+            "Choose the loss function for this script.",
+        ],
+        "--kappa": [float, None, False, None,
+                    "Select a value for kappa constant (for CW flavour losses)"],
+        '--use_softmax': [int, 0, False, [0, 1],
+                          "0 = use raw activations, 1 = use softmax vectors, default 0"],
+        "audio_csv": [str, None, True, None, "Path to the audio csv file."],
+        "targets_csv": [str, None, True, None, "Path to the targets csv file."],
     }
 
     args(attack_run, additional_args=extra_args)

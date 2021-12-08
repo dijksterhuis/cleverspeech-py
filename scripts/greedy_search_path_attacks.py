@@ -331,7 +331,7 @@ def attack_run(master_settings):
     else:
         master_settings["kappa"] = None
 
-    batch_gen = data.ingress.helpers.create_batch_gen_fn(master_settings)
+    batch_gen = data.ingress.helpers.create_mcv_batch_gen_fn(master_settings)
 
     default_manager(
         master_settings,
@@ -352,12 +352,24 @@ KAPPA_LOSSES = ["cw", "weightedmaxmin", "adaptivekappa"]
 
 
 def main():
+
     extra_args = {
-        "attack_graph": [str, "box", True, ATTACK_GRAPHS.keys()],
-        "loss": [str, None, True,
-                 graph.losses.adversarial.AlignmentBased.GREEDY.keys()],
-        "kappa": [float, None, False, None],
-        'use_softmax': [int, 0, False, [0, 1]],
+        "--attack_graph": [
+            str,
+            "box",
+            False,
+            ATTACK_GRAPHS.keys(),
+            "Choose the attack graph for this script -- default 'box' constraint graph."
+        ],
+        "loss": [
+            str,
+            "cw",
+            True,
+            graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS.keys(),
+            "Choose the loss function for this script.",
+        ],
+        "--kappa": [float, None, False, None, "Select a value for kappa constant (for CW flavour losses)"],
+        '--use_softmax': [int, 0, False, [0, 1], "0 = use raw activations, 1 = use softmax vectors, default 0"],
     }
 
     args(attack_run, additional_args=extra_args)

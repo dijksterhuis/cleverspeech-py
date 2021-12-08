@@ -113,7 +113,7 @@ def attack_run(master_settings):
     :return: None
     """
 
-    batch_gen = data.ingress.helpers.create_batch_gen_fn(master_settings)
+    batch_gen = data.ingress.helpers.create_mcv_batch_gen_fn(master_settings)
 
     default_manager(
         master_settings,
@@ -130,11 +130,22 @@ ATTACK_GRAPHS = {
 
 
 def main():
-    log("", wrap=True)
 
     extra_args = {
-        "attack_graph": [str, "box", False, ATTACK_GRAPHS.keys()],
-        "loss": [str, "cw", True, graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS.keys()]
+        "--attack_graph": [
+            str,
+            "box",
+            False,
+            ATTACK_GRAPHS.keys(),
+            "Choose the attack graph for this script -- default 'box' constraint graph."
+        ],
+        "loss": [
+            str,
+            "cw",
+            True,
+            graph.losses.adversarial.AlignmentFree.GRADIENT_PATHS.keys(),
+            "Choose the loss function for this script.",
+        ]
     }
 
     args(attack_run, additional_args=extra_args)
