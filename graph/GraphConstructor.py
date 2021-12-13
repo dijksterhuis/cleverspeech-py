@@ -7,7 +7,7 @@ methods here, i.e. attack.victim.inference()
 --------------------------------------------------------------------------------
 """
 
-
+from tensorflow import add as tf_add
 from cleverspeech.utils.Utils import Logger
 
 
@@ -150,7 +150,7 @@ class Constructor:
 
         Logger.info("Added graph item: {}".format(loss), timings=True)
 
-    def create_loss_fn(self):
+    def create_loss_fn(self, ref_fn=tf_add):
         """
         Given the loss classes that have been added to the graph, create the
         final loss function by performing a sum over all the loss classes.
