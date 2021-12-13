@@ -55,7 +55,7 @@ def linf_constraint_graph(sess, batch, settings):
         a, b = losses
         return tf_where(tf_equal(a, tf_zeros_like(a)), b, a)
 
-    def ref_fn_b(losses):
+    def ref_fn_b(*losses):
         a, b = losses
         return tf_where(tf_less(a, tf_ones_like(a)), b, a)
 
