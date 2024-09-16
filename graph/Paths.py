@@ -379,6 +379,14 @@ class MinimumEnergyPatch(Path):
 
 
 class MinimumEnergyDistributed(Path):
+    """
+    For a given transcription `t`, with possible path length `p` and audio example `x`,
+    find an alignment where all the non-blank tokens are located in logit positions
+    that align with audio windows that have the minimum energy across the all of the
+    sample's windows.
+
+    Distributes the tokens throughout the possible alignment positions. TODO.
+    """
 
     @staticmethod
     def minimum_energy_distributed(t_mod, sig, af, sample_rate=16000):
@@ -417,6 +425,26 @@ class NoValidCTCAlignmentException(Exception):
 
 
 class CTC(Path):
+    """
+    Use CTC (Connectionist-Temporal Classification) to search for a target path.
+
+    Note -- this is NOT the same method as used by Carlini & Wagner in their
+    original attack.
+    
+    This implementation spins up a very simple and temporary Tensorflow graph for
+    each new batch of audio examples:
+    
+        [empty_logits] -> [ctc_loss(empty_logits, target_transcription)]
+
+    We then find a suitable path by minimising CTC-loss (modifying the empty
+    logits tensor) until:
+
+    1. CTC loss < 0.1 --> likely converged on a solution
+    2. Beam/Greedy Search decode of logits yeilds the target transcription.
+
+    Once a CTC ALignment ahs been generated for all examples in the batch, we
+    destroy the temporary graph so we can start building out attack graph.
+    """
 
     @staticmethod
     def __ctc_search(batch, use_beam_search_decoder=False):
